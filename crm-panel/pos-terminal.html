@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Терминал - Тест кассы</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .scanner-area {
+            border: 2px dashed #ccc;
+            padding: 30px;
+            text-align: center;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        input, button {
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background: #4caf50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { opacity: 0.9; }
+        .error { color: red; }
+        .success { color: green; }
+        .user-info { background: #e8f5e9; padding: 15px; border-radius: 12px; margin-top: 15px; }
+        .balance { font-size: 24px; font-weight: bold; color: #2c3e50; }
+        pre { background: #f0f0f0; padding: 10px; border-radius: 8px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🏪 POS Терминал (Тест кассы)</h1>
+    
+    <div class="card">
+        <h3>📷 Шаг 1: Сканирование QR-кода</h3>
+        <div class="scanner-area">
+            <p>Вставьте данные из QR-кода (скопируйте из консоли браузера)</p>
+            <textarea id="qrData" rows="3" cols="50" placeholder='{"vkId":"123456","userName":"Тест","companyId":1,"timestamp":...}'></textarea>
+            <br>
+            <button onclick="verifyQR()">🔍 Проверить QR-код</button>
+        </div>
+        <div id="verifyResult"></div>
+    </div>
+
+    <div class="card" id="orderSection" style="display:none;">
+        <h3>🛒 Шаг 2: Оформление заказа</h3>
+        <div>
+            <label>Сумма заказа (₽):</label>
+            <input type="number" id="orderAmount" placeholder="1000">
+            <button onclick="calculateBonus()">💰 Рассчитать бонусы</button>
+        </div>
+        <div id="bonusResult"></div>
+    </div>
+
+    <div class="card" id="bonusSection" style="display:none;">
+        <h3>🎁 Шаг 3: Начисление бонусов</h3>
+        <button onclick="applyBonus()">✅ Начислить бонусы за заказ</button>
+        <div id="applyResult"></div>
+    </div>
+
+    <div class="card">
+        <h3>💸 Списание бонусов</h3>
+        <div>
+            <label>Списать бонусов:</label>
+            <input type="number" id="spendAmount" placeholder="50">
+            <button onclick="spendBonus()">💸 Списать бонусы</button>
+        </div>
+        <div id="spendResult"></div>
+    </div>
+
+    <div class="card">
+        <h3>📊 Информация о пользователе</h3>
+        <div id="userInfo">Пока нет данных</div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3001';
+        let currentUser = null;
+        let currentQrData = null;
+        let currentBonusEarned = 0;
+
+        async function verifyQR() {
+            const qrData = document.getElementById('qrData').value;
+            if (!qrData) {
+                alert('Введите данные QR-кода');
+                return;
+            }
+            
+            try {
+                // Пробуем распарсить, если это JSON
+                try {
+                    currentQrData = JSON.parse(qrData);
+                } catch(e) {
+                    currentQrData = qrData;
+                }
+                
+                const response = await fetch(`${API_URL}/api/pos/verify-qr`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                        amount: 0
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentUser = result.user;
+                    document.getElementById('verifyResult').innerHTML = `
+                        <div class="success">
+                            ✅ QR-код действителен!<br>
+                            👤 Пользователь: ${result.user.name}<br>
+                            💰 Баланс: ${result.user.balance} бонусов
+                        </div>
+                    `;
+                    document.getElementById('userInfo').innerHTML = `
+                        <div class="user-info">
+                            <strong>👤 ${result.user.name}</strong><br>
+                            🆔 VK ID: ${result.user.vkId}<br>
+                            💰 Баланс: <span class="balance">${result.user.balance}</span> бонусов<br>
+                            📈 Ставка: ${result.bonusRate} бонусов за 1000₽
+                        </div>
+                    `;
+                    document.getElementById('orderSection').style.display = 'block';
+                } else {
+                    document.getElementById('verifyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('verifyResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+            }
+        }
+
+        async function calculateBonus() {
+            const amount = document.getElementById('orderAmount').value;
+            if (!amount) {
+                alert('Введите сумму заказа');
+                return;
+            }
+            
+            const response = await fetch(`${API_URL}/api/pos/verify-qr`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                    amount: parseInt(amount)
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                currentBonusEarned = result.bonusEarned;
+                document.getElementById('bonusResult').innerHTML = `
+                    <div class="success">
+                        🎉 За заказ на сумму ${amount}₽ клиент получит ${result.bonusEarned} бонусов!
+                    </div>
+                `;
+                document.getElementById('bonusSection').style.display = 'block';
+            }
+        }
+
+        async function applyBonus() {
+            const amount = document.getElementById('orderAmount').value;
+            
+            const response = await fetch(`${API_URL}/api/pos/apply-bonus`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                    amount: parseInt(amount),
+                    storeId: 'test_store_001',
+                    cashierId: 'cashier_001'
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                document.getElementById('applyResult').innerHTML = `
+                    <div class="success">
+                        ✅ ${result.message}<br>
+                        💰 Новый баланс: ${result.newBalance} бонусов
+                    </div>
+                `;
+                // Обновляем баланс в интерфейсе
+                if (currentUser) {
+                    currentUser.balance = result.newBalance;
+                    document.getElementById('userInfo').innerHTML = `
+                        <div class="user-info">
+                            <strong>👤 ${currentUser.name}</strong><br>
+                            🆔 VK ID: ${currentUser.vkId}<br>
+                            💰 Баланс: <span class="balance">${result.newBalance}</span> бонусов
+                        </div>
+                    `;
+                }
+                document.getElementById('bonusSection').style.display = 'none';
+            } else {
+                document.getElementById('applyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+            }
+        }
+
+        async function spendBonus() {
+            const spendAmount = document.getElementById('spendAmount').value;
+            if (!spendAmount || !currentQrData) {
+                alert('Введите сумму списания и отсканируйте QR-код');
+                return;
+            }
+            
+            const response = await fetch(`${API_URL}/api/pos/spend-bonus`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                    bonusToSpend: parseInt(spendAmount),
+                    storeId: 'test_store_001',
+                    cashierId: 'cashier_001'
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                document.getElementById('spendResult').innerHTML = `
+                    <div class="success">
+                        ✅ Списано ${result.spent} бонусов!<br>
+                        💰 Новый баланс: ${result.newBalance} бонусов
+                    </div>
+                `;
+                if (currentUser) {
+                    currentUser.balance = result.newBalance;
+                    document.getElementById('userInfo').innerHTML = `
+                        <div class="user-info">
+                            <strong>👤 ${currentUser.name}</strong><br>
+                            🆔 VK ID: ${currentUser.vkId}<br>
+                            💰 Баланс: <span class="balance">${result.newBalance}</span> бонусов
+                        </div>
+                    `;
+                }
+            } else {
+                document.getElementById('spendResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

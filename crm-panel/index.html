@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoyaltyPrime — Программа лояльности для бизнеса</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Шапка -->
+    <header class="header">
+        <div class="container">
+            <div class="header-inner">
+                <div class="logo">
+                    <span class="logo-text">LoyaltyPrime</span>
+                </div>
+                <nav class="nav">
+                    <a href="#card" class="nav-link">Карта</a>
+                    <a href="#ranks" class="nav-link">Ранги</a>
+                    <a href="#marketing" class="nav-link">Акции</a>
+                    <a href="#faq" class="nav-link">FAQ</a>
+                </nav>
+                <div class="auth-buttons">
+                    <button class="btn-outline" onclick="openCRMLogin()">Вход в CRM</button>
+                    <button class="btn-solid" onclick="openCRMRegister()">Регистрация CRM</button>
+                    <button class="btn-demo" onclick="document.querySelector('#cta').scrollIntoView({behavior: 'smooth'})">
+                        Получить демо
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Модальное окно входа в CRM -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal('login')">&times;</span>
+            <div class="modal-title">Вход в CRM</div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="loginEmail" placeholder="example@mail.com">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Пароль</label>
+                <input type="password" class="form-input" id="loginPassword" placeholder="********">
+            </div>
+            <div class="error-message" id="loginError"></div>
+            <button class="modal-btn" onclick="handleCRMLogin()">Войти в CRM</button>
+            <div class="modal-link">
+                Нет аккаунта? <span onclick="switchToRegister()">Зарегистрироваться</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно регистрации CRM -->
+    <div class="modal" id="registerModal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal('register')">&times;</span>
+            <div class="modal-title">Регистрация бизнеса</div>
+            <div class="form-group">
+                <label class="form-label">Название компании</label>
+                <input type="text" class="form-input" id="registerCompany" placeholder="ООО Ромашка">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Имя владельца</label>
+                <input type="text" class="form-input" id="registerName" placeholder="Иван Петров">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="registerEmail" placeholder="example@mail.com">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Телефон</label>
+                <input type="tel" class="form-input" id="registerPhone" placeholder="+7 (999) 123-45-67">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Пароль</label>
+                <input type="password" class="form-input" id="registerPassword" placeholder="********">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Подтвердите пароль</label>
+                <input type="password" class="form-input" id="registerConfirm" placeholder="********">
+            </div>
+            <div class="error-message" id="registerError"></div>
+            <button class="modal-btn" onclick="handleCRMRegister()">Зарегистрироваться</button>
+            <div class="modal-link">
+                Уже есть аккаунт? <span onclick="switchToLogin()">Войти</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- CRM Панель -->
+    <div id="crmPanel" style="display: none;">
+        <div class="crm-container">
+            <div class="crm-sidebar">
+                <div class="crm-logo">
+                    <div class="logo-icon">🎛️</div>
+                    <div class="logo-text">LoyaltyPrime CRM</div>
+                </div>
+                <nav class="crm-nav">
+                    <button class="crm-nav-item active" data-module="analytics">
+                        <span class="nav-icon">📊</span> Аналитика
+                    </button>
+                    <button class="crm-nav-item" data-module="loyalty">
+                        <span class="nav-icon">🎯</span> Лояльность
+                    </button>
+                    <button class="crm-nav-item" data-module="notifications">
+                        <span class="nav-icon">📨</span> Уведомления
+                    </button>
+                    <button class="crm-nav-item" data-module="marketing">
+                        <span class="nav-icon">🎁</span> Маркетинг
+                    </button>
+                    <button class="crm-nav-item" data-module="gamification">
+                        <span class="nav-icon">🎮</span> Игры
+                    </button>
+                    <button class="crm-nav-item" data-module="settings">
+                        <span class="nav-icon">⚙️</span> Настройки
+                    </button>
+                </nav>
+                <div class="crm-footer">
+                    <div class="business-info" id="businessInfo">
+                        <div class="business-name">Загрузка...</div>
+                    </div>
+                    <button class="logout-btn" onclick="closeCRMPanel()">🚪 Выйти</button>
+                </div>
+            </div>
+            <div class="crm-content">
+                <!-- Модуль 1: Аналитика -->
+                <div id="analyticsModule" class="crm-module active">
+                    <div class="module-header">
+                        <h2>📊 Аналитика и сегментация</h2>
+                        <div class="date-range">
+                            <button class="date-btn active" data-period="day">День</button>
+                            <button class="date-btn" data-period="week">Неделя</button>
+                            <button class="date-btn" data-period="month">Месяц</button>
+                            <button class="date-btn" data-period="year">Год</button>
+                        </div>
+                    </div>
+                    <div class="stats-grid" id="statsGrid"></div>
+                    <div class="charts-row">
+                        <div class="chart-card">
+                            <h3>📊 Сегментация пользователей</h3>
+                            <div id="segmentsList"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>📈 Активность по дням</h3>
+                            <div id="activityChart"></div>
+                        </div>
+                    </div>
+                    <div class="chart-card full-width">
+                        <h3>🏆 Топ продаваемых продуктов</h3>
+                        <div id="topProducts"></div>
+                    </div>
+                </div>
+
+                <!-- Модуль 2: Программа лояльности -->
+<div id="loyaltyModule" class="crm-module">
+    <div class="module-header">
+        <h2>🎯 Программа лояльности</h2>
+        <button class="btn-save" onclick="saveLoyaltySettings()">💾 Сохранить</button>
+    </div>
+    <div class="loyalty-settings">
+        <div class="settings-card">
+            <h3>⚙️ Основные настройки</h3>
+            <div class="setting-row">
+                <label>Название программы:</label>
+                <input type="text" id="programName" value="LoyaltyPrime">
+            </div>
+            <div class="setting-row">
+                <label>Бонусов за 1000₽:</label>
+                <input type="number" id="pointsRate" value="10">
+                <span>бонусов</span>
+            </div>
+            <div class="setting-row">
+                <label>Статус:</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="programActive" checked>
+                    <span id="programStatusLabel">Активна</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Новая секция настройки уровней -->
+        <div class="settings-card">
+            <h3>🏆 Настройка уровней</h3>
+            <div class="tiers-info">
+                <p class="info-text">⚡ Настройте пороги, множители и кешбэк для каждого уровня</p>
+                <div id="tiersSettingsList"></div>
+                <button class="btn-add" onclick="addTierConfig()">+ Добавить уровень</button>
+                <div id="saveIndicator" class="save-indicator">✓ Сохранено</div>
+            </div>
+        </div>
+        
+        <div class="settings-card">
+            <h3>💳 Скидки</h3>
+            <div id="discountsList"></div>
+            <button class="btn-add" onclick="addDiscount()">+ Добавить скидку</button>
+        </div>
+    </div>
+</div>
+
+                <!-- Модуль 3: Уведомления -->
+                <div id="notificationsModule" class="crm-module">
+                    <div class="module-header"><h2>📨 Умные уведомления</h2></div>
+                    <div class="notifications-grid">
+                        <div class="notification-card">
+                            <h3>📱 Создать рассылку</h3>
+                            <div class="form-group"><label>Тип</label><select id="notifType"><option>Push</option><option>SMS</option></select></div>
+                            <div class="form-group"><label>Аудитория</label><select id="notifSegment"><option value="all">Все</option><option value="sleeping">Спящие</option><option value="active">Активные</option><option value="vip">VIP</option></select></div>
+                            <div class="form-group"><label>Заголовок</label><input type="text" id="notifTitle" placeholder="Специальное предложение!"></div>
+                            <div class="form-group"><label>Сообщение</label><textarea id="notifMessage" rows="3" placeholder="Текст..."></textarea></div>
+                            <button class="btn-send" onclick="sendNotification()">📤 Отправить</button>
+                        </div>
+                        <div class="notification-card">
+                            <h3>⚙️ Автоматические кампании</h3>
+                            <div class="auto-campaign"><div class="campaign-item"><div><div class="campaign-title">🔄 Возвращение спящих</div><div class="campaign-desc">При неактивности 30 дней</div></div><div class="toggle-switch"><input type="checkbox" id="autoReactivate" checked><span>Активна</span></div></div>
+                            <div class="campaign-item"><div><div class="campaign-title">🎂 День рождения</div><div class="campaign-desc">Поздравление с бонусом</div></div><div class="toggle-switch"><input type="checkbox" id="autoBirthday" checked><span>Активна</span></div></div>
+                            <div class="campaign-item"><div><div class="campaign-title">📍 Geo-уведомления</div><div class="campaign-desc">При входе в радиусе 500м</div></div><div class="toggle-switch"><input type="checkbox" id="autoGeo" checked><span>Активна</span></div></div></div>
+                        </div>
+                    </div>
+                    <div class="notification-history"><h3>📋 История рассылок</h3><div id="notificationsHistory"></div></div>
+                </div>
+
+                <!-- Модуль 4: Маркетинг (Акции и задания) -->
+                <div id="marketingModule" class="crm-module">
+                    <div class="module-header">
+                        <h2>🎁 Управление акциями и заданиями</h2>
+                    </div>
+                    <div class="settings-card">
+                        <h3>🎯 Акции</h3>
+                        <div id="promotionsList"></div>
+                        <button class="btn-add" onclick="showAddPromotionModal()">+ Добавить акцию</button>
+                    </div>
+                    <div class="settings-card">
+                        <h3>📋 Задания (квесты)</h3>
+                        <div id="questsManagerList"></div>
+                        <button class="btn-add" onclick="showAddQuestModal()">+ Добавить задание</button>
+                    </div>
+                </div>
+
+                <!-- Модуль 5: Игры и рефералы -->
+                <div id="gamificationModule" class="crm-module">
+                    <div class="module-header"><h2>🎮 Игровые механики</h2><button class="btn-save" onclick="saveGameSettings()">💾 Сохранить</button></div>
+                    <div class="games-grid">
+                        <div class="game-card"><h3>🎡 Игры</h3><div id="gamesList"></div></div>
+                        <div class="game-card">
+                            <h3>👥 Реферальная программа</h3>
+                            <div class="setting-row"><label>Бонус за приглашение:</label><input type="number" id="referralBonus" value="100"><span>бонусов</span></div>
+                            <div class="setting-row"><label>Бонус за регистрацию:</label><input type="number" id="welcomeBonus" value="50"><span>бонусов</span></div>
+                            <div class="referral-stats"><div class="stat"><div class="stat-value" id="referralTotal">0</div><div class="stat-label">Приглашений</div></div>
+                            <div class="stat"><div class="stat-value" id="referralActive">0</div><div class="stat-label">Активных</div></div>
+                            <div class="stat"><div class="stat-value" id="referralEarned">0</div><div class="stat-label">Начислено</div></div></div>
+                        </div>
+                    </div>
+                    <div class="quests-card"><h3>📋 Ежедневные задания</h3><div id="questsList"></div><button class="btn-add" onclick="addQuest()">+ Добавить задание</button></div>
+                </div>
+
+                <!-- Модуль настроек -->
+                <div id="settingsModule" class="crm-module">
+                    <div class="module-header"><h2>⚙️ Настройки бизнеса</h2><button class="btn-save" onclick="saveBusinessSettings()">💾 Сохранить</button></div>
+                    <div class="settings-card"><h3>🏢 Информация</h3>
+                        <div class="setting-row"><label>Компания:</label><input type="text" id="businessName"></div>
+                        <div class="setting-row"><label>Email:</label><input type="email" id="businessEmail"></div>
+                        <div class="setting-row"><label>Телефон:</label><input type="tel" id="businessPhone"></div>
+                    </div>
+                    <div class="settings-card"><h3>🎨 Брендирование</h3>
+                        <div class="setting-row"><label>Основной цвет:</label><input type="color" id="brandColor" value="#2A4B7C"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Остальной сайт (лендинг) -->
+    <div id="mainSite">
+        <section class="hero"><div class="container"><div class="hero-grid"><div class="hero-content"><h1 class="hero-title">Программа лояльности<span>для малого и среднего бизнеса</span></h1><div class="hero-buttons"><button class="btn-primary" onclick="openCRMRegister()">Попробовать бесплатно</button></div></div><div class="hero-visual"><div class="card-preview"><div>💰 Текущий баланс</div><div class="balance-main"><span class="balance-amount" id="balance">0 <small>бонусов</small></span><span id="userRankBadge">🏅 Новичок</span></div><div class="progress-bar"><div class="progress-fill" id="rankProgress" style="width: 0%;"></div></div><div style="display: flex; justify-content: space-between;"><span id="currentRank">Новичок</span><span id="nextRank">Серебро</span></div></div></div></div></div></section>
+        <section id="card" class="card-features"><div class="container"><div class="section-header"><h2>Цифровая карта лояльности</h2></div><div class="card-grid"><div class="card-feature-item"><h3>📱 VK Mini App</h3><p>Полноценный личный кабинет прямо в VK. Не нужно скачивать приложение.</p></div><div class="card-feature-item"><h3>💳 Карта лояльности</h3><p>Всегда под рукой. Обновление баланса в реальном времени.</p></div></div></div></section>
+        <section id="ranks" class="ranks"><div class="container"><div class="section-header"><h2>Ранговая бонусная система</h2></div><div class="ranks-grid"><div class="rank-card"><div class="rank-name bronze">Bronze</div><div class="rank-cashback">3%</div><p>кешбэк</p></div><div class="rank-card"><div class="rank-name silver">Silver</div><div class="rank-cashback">5%</div><p>кешбэк</p></div><div class="rank-card"><div class="rank-name gold">Gold</div><div class="rank-cashback">10%</div><p>кешбэк</p></div></div></div></section>
+        <section id="marketing" class="marketing"><div class="container"><div class="section-header"><h2>Конструктор акций и рассылок</h2></div><div class="scenario-grid"><div class="scenario-card"><h4>🔄 Возврат потерянных</h4><p>Персональные предложения неактивным гостям</p></div><div class="scenario-card"><h4>🎂 Дни рождения</h4><p>Бонусы и поздравления</p></div><div class="scenario-card"><h4>⏰ Тихие часы</h4><p>Поддержка продаж в часы спада</p></div><div class="scenario-card"><h4>👥 Рефералы</h4><p>Приводите друзей и получайте бонусы</p></div></div></div></section>
+        <section id="faq" class="faq"><div class="container"><div class="section-header"><h2>Частые вопросы</h2></div><div class="faq-grid"><div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Сколько стоит?<span>+</span></div><div class="faq-answer">От 6 000 ₽/месяц. Первый месяц бесплатно.</div></div><div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Скорость запуска?<span>+</span></div><div class="faq-answer">7 дней под ключ.</div></div></div></div></section>
+        <section id="cta" class="cta"><div class="container"><h2>Получите демо системы</h2><div class="cta-form"><div style="display: flex; gap: 16px; flex-wrap: wrap; width: 100%;"><input type="text" class="cta-input" placeholder="Название бренда" id="demoBrand"><input type="email" class="cta-input" placeholder="Ваш email" id="demoEmail"><button class="cta-button" onclick="submitDemo()">Отправить</button></div></div></div></section>
+        <footer class="footer"><div class="container"><div class="footer-grid"><div><div class="footer-logo">LoyaltyPrime</div><p>Программа лояльности для бизнеса</p></div><div><h4>Продукт</h4><ul class="footer-links"><li><a href="#card">Карта</a></li><li><a href="#ranks">Ранги</a></li></ul></div><div><h4>Контакты</h4><ul class="footer-links"><li>@loyaltyprime</li><li>info@loyaltyprime.ru</li></ul></div></div><div style="text-align: center; margin-top: 60px;">© 2026 LoyaltyPrime</div></div></footer>
+    </div>
+
+    <!-- Модальные окна для добавления акции и задания -->
+    <div id="promotionModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal('promotion')">&times;</span>
+            <div class="modal-title">Добавить акцию</div>
+            <div class="form-group"><label>Название</label><input type="text" id="promoName" placeholder="Например: Счастливые часы"></div>
+            <div class="form-group"><label>Эмодзи (выберите два)</label>
+                <select id="promoEmoji1">
+                    <option value="🎯">🎯</option><option value="🎉">🎉</option><option value="🔥">🔥</option><option value="⚡">⚡</option><option value="🎁">🎁</option><option value="🏆">🏆</option><option value="⭐">⭐</option>
+                </select>
+                <select id="promoEmoji2">
+                    <option value="🎯">🎯</option><option value="🎉">🎉</option><option value="🔥">🔥</option><option value="⚡">⚡</option><option value="🎁">🎁</option><option value="🏆">🏆</option><option value="⭐">⭐</option>
+                </select>
+            </div>
+            <div class="form-group"><label>Описание</label><textarea id="promoDesc" rows="2" placeholder="Подробности акции"></textarea></div>
+            <div class="form-group"><label>Активна</label><input type="checkbox" id="promoActive" checked></div>
+            <button class="modal-btn" onclick="savePromotion()">Сохранить</button>
+        </div>
+    </div>
+
+    <div id="questModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal('quest')">&times;</span>
+        <div class="modal-title" id="questModalTitle">Добавить задание</div>
+        <div class="form-group">
+            <label>Эмодзи</label>
+            <select id="questEmoji">
+                <option value="✅">✅</option>
+                <option value="🎡">🎡</option>
+                <option value="👥">👥</option>
+                <option value="💎">💎</option>
+                <option value="💰">💰</option>
+                <option value="🎁">🎁</option>
+                <option value="🏆">🏆</option>
+                <option value="⭐">⭐</option>
+                <option value="🔥">🔥</option>
+                <option value="🎯">🎯</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Название задания</label>
+            <input type="text" id="questTitle" placeholder="Например: Ежедневный вход">
+        </div>
+        <div class="form-group">
+            <label>Описание</label>
+            <textarea id="questDesc" rows="2" placeholder="Описание задания"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Награда (бонусов)</label>
+            <input type="number" id="questReward" value="10">
+        </div>
+        <div class="form-group">
+            <label>Активно</label>
+            <input type="checkbox" id="questActive" checked>
+        </div>
+        <button class="modal-btn" id="saveQuestBtn">Сохранить</button>
+    </div>
+</div>
+
+    <script src="script.js"></script>
+</body>
+</html>
