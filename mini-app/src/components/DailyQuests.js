@@ -12,7 +12,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
   const [lastLoginDate, setLastLoginDate] = useState(null);
   const [dailyBonusClaimed, setDailyBonusClaimed] = useState(false);
 
-  // Загрузка заданий из БД (созданных в CRM)
   const loadQuestsFromDB = async () => {
     if (!selectedGroupId) return [];
     
@@ -20,8 +19,15 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
       const response = await fetch(`${API_URL}/api/quests/${selectedGroupId}`);
       if (response.ok) {
         const questsData = await response.json();
+        const now = new Date();
         const transformed = questsData
-          .filter(q => q.active)
+          .filter(q => {
+            if (!q.active) return false;
+            const createdAt = new Date(q.created_at);
+            const expiresDays = q.expires_days || 30;
+            const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
+            return expiresAt > now;
+          })
           .map(q => ({
             id: q.id,
             title: q.title,
@@ -40,7 +46,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
       console.error('Ошибка загрузки заданий из БД:', error);
     }
     
-    // Дефолтные задания
     return [
       { id: 1, title: 'Ежедневный вход', description: 'Заходите в приложение каждый день', reward: 10, type: 'daily_login', target: 1, progress: 0, completed: false, claimed: false, emoji: '✅' },
       { id: 2, title: 'Покрутить колесо', description: 'Сыграйте в Колесо фортуны', reward: 15, type: 'spin_wheel', target: 1, progress: 0, completed: false, claimed: false, emoji: '🎡' },
@@ -48,7 +53,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     ];
   };
 
-  // Загрузка прогресса пользователя из БД
   const loadUserProgress = async () => {
     if (!userId || !selectedGroupId) return null;
     
@@ -64,7 +68,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     return null;
   };
 
-  // Сохранение прогресса в БД
   const saveProgressToDB = async (questsData, totalEarnedData, streakData, lastLoginData) => {
     if (!userId || !selectedGroupId) return;
     
@@ -90,7 +93,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   };
 
-  // Сохранение выполненного задания в БД
   const saveCompletedQuestToDB = async (questId, reward) => {
     if (!userId) return false;
     
@@ -112,7 +114,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   };
 
-  // Проверка и начисление ежедневного бонуса
   const checkAndClaimDailyBonus = async () => {
     if (!userId || !selectedGroupId) return;
     
@@ -160,7 +161,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   };
 
-  // Инициализация
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -201,14 +201,12 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   }, [selectedGroupId, userId]);
 
-  // Проверка ежедневного бонуса при загрузке
   useEffect(() => {
     if (!loading && userId && selectedGroupId && !dailyBonusClaimed) {
       checkAndClaimDailyBonus();
     }
   }, [loading, userId, selectedGroupId]);
 
-  // Сохранение прогресса при изменениях
   useEffect(() => {
     if (!loading && quests.length > 0 && userId && selectedGroupId) {
       saveProgressToDB(quests, totalEarned, streak, lastLoginDate);
@@ -271,7 +269,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }));
   };
 
-  // Проверка ежедневного входа
   useEffect(() => {
     const checkDailyLogin = () => {
       if (!userId || !selectedGroupId) return;
@@ -300,14 +297,12 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   }, [loading, userId, selectedGroupId, lastLoginDate]);
 
-  // Отслеживание баланса
   useEffect(() => {
     if (userBalance !== undefined) {
       updateQuestProgress('reach_balance', 0, userBalance);
     }
   }, [userBalance]);
 
-  // Экспорт функции для внешнего использования
   useEffect(() => {
     window.updateQuestProgress = updateQuestProgress;
     return () => delete window.updateQuestProgress;

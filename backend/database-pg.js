@@ -40,9 +40,10 @@ async function initDatabase() {
                 id SERIAL PRIMARY KEY,
                 company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 name VARCHAR(255) NOT NULL,
-                emoji1 VARCHAR(10) DEFAULT '🎯',
-                emoji2 VARCHAR(10) DEFAULT '🎉',
+                emoji VARCHAR(10) DEFAULT '🎯',
                 description TEXT,
+                start_date TIMESTAMP,
+                end_date TIMESTAMP,
                 active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -58,6 +59,7 @@ async function initDatabase() {
                 description TEXT,
                 reward INTEGER DEFAULT 10,
                 active BOOLEAN DEFAULT TRUE,
+                expires_days INTEGER DEFAULT 30,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -142,26 +144,94 @@ async function initDatabase() {
     }
 }
 
-async function getCompanyTiers(companyId) {
-    const result = await query('SELECT tiers_settings FROM companies WHERE id = $1', [companyId]);
-    if (result.rows.length > 0 && result.rows[0].tiers_settings && result.rows[0].tiers_settings.length > 0) {
-        return result.rows[0].tiers_settings;
-    }
-    // Возвращаем настройки по умолчанию
+// 20 предустановленных заданий
+function getPresetQuests() {
     return [
-        { name: "Новичок", threshold: 0, multiplier: 1, cashback: 5, color: "#95a5a6", icon: "🌱" },
-        { name: "Серебро", threshold: 1000, multiplier: 1.2, cashback: 6, color: "#bdc3c7", icon: "🥈" },
-        { name: "Золото", threshold: 5000, multiplier: 1.5, cashback: 7.5, color: "#f1c40f", icon: "🥇" },
-        { name: "Платина", threshold: 20000, multiplier: 2, cashback: 10, color: "#3498db", icon: "💎" }
+        { emoji: '✅', title: 'Ежедневный вход', description: 'Заходите в приложение каждый день', reward: 10 },
+        { emoji: '🎡', title: 'Покрутить колесо фортуны', description: 'Сыграйте в Колесо фортуны и получите бонус', reward: 15 },
+        { emoji: '👥', title: 'Пригласить друга', description: 'Пригласите друга в программу лояльности', reward: 50 },
+        { emoji: '💰', title: 'Первая покупка', description: 'Совершите свою первую покупку', reward: 100 },
+        { emoji: '💎', title: 'Накопить 500 бонусов', description: 'Накопите 500 бонусов на счете', reward: 75 },
+        { emoji: '🛍️', title: 'Сделать 3 покупки', description: 'Совершите 3 покупки в нашем заведении', reward: 80 },
+        { emoji: '📸', title: 'Оставить отзыв', description: 'Напишите отзыв о нашем заведении', reward: 30 },
+        { emoji: '📍', title: 'Отметить посещение', description: 'Отметьтесь на карте при посещении', reward: 20 },
+        { emoji: '🎂', title: 'День рождения', description: 'Получите бонус в свой день рождения', reward: 200 },
+        { emoji: '📱', title: 'Подписаться на соцсети', description: 'Подпишитесь на наши социальные сети', reward: 25 },
+        { emoji: '⭐', title: 'Поставить оценку', description: 'Оцените наше приложение в магазине', reward: 15 },
+        { emoji: '🎁', title: 'Акционный код', description: 'Введите промокод из email-рассылки', reward: 40 },
+        { emoji: '🏆', title: 'Достижение "Новичок"', description: 'Завершите регистрацию в программе', reward: 50 },
+        { emoji: '🔥', title: 'Серия 7 дней', description: 'Заходите в приложение 7 дней подряд', reward: 100 },
+        { emoji: '⚡', title: 'Быстрая покупка', description: 'Совершите покупку за 5 минут после входа', reward: 25 },
+        { emoji: '🎯', title: 'Попадание в цель', description: 'Накопите 1000 бонусов на счете', reward: 150 },
+        { emoji: '👑', title: 'VIP статус', description: 'Достигните уровня "Золото"', reward: 500 },
+        { emoji: '📊', title: 'Заполнить профиль', description: 'Заполните всю информацию о себе', reward: 30 },
+        { emoji: '🔔', title: 'Включить уведомления', description: 'Включите push-уведомления', reward: 20 },
+        { emoji: '🎬', title: 'Посмотреть видео', description: 'Просмотрите обучающее видео', reward: 15 }
     ];
 }
 
+async function getCompanyTiers(companyId) {
+    try {
+        const result = await query('SELECT tiers_settings FROM companies WHERE id = $1', [companyId]);
+        
+        if (result.rows.length > 0 && result.rows[0].tiers_settings) {
+            let tiers = result.rows[0].tiers_settings;
+            if (typeof tiers === 'string') {
+                tiers = JSON.parse(tiers);
+            }
+            return tiers;
+        }
+        
+        const defaultTiers = [
+            { name: "🌱 Новичок", threshold: 0, multiplier: 1, cashback: 3, color: "#95a5a6", icon: "🌱" },
+            { name: "🥉 Бронза", threshold: 500, multiplier: 1.2, cashback: 5, color: "#cd7f32", icon: "🥉" },
+            { name: "🥈 Серебро", threshold: 2000, multiplier: 1.5, cashback: 7, color: "#bdc3c7", icon: "🥈" },
+            { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
+            { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
+        ];
+        
+        await updateCompanyTiers(companyId, defaultTiers);
+        return defaultTiers;
+    } catch (error) {
+        console.error('❌ Ошибка getCompanyTiers:', error);
+        return [
+            { name: "🌱 Новичок", threshold: 0, multiplier: 1, cashback: 3, color: "#95a5a6", icon: "🌱" },
+            { name: "🥉 Бронза", threshold: 500, multiplier: 1.2, cashback: 5, color: "#cd7f32", icon: "🥉" },
+            { name: "🥈 Серебро", threshold: 2000, multiplier: 1.5, cashback: 7, color: "#bdc3c7", icon: "🥈" },
+            { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
+            { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
+        ];
+    }
+}
+
 async function updateCompanyTiers(companyId, tiersSettings) {
-    const result = await query(
-        'UPDATE companies SET tiers_settings = $1 WHERE id = $2 RETURNING tiers_settings',
-        [JSON.stringify(tiersSettings), companyId]
-    );
-    return result.rows[0]?.tiers_settings || tiersSettings;
+    try {
+        if (!Array.isArray(tiersSettings)) {
+            throw new Error('tiersSettings должен быть массивом');
+        }
+        
+        const sortedTiers = [...tiersSettings].sort((a, b) => a.threshold - b.threshold);
+        const tiersJson = JSON.stringify(sortedTiers);
+        
+        const result = await query(
+            'UPDATE companies SET tiers_settings = $1::jsonb WHERE id = $2 RETURNING tiers_settings',
+            [tiersJson, companyId]
+        );
+        
+        if (result.rows.length === 0) {
+            throw new Error(`Компания с id ${companyId} не найдена`);
+        }
+        
+        let updatedTiers = result.rows[0].tiers_settings;
+        if (typeof updatedTiers === 'string') {
+            updatedTiers = JSON.parse(updatedTiers);
+        }
+        
+        return updatedTiers;
+    } catch (error) {
+        console.error('❌ Ошибка updateCompanyTiers:', error);
+        throw error;
+    }
 }
 
 async function addMissingColumns() {
@@ -174,96 +244,55 @@ async function addMissingColumns() {
         
         if (checkTiers.rows.length === 0) {
             console.log('📝 Добавляем колонку tiers_settings в таблицу companies...');
-            await query(`ALTER TABLE companies ADD COLUMN tiers_settings JSONB DEFAULT '[]'`);
+            const defaultTiers = JSON.stringify([
+                {"name": "🌱 Новичок", "threshold": 0, "multiplier": 1, "cashback": 3, "color": "#95a5a6", "icon": "🌱"},
+                {"name": "🥉 Бронза", "threshold": 500, "multiplier": 1.2, "cashback": 5, "color": "#cd7f32", "icon": "🥉"},
+                {"name": "🥈 Серебро", "threshold": 2000, "multiplier": 1.5, "cashback": 7, "color": "#bdc3c7", "icon": "🥈"},
+                {"name": "🥇 Золото", "threshold": 8000, "multiplier": 2, "cashback": 10, "color": "#f1c40f", "icon": "🥇"},
+                {"name": "💎 Бриллиант", "threshold": 20000, "multiplier": 2.5, "cashback": 15, "color": "#00b4d8", "icon": "💎"}
+            ]);
+            await query(`
+                ALTER TABLE companies 
+                ADD COLUMN tiers_settings JSONB DEFAULT $1::jsonb
+            `, [defaultTiers]);
             console.log('✅ Колонка tiers_settings добавлена');
+        }
+        
+        const checkStartDate = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'start_date'
+        `);
+        
+        if (checkStartDate.rows.length === 0) {
+            console.log('📝 Добавляем колонки start_date и end_date в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN start_date TIMESTAMP`);
+            await query(`ALTER TABLE promotions ADD COLUMN end_date TIMESTAMP`);
+            console.log('✅ Колонки start_date и end_date добавлены');
+        }
+        
+        const checkExpiresDays = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'quests' AND column_name = 'expires_days'
+        `);
+        
+        if (checkExpiresDays.rows.length === 0) {
+            console.log('📝 Добавляем колонку expires_days в таблицу quests...');
+            await query(`ALTER TABLE quests ADD COLUMN expires_days INTEGER DEFAULT 30`);
+            console.log('✅ Колонка expires_days добавлена');
         }
         
         const checkEmoji = await query(`
             SELECT column_name 
             FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'emoji'
+            WHERE table_name = 'promotions' AND column_name = 'emoji'
         `);
         
         if (checkEmoji.rows.length === 0) {
-            console.log('📝 Добавляем колонку emoji в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN emoji VARCHAR(10) DEFAULT '✅'`);
+            console.log('📝 Добавляем колонку emoji в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN emoji VARCHAR(10) DEFAULT '🎯'`);
             console.log('✅ Колонка emoji добавлена');
-        }
-        
-        const checkDescription = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'description'
-        `);
-        
-        if (checkDescription.rows.length === 0) {
-            console.log('📝 Добавляем колонку description в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN description TEXT`);
-            console.log('✅ Колонка description добавлена');
-        }
-        
-        const checkReward = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'reward'
-        `);
-        
-        if (checkReward.rows.length === 0) {
-            console.log('📝 Добавляем колонку reward в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN reward INTEGER DEFAULT 10`);
-            console.log('✅ Колонка reward добавлена');
-        }
-        
-        const checkActive = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'active'
-        `);
-        
-        if (checkActive.rows.length === 0) {
-            console.log('📝 Добавляем колонку active в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN active BOOLEAN DEFAULT TRUE`);
-            console.log('✅ Колонка active добавлена');
-        }
-        
-        const checkUpdatedAt = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'updated_at'
-        `);
-        
-        if (checkUpdatedAt.rows.length === 0) {
-            console.log('📝 Добавляем колонку updated_at в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-            console.log('✅ Колонка updated_at добавлена');
-        }
-        
-        const checkEmoji1 = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'emoji1'
-        `);
-        
-        if (checkEmoji1.rows.length === 0) {
-            console.log('📝 Добавляем колонки emoji1/emoji2 в таблицу promotions...');
-            await query(`
-                ALTER TABLE promotions 
-                ADD COLUMN emoji1 VARCHAR(10) DEFAULT '🎯',
-                ADD COLUMN emoji2 VARCHAR(10) DEFAULT '🎉'
-            `);
-            console.log('✅ Колонки добавлены в promotions');
-        }
-        
-        const checkPromoUpdatedAt = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'updated_at'
-        `);
-        
-        if (checkPromoUpdatedAt.rows.length === 0) {
-            console.log('📝 Добавляем колонку updated_at в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-            console.log('✅ Колонка updated_at добавлена в promotions');
         }
         
         console.log('✅ Все недостающие колонки добавлены');
@@ -280,40 +309,36 @@ async function insertTestData() {
         if (count === 0) {
             console.log('📝 Добавление тестовых данных...');
             
+            const defaultTiers = JSON.stringify([
+                {"name": "🌱 Новичок", "threshold": 0, "multiplier": 1, "cashback": 3, "color": "#95a5a6", "icon": "🌱"},
+                {"name": "🥉 Бронза", "threshold": 500, "multiplier": 1.2, "cashback": 5, "color": "#cd7f32", "icon": "🥉"},
+                {"name": "🥈 Серебро", "threshold": 2000, "multiplier": 1.5, "cashback": 7, "color": "#bdc3c7", "icon": "🥈"},
+                {"name": "🥇 Золото", "threshold": 8000, "multiplier": 2, "cashback": 10, "color": "#f1c40f", "icon": "🥇"},
+                {"name": "💎 Бриллиант", "threshold": 20000, "multiplier": 2.5, "cashback": 15, "color": "#00b4d8", "icon": "💎"}
+            ]);
+            
             await query(`
                 INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings) VALUES 
-                ('Пиццерия "Маргарита"', 'Иван Петров', 'pizza@test.com', '+7 (999) 123-45-67', '123456', '#e74c3c', 'Итальянская кухня, пицца, паста', '[
-                    {"name": "Новичок", "threshold": 0, "multiplier": 1, "cashback": 5, "color": "#95a5a6", "icon": "🌱"},
-                    {"name": "Серебро", "threshold": 1000, "multiplier": 1.2, "cashback": 6, "color": "#bdc3c7", "icon": "🥈"},
-                    {"name": "Золото", "threshold": 5000, "multiplier": 1.5, "cashback": 7.5, "color": "#f1c40f", "icon": "🥇"},
-                    {"name": "Платина", "threshold": 20000, "multiplier": 2, "cashback": 10, "color": "#3498db", "icon": "💎"}
-                ]'),
-                ('Кофейня "Кофеин"', 'Анна Сидорова', 'coffee@test.com', '+7 (999) 234-56-78', '123456', '#8e44ad', 'Ароматный кофе, десерты, выпечка', '[
-                    {"name": "Новичок", "threshold": 0, "multiplier": 1, "cashback": 5, "color": "#95a5a6", "icon": "🌱"},
-                    {"name": "Серебро", "threshold": 1000, "multiplier": 1.2, "cashback": 6, "color": "#bdc3c7", "icon": "🥈"},
-                    {"name": "Золото", "threshold": 5000, "multiplier": 1.5, "cashback": 7.5, "color": "#f1c40f", "icon": "🥇"},
-                    {"name": "Платина", "threshold": 20000, "multiplier": 2, "cashback": 10, "color": "#3498db", "icon": "💎"}
-                ]')
-            `);
+                ('Пиццерия "Маргарита"', 'Иван Петров', 'pizza@test.com', '+7 (999) 123-45-67', '123456', '#e74c3c', 'Итальянская кухня, пицца, паста', $1),
+                ('Кофейня "Кофеин"', 'Анна Сидорова', 'coffee@test.com', '+7 (999) 234-56-78', '123456', '#8e44ad', 'Ароматный кофе, десерты, выпечка', $1)
+            `, [defaultTiers]);
             
             await query(`
-                INSERT INTO promotions (company_id, name, emoji1, emoji2, description, active) VALUES 
-                (1, 'Счастливые часы', '⏰', '☕', 'с 15:00 до 17:00 скидка 30%', true),
-                (1, 'День рождения', '🎂', '🎉', '+200 бонусов имениннику', true),
-                (1, 'Семейный ужин', '👨‍👩‍👧', '🍕', 'При заказе от 2000₽ - пицца в подарок', true)
+                INSERT INTO promotions (company_id, name, emoji, description, active) VALUES 
+                (1, 'Счастливые часы', '⏰', 'с 15:00 до 17:00 скидка 30%', true),
+                (1, 'День рождения', '🎂', '+200 бонусов имениннику', true),
+                (1, 'Семейный ужин', '👨‍👩‍👧', 'При заказе от 2000₽ - пицца в подарок', true)
             `);
             
-            await query(`
-                INSERT INTO quests (company_id, emoji, title, description, reward, active) VALUES 
-                (1, '✅', 'Ежедневный вход', 'Заходите в приложение каждый день', 10, true),
-                (1, '🎡', 'Покрутить колесо', 'Сыграйте в Колесо фортуны', 15, true),
-                (1, '👥', 'Пригласить друга', 'Поделитесь приложением с другом', 50, true),
-                (1, '💰', 'Первая покупка', 'Совершите первую покупку', 100, true),
-                (1, '💎', 'Накопить 500 бонусов', 'Накопите 500 бонусов на счете', 75, true),
-                (1, '🛍️', 'Сделать 3 покупки', 'Совершите 3 покупки в нашем заведении', 80, true)
-            `);
+            const presetQuests = getPresetQuests();
+            for (const quest of presetQuests) {
+                await query(`
+                    INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days) 
+                    VALUES ($1, $2, $3, $4, $5, true, $6)
+                `, [1, quest.emoji, quest.title, quest.description, quest.reward, 30]);
+            }
             
-            console.log('✅ Тестовые данные добавлены');
+            console.log('✅ Тестовые данные добавлены с 20 заданиями');
         } else {
             console.log(`📊 В базе уже есть ${count} компаний`);
         }
@@ -322,30 +347,31 @@ async function insertTestData() {
     }
 }
 
+// ============ CRUD операции для акций ============
 async function getPromotions(companyId) {
     const result = await query('SELECT * FROM promotions WHERE company_id = $1 ORDER BY created_at DESC', [companyId]);
     return result.rows;
 }
 
 async function addPromotion(companyId, promotionData) {
-    const { name, emoji1, emoji2, description, active } = promotionData;
+    const { name, emoji, description, startDate, endDate, active } = promotionData;
     const result = await query(
-        `INSERT INTO promotions (company_id, name, emoji1, emoji2, description, active, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
+        `INSERT INTO promotions (company_id, name, emoji, description, start_date, end_date, active, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
          RETURNING *`,
-        [companyId, name, emoji1 || '🎯', emoji2 || '🎉', description || '', active !== undefined ? active : true]
+        [companyId, name, emoji || '🎯', description || '', startDate || null, endDate || null, active !== undefined ? active : true]
     );
     return result.rows[0];
 }
 
 async function updatePromotion(promotionId, promotionData) {
-    const { name, emoji1, emoji2, description, active } = promotionData;
+    const { name, emoji, description, startDate, endDate, active } = promotionData;
     const result = await query(
         `UPDATE promotions 
-         SET name = $1, emoji1 = $2, emoji2 = $3, description = $4, active = $5, updated_at = NOW()
-         WHERE id = $6
+         SET name = $1, emoji = $2, description = $3, start_date = $4, end_date = $5, active = $6, updated_at = NOW()
+         WHERE id = $7
          RETURNING *`,
-        [name, emoji1, emoji2, description, active, promotionId]
+        [name, emoji, description, startDate || null, endDate || null, active, promotionId]
     );
     return result.rows[0];
 }
@@ -355,30 +381,31 @@ async function deletePromotion(promotionId) {
     return true;
 }
 
+// ============ CRUD операции для заданий ============
 async function getQuests(companyId) {
     const result = await query('SELECT * FROM quests WHERE company_id = $1 ORDER BY created_at DESC', [companyId]);
     return result.rows;
 }
 
 async function addQuest(companyId, questData) {
-    const { emoji, title, description, reward, active } = questData;
+    const { emoji, title, description, reward, active, expiresDays } = questData;
     const result = await query(
-        `INSERT INTO quests (company_id, emoji, title, description, reward, active, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
+        `INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
          RETURNING *`,
-        [companyId, emoji || '✅', title, description || '', reward || 10, active !== undefined ? active : true]
+        [companyId, emoji || '✅', title, description || '', reward || 10, active !== undefined ? active : true, expiresDays || 30]
     );
     return result.rows[0];
 }
 
 async function updateQuest(questId, questData) {
-    const { emoji, title, description, reward, active } = questData;
+    const { emoji, title, description, reward, active, expiresDays } = questData;
     const result = await query(
         `UPDATE quests 
-         SET emoji = $1, title = $2, description = $3, reward = $4, active = $5, updated_at = NOW()
-         WHERE id = $6
+         SET emoji = $1, title = $2, description = $3, reward = $4, active = $5, expires_days = $6, updated_at = NOW()
+         WHERE id = $7
          RETURNING *`,
-        [emoji, title, description, reward, active, questId]
+        [emoji, title, description, reward, active, expiresDays || 30, questId]
     );
     return result.rows[0];
 }
@@ -388,13 +415,15 @@ async function deleteQuest(questId) {
     return true;
 }
 
+// ============ Операции с компаниями ============
 async function addCompany(companyData) {
     const { company, name, email, phone, password, brandColor, description } = companyData;
     const defaultTiers = JSON.stringify([
-        { name: "Новичок", threshold: 0, multiplier: 1, cashback: 5, color: "#95a5a6", icon: "🌱" },
-        { name: "Серебро", threshold: 1000, multiplier: 1.2, cashback: 6, color: "#bdc3c7", icon: "🥈" },
-        { name: "Золото", threshold: 5000, multiplier: 1.5, cashback: 7.5, color: "#f1c40f", icon: "🥇" },
-        { name: "Платина", threshold: 20000, multiplier: 2, cashback: 10, color: "#3498db", icon: "💎" }
+        { name: "🌱 Новичок", threshold: 0, multiplier: 1, cashback: 3, color: "#95a5a6", icon: "🌱" },
+        { name: "🥉 Бронза", threshold: 500, multiplier: 1.2, cashback: 5, color: "#cd7f32", icon: "🥉" },
+        { name: "🥈 Серебро", threshold: 2000, multiplier: 1.5, cashback: 7, color: "#bdc3c7", icon: "🥈" },
+        { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
+        { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
     ]);
     
     const result = await query(
@@ -421,6 +450,7 @@ async function getCompanyById(id) {
     return result.rows[0];
 }
 
+// ============ Операции с пользователями ============
 async function getUserById(id) {
     const result = await query('SELECT * FROM users WHERE id = $1', [id]);
     return result.rows[0];
@@ -620,5 +650,6 @@ module.exports = {
     checkDailyBonusClaimed,
     claimDailyBonus,
     getCompanyTiers,
-    updateCompanyTiers
+    updateCompanyTiers,
+    getPresetQuests
 };

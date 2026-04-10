@@ -1,12 +1,18 @@
 // ========== УПРАВЛЕНИЕ МОДАЛЬНЫМИ ОКНАМИ ==========
 function openModal(type) {
-    document.getElementById(type + 'Modal').classList.add('active');
-    document.body.style.overflow = 'hidden';
+    const modal = document.getElementById(type + 'Modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
 }
 
 function closeModal(type) {
-    document.getElementById(type + 'Modal').classList.remove('active');
-    document.body.style.overflow = 'auto';
+    const modal = document.getElementById(type + 'Modal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = 'auto';
+    }
 }
 
 function switchToRegister() {
@@ -21,18 +27,17 @@ function switchToLogin() {
 
 function toggleFaq(element) {
     const item = element.closest('.faq-item');
-    item.classList.toggle('active');
-    const span = element.querySelector('span');
-    if (span) span.textContent = item.classList.contains('active') ? '−' : '+';
+    if (item) {
+        item.classList.toggle('active');
+        const span = element.querySelector('span');
+        if (span) span.textContent = item.classList.contains('active') ? '−' : '+';
+    }
 }
 
 function submitDemo() {
-    const brand = document.getElementById('demoBrand')?.value || '';
-    const email = document.getElementById('demoEmail')?.value || '';
+    const email = document.getElementById('demoEmail')?.value;
     if (email && email.includes('@')) {
         alert('Спасибо! Мы свяжемся с вами в ближайшее время.');
-        if (document.getElementById('demoBrand')) document.getElementById('demoBrand').value = '';
-        if (document.getElementById('demoEmail')) document.getElementById('demoEmail').value = '';
     } else {
         alert('Пожалуйста, введите корректный email');
     }
@@ -41,16 +46,7 @@ function submitDemo() {
 // ========== CRM PANEL DATA ==========
 let currentBusiness = null;
 let notificationsHistory = [];
-let tiers = [
-    { name: 'Новичок', threshold: 0, multiplier: 1, color: '#95a5a6' },
-    { name: 'Серебро', threshold: 1000, multiplier: 1.2, color: '#bdc3c7' },
-    { name: 'Золото', threshold: 5000, multiplier: 1.5, color: '#f1c40f' },
-    { name: 'Платина', threshold: 20000, multiplier: 2, color: '#3498db' }
-];
-let discounts = [
-    { name: 'Скидка 5%', type: 'percent', value: 5, minAmount: 500, active: true },
-    { name: 'Скидка 10%', type: 'percent', value: 10, minAmount: 1000, active: true }
-];
+let tiers = [];
 let games = [
     { id: 1, name: 'Колесо фортуны', active: true, cost: 25, icon: '🎡' },
     { id: 2, name: 'Скретч-карта', active: true, cost: 15, icon: '🎫' }
@@ -60,6 +56,7 @@ let promotions = [];
 let questsManager = [];
 let currentEditingQuestId = null;
 let currentEditingPromotionId = null;
+let presetQuestsList = [];
 
 const API_URL = 'http://localhost:3001';
 
@@ -177,6 +174,7 @@ async function loadCRMPanel() {
         `;
     }
     
+    await loadPresetQuests();
     await loadPromotionsAndQuestsFromDB();
     loadAnalytics();
     loadLoyaltySettings();
@@ -216,47 +214,40 @@ function loadAnalytics() {
         ]
     };
     const totalRevenue = stats.revenue;
-    document.getElementById('statsGrid').innerHTML = `
-        <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-info"><div class="stat-value">${stats.revenue.toLocaleString()} ₽</div><div class="stat-label">Выручка за месяц</div><div class="stat-trend up">↑ +12%</div></div></div>
-        <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><div class="stat-value">${stats.activeUsers}</div><div class="stat-label">Активных пользователей</div><div class="stat-trend up">↑ +8%</div></div></div>
-        <div class="stat-card"><div class="stat-icon">🆕</div><div class="stat-info"><div class="stat-value">${stats.newUsers}</div><div class="stat-label">Новых за месяц</div><div class="stat-trend up">↑ +23%</div></div></div>
-        <div class="stat-card"><div class="stat-icon">💎</div><div class="stat-info"><div class="stat-value">${stats.vipCount}</div><div class="stat-label">VIP-клиентов</div><div class="stat-trend up">↑ +5%</div></div></div>
-    `;
-    document.getElementById('segmentsList').innerHTML = stats.segments.map(seg => `
-        <div class="segment-item"><div class="segment-header"><div class="segment-color" style="background-color: ${seg.color}"></div><div class="segment-name">${seg.name}</div><div class="segment-count">${seg.count} чел.</div><div class="segment-percent">${seg.percent}%</div></div><div class="segment-bar"><div class="segment-fill" style="width: ${seg.percent}%; background-color: ${seg.color}"></div></div></div>
-    `).join('');
-    const maxValue = Math.max(...stats.dailyActivity);
-    document.getElementById('activityChart').innerHTML = `<div class="activity-chart">${stats.dailyActivity.slice(-14).map((val, i) => `<div class="bar-container"><div class="bar" style="height: ${(val / maxValue) * 150}px"><span class="bar-value">${val}</span></div><div class="bar-label">Д${i+1}</div></div>`).join('')}</div>`;
-    document.getElementById('topProducts').innerHTML = `
-        <div class="products-table"><div class="table-header"><div>Продукт</div><div>Продажи</div><div>Выручка</div><div>Доля</div></div>
-        ${stats.topProducts.map((p,i) => `<div class="table-row"><div class="product-name"><span class="product-rank">${i+1}</span> ${p.name}</div><div>${p.sales} шт.</div><div>${p.revenue.toLocaleString()} ₽</div><div><div class="product-bar"><div class="product-fill" style="width: ${(p.revenue/totalRevenue)*100}%"></div><span>${Math.round((p.revenue/totalRevenue)*100)}%</span></div></div></div>`).join('')}
-        </div>`;
-}
-
-// ========== МОДУЛЬ 2: ЛОЯЛЬНОСТЬ ==========
-// В script.js, обновите функцию loadLoyaltySettings
-window.loadLoyaltySettings = async function() {
-    console.log('loadLoyaltySettings вызвана');
-    await loadTiersSettings();
     
-    const discountsContainer = document.getElementById('discountsList');
-    if (discountsContainer) {
-        discountsContainer.innerHTML = discounts.map((d, idx) => `
-            <div class="discount-item">
-                <div class="discount-info">
-                    <div class="discount-title">${escapeHtml(d.name)}</div>
-                    <div class="discount-desc">${d.type === 'percent' ? `${d.value}% скидка` : d.name} от ${d.minAmount}₽</div>
-                </div>
-                <div class="toggle-switch">
-                    <input type="checkbox" ${d.active ? 'checked' : ''} onchange="toggleDiscount(${idx}, this.checked)">
-                    <span>${d.active ? 'Активна' : 'Отключена'}</span>
-                </div>
-            </div>
+    const statsGrid = document.getElementById('statsGrid');
+    if (statsGrid) {
+        statsGrid.innerHTML = `
+            <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-info"><div class="stat-value">${stats.revenue.toLocaleString()} ₽</div><div class="stat-label">Выручка за месяц</div><div class="stat-trend up">↑ +12%</div></div></div>
+            <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><div class="stat-value">${stats.activeUsers}</div><div class="stat-label">Активных пользователей</div><div class="stat-trend up">↑ +8%</div></div></div>
+            <div class="stat-card"><div class="stat-icon">🆕</div><div class="stat-info"><div class="stat-value">${stats.newUsers}</div><div class="stat-label">Новых за месяц</div><div class="stat-trend up">↑ +23%</div></div></div>
+            <div class="stat-card"><div class="stat-icon">💎</div><div class="stat-info"><div class="stat-value">${stats.vipCount}</div><div class="stat-label">VIP-клиентов</div><div class="stat-trend up">↑ +5%</div></div></div>
+        `;
+    }
+    
+    const segmentsList = document.getElementById('segmentsList');
+    if (segmentsList) {
+        segmentsList.innerHTML = stats.segments.map(seg => `
+            <div class="segment-item"><div class="segment-header"><div class="segment-color" style="background-color: ${seg.color}"></div><div class="segment-name">${seg.name}</div><div class="segment-count">${seg.count} чел.</div><div class="segment-percent">${seg.percent}%</div></div><div class="segment-bar"><div class="segment-fill" style="width: ${seg.percent}%; background-color: ${seg.color}"></div></div></div>
         `).join('');
     }
-};
+    
+    const activityChart = document.getElementById('activityChart');
+    if (activityChart) {
+        const maxValue = Math.max(...stats.dailyActivity);
+        activityChart.innerHTML = `<div class="activity-chart">${stats.dailyActivity.slice(-14).map((val, i) => `<div class="bar-container"><div class="bar" style="height: ${(val / maxValue) * 150}px"><span class="bar-value">${val}</span></div><div class="bar-label">Д${i+1}</div></div>`).join('')}</div>`;
+    }
+    
+    const topProducts = document.getElementById('topProducts');
+    if (topProducts) {
+        topProducts.innerHTML = `
+            <div class="products-table"><div class="table-header"><div>Продукт</div><div>Продажи</div><div>Выручка</div><div>Доля</div></div>
+            ${stats.topProducts.map((p,i) => `<div class="table-row"><div class="product-name"><span class="product-rank">${i+1}</span> ${p.name}</div><div>${p.sales} шт.</div><div>${p.revenue.toLocaleString()} ₽</div><div><div class="product-bar"><div class="product-fill" style="width: ${(p.revenue/totalRevenue)*100}%"></div><span>${Math.round((p.revenue/totalRevenue)*100)}%</span></div></div></div>`).join('')}
+            </div>`;
+    }
+}
 
-// Обновите функцию loadTiersSettings
+// ========== МОДУЛЬ 2: ЛОЯЛЬНОСТЬ (УРОВНИ) ==========
 async function loadTiersSettings() {
     if (!currentBusiness) return;
     
@@ -268,12 +259,12 @@ async function loadTiersSettings() {
             tiers = data.tiers;
             renderTiersSettings();
         } else {
-            // Если нет сохраненных уровней, используем дефолтные
             tiers = [
-                { name: "Новичок", threshold: 0, multiplier: 1, cashback: 5, color: "#95a5a6", icon: "🌱" },
-                { name: "Серебро", threshold: 1000, multiplier: 1.2, cashback: 6, color: "#bdc3c7", icon: "🥈" },
-                { name: "Золото", threshold: 5000, multiplier: 1.5, cashback: 7.5, color: "#f1c40f", icon: "🥇" },
-                { name: "Платина", threshold: 20000, multiplier: 2, cashback: 10, color: "#3498db", icon: "💎" }
+                { name: "🌱 Новичок", threshold: 0, multiplier: 1, cashback: 3, color: "#95a5a6", icon: "🌱" },
+                { name: "🥉 Бронза", threshold: 500, multiplier: 1.2, cashback: 5, color: "#cd7f32", icon: "🥉" },
+                { name: "🥈 Серебро", threshold: 2000, multiplier: 1.5, cashback: 7, color: "#bdc3c7", icon: "🥈" },
+                { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
+                { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
             ];
             renderTiersSettings();
         }
@@ -283,134 +274,158 @@ async function loadTiersSettings() {
     }
 }
 
-// Обновите функцию renderTiersSettings
 function renderTiersSettings() {
     const container = document.getElementById('tiersSettingsList');
     if (!container) return;
     
-    if (!tiers || tiers.length === 0) {
-        container.innerHTML = '<div class="empty-state">Нет настроек уровней. Нажмите "+ Добавить уровень" чтобы создать первый уровень.</div>';
-        return;
-    }
+    const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
     
-    container.innerHTML = tiers.map((tier, idx) => `
-        <div class="tier-config-item" style="border-left: 4px solid ${tier.color || '#95a5a6'}">
+    container.innerHTML = sortedTiers.map((tier, idx) => `
+        <div class="tier-config-item" style="border-left: 4px solid ${tier.color}">
             <div class="tier-config-header">
                 <div class="tier-config-title">
-                    <input type="text" value="${escapeHtml(tier.name)}" 
-                           onchange="updateTierConfig(${idx}, 'name', this.value)" 
-                           class="tier-name-input">
-                    <input type="color" value="${tier.color || '#95a5a6'}" 
+                    <div class="tier-icon-preview" style="background: ${tier.color}20; border-radius: 12px; padding: 4px 8px;">
+                        <span style="font-size: 20px;">${tier.icon || '⭐'}</span>
+                        <input type="text" value="${escapeHtml(tier.name)}" 
+                               onchange="updateTierConfig(${idx}, 'name', this.value)" 
+                               class="tier-name-input"
+                               style="width: 120px; margin-left: 8px;">
+                    </div>
+                    <input type="color" value="${tier.color}" 
                            onchange="updateTierConfig(${idx}, 'color', this.value)" 
                            class="tier-color-input">
                     <select onchange="updateTierConfig(${idx}, 'icon', this.value)" class="tier-icon-select">
-                        ${getIconOptions(tier.icon || '🌱')}
+                        ${getIconOptions(tier.icon)}
                     </select>
                 </div>
-                <button class="btn-remove" onclick="removeTierConfig(${idx})">🗑️</button>
+                <button class="btn-remove" onclick="removeTierConfig(${idx})" ${sortedTiers.length <= 1 ? 'disabled style="opacity:0.5"' : ''}>🗑️</button>
             </div>
             
             <div class="tier-config-fields">
                 <div class="config-field">
                     <label>💰 Порог LTV (₽):</label>
-                    <input type="number" value="${tier.threshold || 0}" 
+                    <input type="number" value="${tier.threshold}" 
                            onchange="updateTierConfig(${idx}, 'threshold', parseInt(this.value))" 
                            class="config-input">
                 </div>
                 
                 <div class="config-field">
                     <label>⚡ Множитель бонусов:</label>
-                    <input type="number" step="0.1" value="${tier.multiplier || 1}" 
+                    <input type="number" step="0.1" value="${tier.multiplier}" 
                            onchange="updateTierConfig(${idx}, 'multiplier', parseFloat(this.value))" 
                            class="config-input">
-                    <span class="field-hint">x</span>
                 </div>
                 
                 <div class="config-field">
                     <label>💰 Кешбэк (%):</label>
-                    <input type="number" step="0.5" value="${tier.cashback || 5}" 
+                    <input type="number" step="0.5" value="${tier.cashback || tier.multiplier * 5}" 
                            onchange="updateTierConfig(${idx}, 'cashback', parseFloat(this.value))" 
                            class="config-input">
-                    <span class="field-hint">%</span>
                 </div>
             </div>
             
             <div class="tier-preview">
-                <div style="background: ${tier.color || '#95a5a6'}; padding: 8px 12px; border-radius: 12px; color: white;">
-                    ${tier.threshold.toLocaleString()} ₽ - ${tier.icon || '🌱'} ${escapeHtml(tier.name)}: x${tier.multiplier || 1} бонусов • ${tier.cashback || 5}% кешбэк
+                <div style="background: ${tier.color}; padding: 8px 12px; border-radius: 12px; color: white;">
+                    ${tier.icon} ${escapeHtml(tier.name)}: x${tier.multiplier} бонусов • ${tier.cashback || tier.multiplier * 5}% кешбэк
                 </div>
             </div>
         </div>
     `).join('');
 }
 
-// Обновите функцию updateTierConfig
-window.updateTierConfig = function(index, field, value) {
+function getIconOptions(selectedIcon) {
+    const icons = ['🌱', '🥉', '🥈', '🥇', '💎', '⭐', '🏆', '👑', '🔥', '⚡', '🎯'];
+    return icons.map(icon => `<option value="${icon}" ${selectedIcon === icon ? 'selected' : ''}>${icon}</option>`).join('');
+}
+
+function updateTierConfig(index, field, value) {
     if (tiers[index]) {
         tiers[index][field] = value;
         renderTiersSettings();
         if (window.tiersSaveTimeout) clearTimeout(window.tiersSaveTimeout);
         window.tiersSaveTimeout = setTimeout(() => saveTiersToServer(), 1000);
     }
-};
+}
 
-// Обновите функцию addTierConfig
-window.addTierConfig = function() {
-    const lastThreshold = tiers.length > 0 ? tiers[tiers.length - 1].threshold + 5000 : 1000;
+function addTierConfig() {
+    const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
+    const lastTier = sortedTiers[sortedTiers.length - 1];
+    const newThreshold = lastTier ? lastTier.threshold + 5000 : 1000;
+    const newMultiplier = lastTier ? Math.min(5, lastTier.multiplier + 0.3) : 1;
+    
     tiers.push({
-        name: 'Новый уровень',
-        threshold: lastThreshold,
-        multiplier: 1,
-        cashback: 5,
-        color: '#95a5a6',
-        icon: '⭐'
+        name: `Уровень ${tiers.length + 1}`,
+        threshold: newThreshold,
+        multiplier: newMultiplier,
+        cashback: Math.min(25, newMultiplier * 5),
+        color: getNextColor(tiers.length),
+        icon: getNextIcon(tiers.length)
     });
     renderTiersSettings();
     saveTiersToServer();
-};
+}
 
-// Обновите функцию removeTierConfig
-window.removeTierConfig = function(index) {
+function getNextColor(index) {
+    const colors = ['#95a5a6', '#cd7f32', '#bdc3c7', '#f1c40f', '#00b4d8', '#9b59b6', '#e74c3c', '#2ecc71', '#e67e22', '#1abc9c'];
+    return colors[index % colors.length];
+}
+
+function getNextIcon(index) {
+    const icons = ['🌱', '🥉', '🥈', '🥇', '💎', '⭐', '🏆', '👑', '🔥', '⚡'];
+    return icons[index % icons.length];
+}
+
+function removeTierConfig(index) {
     if (tiers.length <= 1) {
-        alert('Нельзя удалить последний уровень');
+        alert('❌ Нельзя удалить последний уровень');
         return;
     }
-    tiers.splice(index, 1);
-    renderTiersSettings();
-    saveTiersToServer();
-};
+    if (confirm(`Удалить уровень "${tiers[index].name}"?`)) {
+        tiers.splice(index, 1);
+        renderTiersSettings();
+        saveTiersToServer();
+    }
+}
 
-// Обновите функцию saveTiersToServer
 async function saveTiersToServer() {
     if (!currentBusiness) return;
     
-    tiers.sort((a, b) => a.threshold - b.threshold);
+    const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
     
     try {
         const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/tiers`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tiers })
+            body: JSON.stringify({ tiers: sortedTiers })
         });
         
         const data = await response.json();
         if (data.success) {
             showSaveIndicator();
-            console.log('✅ Уровни сохранены в БД');
-        } else {
-            console.error('Ошибка сохранения:', data.message);
         }
     } catch (error) {
         console.error('Ошибка сохранения уровней:', error);
     }
 }
 
-function updateTier(index, field, value) { if (tiers[index]) { tiers[index][field] = value; loadLoyaltySettings(); } }
-function addTier() { tiers.push({ name: 'Новый ранг', threshold: 0, multiplier: 1, color: '#95a5a6' }); loadLoyaltySettings(); }
-function removeTier(index) { tiers.splice(index,1); loadLoyaltySettings(); }
-function toggleDiscount(index, active) { if (discounts[index]) { discounts[index].active = active; loadLoyaltySettings(); } }
-function addDiscount() { discounts.push({ name: 'Новая скидка', type: 'percent', value: 10, minAmount: 500, active: true }); loadLoyaltySettings(); }
-function saveLoyaltySettings() { alert('Настройки сохранены!'); localStorage.setItem('loyalty_tiers', JSON.stringify(tiers)); localStorage.setItem('loyalty_discounts', JSON.stringify(discounts)); }
+function showSaveIndicator() {
+    const indicator = document.getElementById('saveIndicator');
+    if (indicator) {
+        indicator.style.opacity = '1';
+        setTimeout(() => {
+            indicator.style.opacity = '0';
+        }, 1500);
+    }
+}
+
+function loadLoyaltySettings() {
+    loadTiersSettings();
+}
+
+function saveLoyaltySettings() {
+    saveTiersToServer();
+    alert('✅ Настройки сохранены!');
+}
 
 // ========== МОДУЛЬ 3: УВЕДОМЛЕНИЯ ==========
 function sendNotification() {
@@ -418,26 +433,92 @@ function sendNotification() {
     const segment = document.getElementById('notifSegment')?.value || 'all';
     const title = document.getElementById('notifTitle')?.value || '';
     const message = document.getElementById('notifMessage')?.value || '';
-    if (!title || !message) { alert('Заполните заголовок и сообщение'); return; }
-    const notification = { id: Date.now(), type, segment, title, message, date: new Date().toLocaleString(), status: 'sent' };
+    
+    if (!title || !message) {
+        alert('Заполните заголовок и сообщение');
+        return;
+    }
+    
+    const notification = { 
+        id: Date.now(), 
+        type, 
+        segment, 
+        title, 
+        message, 
+        date: new Date().toLocaleString(), 
+        status: 'sent' 
+    };
     notificationsHistory.unshift(notification);
     if (notificationsHistory.length > 20) notificationsHistory.pop();
     loadNotificationsHistory();
-    if (document.getElementById('notifTitle')) document.getElementById('notifTitle').value = '';
-    if (document.getElementById('notifMessage')) document.getElementById('notifMessage').value = '';
-    alert(`✅ Уведомление отправлено!\nАудитория: ${getSegmentName(segment)}\nЗаголовок: ${title}`);
+    
+    document.getElementById('notifTitle').value = '';
+    document.getElementById('notifMessage').value = '';
+    alert(`✅ Уведомление отправлено!\nАудитория: ${getSegmentName(segment)}`);
 }
 
-function getSegmentName(segment) { const segments = { 'all':'Все','active':'Активные','sleeping':'Спящие','vip':'VIP','new':'Новые' }; return segments[segment] || segment; }
+function getSegmentName(segment) {
+    const segments = { 'all':'Все', 'active':'Активные', 'sleeping':'Спящие', 'vip':'VIP', 'new':'Новые' };
+    return segments[segment] || segment;
+}
 
 function loadNotificationsHistory() {
     const container = document.getElementById('notificationsHistory');
     if (!container) return;
-    if (notificationsHistory.length === 0) { container.innerHTML = '<div class="empty-state">Нет отправленных уведомлений</div>'; return; }
-    container.innerHTML = notificationsHistory.map(n => `<div class="history-item"><div class="history-info"><div class="history-title">${escapeHtml(n.title)}</div><div class="history-message">${escapeHtml(n.message)}</div><div class="history-meta">Аудитория: ${getSegmentName(n.segment)} • ${n.date}</div></div><div class="history-status sent">✅ Отправлено</div></div>`).join('');
+    if (notificationsHistory.length === 0) {
+        container.innerHTML = '<div class="empty-state">Нет отправленных уведомлений</div>';
+        return;
+    }
+    container.innerHTML = notificationsHistory.map(n => `
+        <div class="history-item">
+            <div class="history-info">
+                <div class="history-title">${escapeHtml(n.title)}</div>
+                <div class="history-message">${escapeHtml(n.message)}</div>
+                <div class="history-meta">Аудитория: ${getSegmentName(n.segment)} • ${n.date}</div>
+            </div>
+            <div class="history-status sent">✅ Отправлено</div>
+        </div>
+    `).join('');
 }
 
-// ========== МОДУЛЬ 4: МАРКЕТИНГ (АКЦИИ И ЗАДАНИЯ) ==========
+// ========== МОДУЛЬ 4: МАРКЕТИНГ ==========
+
+async function loadPresetQuests() {
+    try {
+        const response = await fetch(`${API_URL}/api/preset-quests`);
+        const data = await response.json();
+        if (data.success) {
+            presetQuestsList = data.quests;
+            const select = document.getElementById('questPresetSelect');
+            if (select) {
+                select.innerHTML = '<option value="">-- Выберите готовое задание --</option>' +
+                    presetQuestsList.map(q => `<option value="${escapeHtml(q.title)}" data-emoji="${q.emoji}" data-desc="${escapeHtml(q.description)}" data-reward="${q.reward}">${q.emoji} ${q.title}</option>`).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки предустановленных заданий:', error);
+    }
+}
+
+function loadPresetQuest() {
+    const select = document.getElementById('questPresetSelect');
+    const selectedOption = select.options[select.selectedIndex];
+    if (selectedOption && selectedOption.value) {
+        document.getElementById('questTitle').value = selectedOption.value;
+        document.getElementById('questDesc').value = selectedOption.getAttribute('data-desc') || '';
+        document.getElementById('questReward').value = selectedOption.getAttribute('data-reward') || 10;
+        const emoji = selectedOption.getAttribute('data-emoji') || '✅';
+        const emojiSelect = document.getElementById('questEmoji');
+        if (emojiSelect) {
+            for (let i = 0; i < emojiSelect.options.length; i++) {
+                if (emojiSelect.options[i].value === emoji) {
+                    emojiSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+}
 
 async function loadPromotionsAndQuestsFromDB() {
     if (!currentBusiness) return;
@@ -465,23 +546,47 @@ async function loadPromotionsAndQuestsFromDB() {
 function renderPromotionsList() {
     const container = document.getElementById('promotionsList');
     if (!container) return;
-    if (promotions.length === 0) { container.innerHTML = '<div class="empty-state">Нет акций. Добавьте первую!</div>'; return; }
-    container.innerHTML = promotions.map(promo => `
-        <div class="promotion-item">
-            <div class="promotion-header"><div class="promotion-emojis">${promo.emoji1} ${promo.emoji2}</div><div class="promotion-name">${escapeHtml(promo.name)}</div><div class="promotion-status ${promo.active ? 'active' : 'inactive'}">${promo.active ? 'Активна' : 'Отключена'}</div><button class="btn-remove" onclick="deletePromotion(${promo.id})">🗑️</button><button class="btn-edit" onclick="editPromotion(${promo.id})">✏️</button></div>
-            <div class="promotion-desc">${escapeHtml(promo.description)}</div>
-            <div class="promotion-actions"><label>Активна: <input type="checkbox" ${promo.active ? 'checked' : ''} onchange="togglePromotion(${promo.id}, this.checked)"></label></div>
-        </div>
-    `).join('');
+    if (promotions.length === 0) {
+        container.innerHTML = '<div class="empty-state">Нет акций. Добавьте первую!</div>';
+        return;
+    }
+    
+    container.innerHTML = promotions.map(promo => {
+        const startDate = promo.start_date ? new Date(promo.start_date).toLocaleString() : 'не указана';
+        const endDate = promo.end_date ? new Date(promo.end_date).toLocaleString() : 'не указана';
+        const now = new Date();
+        const isExpired = promo.end_date && new Date(promo.end_date) < now;
+        const status = isExpired ? 'expired' : (promo.active ? 'active' : 'inactive');
+        const statusText = isExpired ? 'Истекла' : (promo.active ? 'Активна' : 'Отключена');
+        
+        return `
+            <div class="promotion-item">
+                <div class="promotion-header">
+                    <div class="promotion-emojis">${promo.emoji || '🎯'}</div>
+                    <div class="promotion-name">${escapeHtml(promo.name)}</div>
+                    <div class="promotion-status ${status}">${statusText}</div>
+                    <button class="btn-remove" onclick="deletePromotion(${promo.id})">🗑️</button>
+                    <button class="btn-edit" onclick="editPromotion(${promo.id})">✏️</button>
+                </div>
+                <div class="promotion-desc">${escapeHtml(promo.description)}</div>
+                <div class="promotion-dates">📅 ${startDate} → ${endDate}</div>
+                <div class="promotion-actions">
+                    <label>Активна: <input type="checkbox" ${promo.active && !isExpired ? 'checked' : ''} ${isExpired ? 'disabled' : ''} onchange="togglePromotion(${promo.id}, this.checked)"></label>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
-function showAddPromotionModal() { 
-    openModal('promotion'); 
-    document.getElementById('promoName').value = ''; 
-    document.getElementById('promoDesc').value = ''; 
+function showAddPromotionModal() {
+    openModal('promotion');
+    document.getElementById('promoName').value = '';
+    document.getElementById('promoDesc').value = '';
     document.getElementById('promoActive').checked = true;
+    document.getElementById('promoEmoji').value = '🎯';
+    document.getElementById('promoStartDate').value = '';
+    document.getElementById('promoEndDate').value = '';
     document.getElementById('promotionModalTitle').textContent = 'Добавить акцию';
-    document.getElementById('savePromotionBtn').onclick = () => savePromotion();
     currentEditingPromotionId = null;
 }
 
@@ -493,67 +598,84 @@ async function editPromotion(promotionId) {
     document.getElementById('promoName').value = promo.name;
     document.getElementById('promoDesc').value = promo.description || '';
     document.getElementById('promoActive').checked = promo.active;
-    document.getElementById('promoEmoji1').value = promo.emoji1 || '🎯';
-    document.getElementById('promoEmoji2').value = promo.emoji2 || '🎉';
+    document.getElementById('promoEmoji').value = promo.emoji || '🎯';
+    if (promo.start_date) {
+        const startDate = new Date(promo.start_date);
+        document.getElementById('promoStartDate').value = startDate.toISOString().slice(0, 16);
+    }
+    if (promo.end_date) {
+        const endDate = new Date(promo.end_date);
+        document.getElementById('promoEndDate').value = endDate.toISOString().slice(0, 16);
+    }
     document.getElementById('promotionModalTitle').textContent = 'Редактировать акцию';
-    document.getElementById('savePromotionBtn').onclick = () => updatePromotion();
     openModal('promotion');
 }
 
 async function savePromotion() {
     const name = document.getElementById('promoName').value.trim();
-    const emoji1 = document.getElementById('promoEmoji1').value;
-    const emoji2 = document.getElementById('promoEmoji2').value;
+    const emoji = document.getElementById('promoEmoji').value;
     const description = document.getElementById('promoDesc').value.trim();
     const active = document.getElementById('promoActive').checked;
+    const startDate = document.getElementById('promoStartDate').value;
+    const endDate = document.getElementById('promoEndDate').value;
+    const errorElement = document.getElementById('promotionError');
     
-    if (!name) { alert('Введите название акции'); return; }
-    
-    try {
-        const response = await fetch(`${API_URL}/api/promotions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ companyId: currentBusiness.id, name, emoji1, emoji2, description, active })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            promotions.push(data.promotion);
-            renderPromotionsList();
-            closeModal('promotion');
-            alert('✅ Акция сохранена в базе данных!');
-        }
-    } catch (error) {
-        alert('❌ Ошибка сохранения');
+    if (!name) {
+        errorElement.textContent = 'Введите название акции';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
     }
-}
-
-async function updatePromotion() {
-    if (!currentEditingPromotionId) return;
     
-    const name = document.getElementById('promoName').value.trim();
-    const emoji1 = document.getElementById('promoEmoji1').value;
-    const emoji2 = document.getElementById('promoEmoji2').value;
-    const description = document.getElementById('promoDesc').value.trim();
-    const active = document.getElementById('promoActive').checked;
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        if (end <= start) {
+            errorElement.textContent = 'Дата окончания должна быть позже даты начала';
+            errorElement.style.display = 'block';
+            setTimeout(() => errorElement.style.display = 'none', 3000);
+            return;
+        }
+        if (end < new Date()) {
+            errorElement.textContent = 'Дата окончания не может быть в прошлом';
+            errorElement.style.display = 'block';
+            setTimeout(() => errorElement.style.display = 'none', 3000);
+            return;
+        }
+    }
     
     try {
-        const response = await fetch(`${API_URL}/api/promotions/${currentEditingPromotionId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, emoji1, emoji2, description, active })
-        });
+        let response;
+        if (currentEditingPromotionId) {
+            response = await fetch(`${API_URL}/api/promotions/${currentEditingPromotionId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, emoji, description, startDate, endDate, active })
+            });
+        } else {
+            response = await fetch(`${API_URL}/api/promotions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companyId: currentBusiness.id, name, emoji, description, startDate, endDate, active })
+            });
+        }
         
-        if (response.ok) {
-            const data = await response.json();
-            const index = promotions.findIndex(p => p.id === currentEditingPromotionId);
-            if (index !== -1) promotions[index] = data.promotion;
-            renderPromotionsList();
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            await loadPromotionsAndQuestsFromDB();
             closeModal('promotion');
-            alert('✅ Акция обновлена!');
+            alert(currentEditingPromotionId ? '✅ Акция обновлена!' : '✅ Акция сохранена!');
+        } else {
+            errorElement.textContent = data.message || 'Ошибка сохранения';
+            errorElement.style.display = 'block';
+            setTimeout(() => errorElement.style.display = 'none', 3000);
         }
     } catch (error) {
-        alert('❌ Ошибка обновления');
+        console.error('Ошибка:', error);
+        errorElement.textContent = 'Ошибка подключения к серверу';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
     }
 }
 
@@ -561,8 +683,7 @@ async function deletePromotion(id) {
     if (confirm('Удалить акцию?')) {
         try {
             await fetch(`${API_URL}/api/promotions/${id}`, { method: 'DELETE' });
-            promotions = promotions.filter(p => p.id !== id);
-            renderPromotionsList();
+            await loadPromotionsAndQuestsFromDB();
             alert('✅ Акция удалена!');
         } catch (error) {
             alert('❌ Ошибка удаления');
@@ -589,39 +710,49 @@ async function togglePromotion(id, isActive) {
 function renderQuestsManagerList() {
     const container = document.getElementById('questsManagerList');
     if (!container) return;
-    if (!questsManager || questsManager.length === 0) { 
-        container.innerHTML = '<div class="empty-state">Нет заданий. Добавьте первое!</div>'; 
-        return; 
+    if (!questsManager || questsManager.length === 0) {
+        container.innerHTML = '<div class="empty-state">Нет заданий. Добавьте первое!</div>';
+        return;
     }
-    container.innerHTML = questsManager.map(quest => `
-        <div class="quest-manager-item">
-            <div class="quest-header">
-                <div class="quest-emoji">${quest.emoji || '✅'}</div>
-                <div class="quest-title">${escapeHtml(quest.title)}</div>
-                <div class="quest-reward">+${quest.reward} бонусов</div>
-                <div class="quest-status ${quest.active ? 'active' : 'inactive'}">${quest.active ? 'Активно' : 'Отключено'}</div>
-                <button class="btn-remove" onclick="deleteQuest(${quest.id})">🗑️</button>
-                <button class="btn-edit" onclick="editQuest(${quest.id})">✏️</button>
+    
+    container.innerHTML = questsManager.map(quest => {
+        const createdAt = new Date(quest.created_at);
+        const expiresDays = quest.expires_days || 30;
+        const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
+        const isExpired = expiresAt < new Date();
+        const status = isExpired ? 'expired' : (quest.active ? 'active' : 'inactive');
+        const statusText = isExpired ? 'Окончено' : (quest.active ? 'Активно' : 'Отключено');
+        
+        return `
+            <div class="quest-manager-item">
+                <div class="quest-header">
+                    <div class="quest-emoji">${quest.emoji || '✅'}</div>
+                    <div class="quest-title">${escapeHtml(quest.title)}</div>
+                    <div class="quest-reward">+${quest.reward} бонусов</div>
+                    <div class="quest-status ${status}">${statusText}</div>
+                    <button class="btn-remove" onclick="deleteQuest(${quest.id})">🗑️</button>
+                    <button class="btn-edit" onclick="editQuest(${quest.id})">✏️</button>
+                </div>
+                <div class="quest-desc">${escapeHtml(quest.description || '')}</div>
+                <div class="quest-expires">⏱️ Срок действия: ${expiresDays} дней (до ${expiresAt.toLocaleDateString()})</div>
+                <div class="quest-actions">
+                    <label>Активно: <input type="checkbox" ${quest.active && !isExpired ? 'checked' : ''} ${isExpired ? 'disabled' : ''} onchange="toggleQuest(${quest.id}, this.checked)"></label>
+                </div>
             </div>
-            <div class="quest-desc">${escapeHtml(quest.description || '')}</div>
-            <div class="quest-actions">
-                <label>Активно: 
-                    <input type="checkbox" ${quest.active ? 'checked' : ''} onchange="toggleQuest(${quest.id}, this.checked)">
-                </label>
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
-function showAddQuestModal() { 
-    openModal('quest'); 
-    document.getElementById('questTitle').value = ''; 
-    document.getElementById('questDesc').value = ''; 
-    document.getElementById('questReward').value = 10; 
+function showAddQuestModal() {
+    openModal('quest');
+    document.getElementById('questTitle').value = '';
+    document.getElementById('questDesc').value = '';
+    document.getElementById('questReward').value = 10;
     document.getElementById('questActive').checked = true;
     document.getElementById('questEmoji').value = '✅';
+    document.getElementById('questExpiresDays').value = 30;
+    document.getElementById('questPresetSelect').value = '';
     document.getElementById('questModalTitle').textContent = 'Добавить задание';
-    document.getElementById('saveQuestBtn').onclick = () => saveQuest();
     currentEditingQuestId = null;
 }
 
@@ -635,12 +766,10 @@ async function editQuest(questId) {
     document.getElementById('questReward').value = quest.reward;
     document.getElementById('questActive').checked = quest.active;
     document.getElementById('questEmoji').value = quest.emoji || '✅';
+    document.getElementById('questExpiresDays').value = quest.expires_days || 30;
     document.getElementById('questModalTitle').textContent = 'Редактировать задание';
-    document.getElementById('saveQuestBtn').onclick = () => updateQuest();
     openModal('quest');
 }
-
-// Замените функцию saveQuest() в script.js на эту:
 
 async function saveQuest() {
     const emoji = document.getElementById('questEmoji').value;
@@ -648,14 +777,13 @@ async function saveQuest() {
     const description = document.getElementById('questDesc').value.trim();
     const reward = parseInt(document.getElementById('questReward').value) || 10;
     const active = document.getElementById('questActive').checked;
+    const expiresDays = parseInt(document.getElementById('questExpiresDays').value) || 30;
+    const errorElement = document.getElementById('questError');
     
-    if (!title) { 
-        alert('Введите название задания'); 
-        return; 
-    }
-    
-    if (!currentBusiness || !currentBusiness.id) {
-        alert('Ошибка: не удалось определить компанию');
+    if (!title) {
+        errorElement.textContent = 'Введите название задания';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
         return;
     }
     
@@ -665,88 +793,37 @@ async function saveQuest() {
     saveBtn.disabled = true;
     
     try {
-        const response = await fetch(`${API_URL}/api/quests`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                companyId: currentBusiness.id, 
-                emoji, 
-                title, 
-                description, 
-                reward, 
-                active 
-            })
-        });
+        let response;
+        if (currentEditingQuestId) {
+            response = await fetch(`${API_URL}/api/quests/${currentEditingQuestId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emoji, title, description, reward, active, expiresDays })
+            });
+        } else {
+            response = await fetch(`${API_URL}/api/quests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companyId: currentBusiness.id, emoji, title, description, reward, active, expiresDays })
+            });
+        }
         
         const data = await response.json();
         
         if (response.ok && data.success) {
-            // Добавляем новое задание в локальный массив
-            questsManager.push(data.quest);
-            // Обновляем отображение
-            renderQuestsManagerList();
-            // Закрываем модальное окно
+            await loadPromotionsAndQuestsFromDB();
             closeModal('quest');
-            // Очищаем форму
-            document.getElementById('questTitle').value = '';
-            document.getElementById('questDesc').value = '';
-            document.getElementById('questReward').value = 10;
-            document.getElementById('questEmoji').value = '✅';
-            document.getElementById('questActive').checked = true;
-            alert('✅ Задание успешно сохранено в базе данных!');
+            alert(currentEditingQuestId ? '✅ Задание обновлено!' : '✅ Задание сохранено!');
         } else {
-            alert('❌ Ошибка сохранения: ' + (data.message || data.error || 'Неизвестная ошибка'));
+            errorElement.textContent = data.message || 'Ошибка сохранения';
+            errorElement.style.display = 'block';
+            setTimeout(() => errorElement.style.display = 'none', 3000);
         }
     } catch (error) {
         console.error('Ошибка:', error);
-        alert('❌ Ошибка подключения к серверу. Убедитесь, что backend запущен на порту 3001');
-    } finally {
-        saveBtn.textContent = originalText;
-        saveBtn.disabled = false;
-    }
-}
-
-// Исправьте функцию updateQuest():
-async function updateQuest() {
-    if (!currentEditingQuestId) return;
-    
-    const emoji = document.getElementById('questEmoji').value;
-    const title = document.getElementById('questTitle').value.trim();
-    const description = document.getElementById('questDesc').value.trim();
-    const reward = parseInt(document.getElementById('questReward').value) || 10;
-    const active = document.getElementById('questActive').checked;
-    
-    if (!title) { 
-        alert('Введите название задания'); 
-        return; 
-    }
-    
-    const saveBtn = document.getElementById('saveQuestBtn');
-    const originalText = saveBtn.textContent;
-    saveBtn.textContent = 'Сохранение...';
-    saveBtn.disabled = true;
-    
-    try {
-        const response = await fetch(`${API_URL}/api/quests/${currentEditingQuestId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ emoji, title, description, reward, active })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            const index = questsManager.findIndex(q => q.id === currentEditingQuestId);
-            if (index !== -1) questsManager[index] = data.quest;
-            renderQuestsManagerList();
-            closeModal('quest');
-            alert('✅ Задание обновлено!');
-        } else {
-            alert('❌ Ошибка обновления: ' + (data.message || data.error));
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        alert('❌ Ошибка подключения к серверу');
+        errorElement.textContent = 'Ошибка подключения к серверу';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
     } finally {
         saveBtn.textContent = originalText;
         saveBtn.disabled = false;
@@ -757,8 +834,7 @@ async function deleteQuest(id) {
     if (confirm('Удалить задание?')) {
         try {
             await fetch(`${API_URL}/api/quests/${id}`, { method: 'DELETE' });
-            questsManager = questsManager.filter(q => q.id !== id);
-            renderQuestsManagerList();
+            await loadPromotionsAndQuestsFromDB();
             alert('✅ Задание удалено!');
         } catch (error) {
             alert('❌ Ошибка удаления');
@@ -785,45 +861,62 @@ async function toggleQuest(id, isActive) {
 function loadGamesList() {
     const container = document.getElementById('gamesList');
     if (!container) return;
-    container.innerHTML = games.map(game => `<div class="game-item"><div class="game-info"><div class="game-name">${game.icon} ${escapeHtml(game.name)}</div><div class="game-cost">Стоимость участия: ${game.cost} бонусов</div></div><div class="toggle-switch"><input type="checkbox" ${game.active ? 'checked' : ''} onchange="toggleGame(${game.id}, this.checked)"><span>${game.active ? 'Активна' : 'Отключена'}</span></div></div>`).join('');
+    container.innerHTML = games.map(game => `
+        <div class="game-item">
+            <div class="game-info">
+                <div class="game-name">${game.icon} ${escapeHtml(game.name)}</div>
+                <div class="game-cost">Стоимость участия: ${game.cost} бонусов</div>
+            </div>
+            <div class="toggle-switch">
+                <input type="checkbox" ${game.active ? 'checked' : ''} onchange="toggleGame(${game.id}, this.checked)">
+                <span>${game.active ? 'Активна' : 'Отключена'}</span>
+            </div>
+        </div>
+    `).join('');
 }
 
-function toggleGame(id, active) { const game = games.find(g => g.id === id); if (game) game.active = active; }
-function saveGameSettings() { alert('Настройки игр сохранены!'); localStorage.setItem('loyalty_games', JSON.stringify(games)); }
+function toggleGame(id, active) {
+    const game = games.find(g => g.id === id);
+    if (game) game.active = active;
+}
+
+function saveGameSettings() {
+    alert('Настройки игр сохранены!');
+    localStorage.setItem('loyalty_games', JSON.stringify(games));
+}
 
 // ========== НАСТРОЙКИ ==========
 function saveBusinessSettings() {
-    if (currentBusiness) {
-        const businesses = JSON.parse(localStorage.getItem('loyaltyPrime_businesses') || '[]');
-        const index = businesses.findIndex(b => b.id === currentBusiness.id);
-        if (index !== -1) businesses[index] = currentBusiness;
-        localStorage.setItem('loyaltyPrime_businesses', JSON.stringify(businesses));
-    }
     alert('Настройки бизнеса сохранены!');
 }
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 document.addEventListener('DOMContentLoaded', () => {
-    // В секции DOMContentLoaded, добавьте обработчик для модуля loyalty
-	document.querySelectorAll('.crm-nav-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const module = btn.dataset.module;
-        document.querySelectorAll('.crm-nav-item').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('.crm-module').forEach(m => m.classList.remove('active'));
-        const activeModule = document.getElementById(`${module}Module`);
-        if (activeModule) activeModule.classList.add('active');
-        
-        // Загружаем данные при переходе в модуль
-        if (module === 'marketing') {
-            renderPromotionsList();
-            renderQuestsManagerList();
-        }
-        if (module === 'loyalty') {
-            loadLoyaltySettings();
-        }
+    document.querySelectorAll('.crm-nav-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const module = btn.dataset.module;
+            document.querySelectorAll('.crm-nav-item').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.crm-module').forEach(m => m.classList.remove('active'));
+            const activeModule = document.getElementById(`${module}Module`);
+            if (activeModule) activeModule.classList.add('active');
+            if (module === 'marketing') {
+                renderPromotionsList();
+                renderQuestsManagerList();
+            }
+            if (module === 'loyalty') {
+                loadLoyaltySettings();
+            }
+        });
     });
-});
+    
+    document.querySelectorAll('.date-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadAnalytics();
+        });
+    });
     
     const programActive = document.getElementById('programActive');
     if (programActive) {
@@ -833,10 +926,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    const savedTiers = localStorage.getItem('loyalty_tiers');
-    if (savedTiers) try { tiers = JSON.parse(savedTiers); } catch(e) {}
-    const savedDiscounts = localStorage.getItem('loyalty_discounts');
-    if (savedDiscounts) try { discounts = JSON.parse(savedDiscounts); } catch(e) {}
     const savedGames = localStorage.getItem('loyalty_games');
     if (savedGames) try { games = JSON.parse(savedGames); } catch(e) {}
     
@@ -855,152 +944,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-
-// ========== НАСТРОЙКА УРОВНЕЙ (TIERS) ==========
-
-async function loadTiersSettings() {
-    if (!currentBusiness) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/tiers`);
-        const data = await response.json();
-        
-        if (data.success && data.tiers) {
-            tiers = data.tiers;
-            renderTiersSettings();
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки уровней:', error);
-        // Используем локальные данные если сервер недоступен
-        renderTiersSettings();
-    }
-}
-
-function renderTiersSettings() {
-    const container = document.getElementById('tiersSettingsList');
-    if (!container) return;
-    
-    container.innerHTML = tiers.map((tier, idx) => `
-        <div class="tier-config-item" style="border-left: 4px solid ${tier.color}">
-            <div class="tier-config-header">
-                <div class="tier-config-title">
-                    <input type="text" value="${escapeHtml(tier.name)}" 
-                           onchange="updateTierConfig(${idx}, 'name', this.value)" 
-                           class="tier-name-input">
-                    <input type="color" value="${tier.color}" 
-                           onchange="updateTierConfig(${idx}, 'color', this.value)" 
-                           class="tier-color-input">
-                    <select onchange="updateTierConfig(${idx}, 'icon', this.value)" class="tier-icon-select">
-                        ${getIconOptions(tier.icon)}
-                    </select>
-                </div>
-                <button class="btn-remove" onclick="removeTierConfig(${idx})">🗑️</button>
-            </div>
-            
-            <div class="tier-config-fields">
-                <div class="config-field">
-                    <label>💰 Порог LTV (₽):</label>
-                    <input type="number" value="${tier.threshold}" 
-                           onchange="updateTierConfig(${idx}, 'threshold', parseInt(this.value))" 
-                           class="config-input">
-                </div>
-                
-                <div class="config-field">
-                    <label>⚡ Множитель бонусов:</label>
-                    <input type="number" step="0.1" value="${tier.multiplier}" 
-                           onchange="updateTierConfig(${idx}, 'multiplier', parseFloat(this.value))" 
-                           class="config-input">
-                    <span class="field-hint">x (во сколько раз больше бонусов)</span>
-                </div>
-                
-                <div class="config-field">
-                    <label>💰 Кешбэк (%):</label>
-                    <input type="number" step="0.5" value="${tier.cashback}" 
-                           onchange="updateTierConfig(${idx}, 'cashback', parseFloat(this.value))" 
-                           class="config-input">
-                    <span class="field-hint">% возврата от покупки</span>
-                </div>
-            </div>
-            
-            <div class="tier-preview">
-                <div style="background: ${tier.color}; padding: 8px 12px; border-radius: 12px; color: white;">
-                    ${tier.icon} ${escapeHtml(tier.name)}: x${tier.multiplier} бонусов • ${tier.cashback}% кешбэк
-                </div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function getIconOptions(selectedIcon) {
-    const icons = ['🌱', '🥈', '🥇', '💎', '⭐', '🏆', '👑', '🔥', '⚡', '🎯'];
-    return icons.map(icon => `<option value="${icon}" ${selectedIcon === icon ? 'selected' : ''}>${icon}</option>`).join('');
-}
-
-function updateTierConfig(index, field, value) {
-    if (tiers[index]) {
-        tiers[index][field] = value;
-        renderTiersSettings();
-        // Автосохранение через 1 секунду после последнего изменения
-        if (window.tiersSaveTimeout) clearTimeout(window.tiersSaveTimeout);
-        window.tiersSaveTimeout = setTimeout(() => saveTiersToServer(), 1000);
-    }
-}
-
-function addTierConfig() {
-    tiers.push({
-        name: 'Новый уровень',
-        threshold: tiers.length > 0 ? tiers[tiers.length - 1].threshold + 5000 : 1000,
-        multiplier: 1,
-        cashback: 5,
-        color: '#95a5a6',
-        icon: '⭐'
-    });
-    renderTiersSettings();
-    saveTiersToServer();
-}
-
-function removeTierConfig(index) {
-    if (tiers.length <= 1) {
-        alert('Нельзя удалить последний уровень');
-        return;
-    }
-    tiers.splice(index, 1);
-    renderTiersSettings();
-    saveTiersToServer();
-}
-
-async function saveTiersToServer() {
-    if (!currentBusiness) return;
-    
-    // Сортируем уровни по порогу
-    tiers.sort((a, b) => a.threshold - b.threshold);
-    
-    try {
-        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/tiers`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tiers })
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            console.log('✅ Уровни сохранены');
-            // Показываем индикатор сохранения
-            showSaveIndicator();
-        } else {
-            console.error('Ошибка сохранения:', data.message);
-        }
-    } catch (error) {
-        console.error('Ошибка сохранения уровней:', error);
-    }
-}
-
-function showSaveIndicator() {
-    const indicator = document.getElementById('saveIndicator');
-    if (indicator) {
-        indicator.style.opacity = '1';
-        setTimeout(() => {
-            indicator.style.opacity = '0';
-        }, 1500);
-    }
-}

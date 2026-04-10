@@ -9,6 +9,15 @@ import { LoyaltyCard } from './components/LoyaltyCard';
 
 const API_URL = 'http://localhost:3001';
 
+// Определяем DEFAULT_TIERS ДО его использования
+const DEFAULT_TIERS = [
+    { name: '🌱 Новичок', threshold: 0, multiplier: 1, cashback: 3, color: '#95a5a6', icon: '🌱' },
+    { name: '🥉 Бронза', threshold: 500, multiplier: 1.2, cashback: 5, color: '#cd7f32', icon: '🥉' },
+    { name: '🥈 Серебро', threshold: 2000, multiplier: 1.5, cashback: 7, color: '#bdc3c7', icon: '🥈' },
+    { name: '🥇 Золото', threshold: 8000, multiplier: 2, cashback: 10, color: '#f1c40f', icon: '🥇' },
+    { name: '💎 Бриллиант', threshold: 20000, multiplier: 2.5, cashback: 15, color: '#00b4d8', icon: '💎' }
+];
+
 export function App() {
   const [userInfo, setUserInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,133 +28,51 @@ export function App() {
   const [modal, setModal] = useState({ show: false, title: '', message: '' });
   const [availableCompanies, setAvailableCompanies] = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
-  const [tiers, setTiers] = useState([]);
+  const [tiers, setTiers] = useState(DEFAULT_TIERS);
   const [showTiersModal, setShowTiersModal] = useState(false);
   const [promotions, setPromotions] = useState([]);
   const [userId, setUserId] = useState(null);
-  const [userTierData, setUserTierData] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  // Функция принудительного обновления данных об уровнях
-  const refreshTierData = async () => {
-    if (!userId || !selectedGroup) return;
-    
-    setRefreshing(true);
-    try {
-      console.log('🔄 Обновление данных об уровнях...');
-      
-      // Обновляем уровни компании
-      const tiersResponse = await fetch(`${API_URL}/api/companies/${selectedGroup.id}/tiers`);
-      const tiersData = await tiersResponse.json();
-      console.log('📊 Получены уровни компании:', tiersData);
-      
-      if (tiersData.success && tiersData.tiers && tiersData.tiers.length > 0) {
-        setTiers(tiersData.tiers);
-      }
-      
-      // Обновляем данные пользователя
-      const userTierResponse = await fetch(`${API_URL}/api/users/${userId}/tier`);
-      const userTierDataResult = await userTierResponse.json();
-      console.log('👤 Получены данные пользователя:', userTierDataResult);
-      
-      if (userTierDataResult.success) {
-        setUserTierData(userTierDataResult);
-      }
-    } catch (error) {
-      console.error('Ошибка обновления данных уровней:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const loadTiersFromServer = async (companyId, userId) => {
-    if (!companyId) return [];
-    
-    try {
-      const response = await fetch(`${API_URL}/api/companies/${companyId}/tiers`);
-      const data = await response.json();
-      console.log('📊 Загрузка уровней компании:', data);
-      
-      if (data.success && data.tiers && data.tiers.length > 0) {
-        setTiers(data.tiers);
-        
-        if (userId) {
-          const userTierResponse = await fetch(`${API_URL}/api/users/${userId}/tier`);
-          const userTierDataResult = await userTierResponse.json();
-          console.log('👤 Загрузка данных пользователя:', userTierDataResult);
-          if (userTierDataResult.success) {
-            setUserTierData(userTierDataResult);
-          }
-        }
-        return data.tiers;
-      } else {
-        // Дефолтные уровни если нет данных
-        const defaultTiers = [
-          { name: "Новичок", threshold: 0, multiplier: 1, cashback: 5, color: "#95a5a6", icon: "🌱" },
-          { name: "Серебро", threshold: 1000, multiplier: 1.2, cashback: 6, color: "#bdc3c7", icon: "🥈" },
-          { name: "Золото", threshold: 5000, multiplier: 1.5, cashback: 7.5, color: "#f1c40f", icon: "🥇" },
-          { name: "Платина", threshold: 20000, multiplier: 2, cashback: 10, color: "#3498db", icon: "💎" }
-        ];
-        setTiers(defaultTiers);
-        return defaultTiers;
-      }
-    } catch (error) {
-      console.error('Ошибка загрузки уровней:', error);
-      const defaultTiers = [
-        { name: "Новичок", threshold: 0, multiplier: 1, cashback: 5, color: "#95a5a6", icon: "🌱" },
-        { name: "Серебро", threshold: 1000, multiplier: 1.2, cashback: 6, color: "#bdc3c7", icon: "🥈" },
-        { name: "Золото", threshold: 5000, multiplier: 1.5, cashback: 7.5, color: "#f1c40f", icon: "🥇" },
-        { name: "Платина", threshold: 20000, multiplier: 2, cashback: 10, color: "#3498db", icon: "💎" }
-      ];
-      setTiers(defaultTiers);
-      return defaultTiers;
-    }
-  };
-
-  const getCurrentTier = () => {
-    if (userTierData && userTierData.currentTier) {
-      return userTierData.currentTier;
-    }
+  const getCurrentTier = (balance) => {
+    // Если уровни загружены из БД, используем их
     if (tiers && tiers.length > 0) {
-      return tiers[0];
+        let current = tiers[0];
+        for (let i = tiers.length - 1; i >= 0; i--) {
+            if (balance >= tiers[i].threshold) {
+                current = tiers[i];
+                break;
+            }
+        }
+        return current;
     }
-    return { name: 'Новичок', multiplier: 1, threshold: 0, color: '#95a5a6', icon: '🌱', cashback: 5 };
+    // Fallback на дефолтные 5 уровней
+    let current = DEFAULT_TIERS[0];
+    for (let i = DEFAULT_TIERS.length - 1; i >= 0; i--) {
+        if (balance >= DEFAULT_TIERS[i].threshold) {
+            current = DEFAULT_TIERS[i];
+            break;
+        }
+    }
+    return current;
   };
   
-  const getNextTier = () => {
-    if (userTierData && userTierData.nextTier) {
-      return userTierData.nextTier;
-    }
-    if (tiers && tiers.length > 1) {
-      return tiers[1];
+  const getNextTier = (balance) => {
+    const tiersList = tiers.length > 0 ? tiers : DEFAULT_TIERS;
+    for (let i = 0; i < tiersList.length; i++) {
+        if (balance < tiersList[i].threshold) return tiersList[i];
     }
     return null;
   };
   
-  const getProgressToNextTier = () => {
-    if (userTierData && userTierData.progressToNext !== undefined) {
-      return userTierData.progressToNext;
-    }
-    return 0;
+  const getProgressToNextTier = (balance) => {
+    const current = getCurrentTier(balance);
+    const next = getNextTier(balance);
+    if (!next) return 100;
+    const progress = ((balance - current.threshold) / (next.threshold - current.threshold)) * 100;
+    return Math.min(Math.max(progress, 0), 100);
   };
 
-  const getTotalEarned = () => {
-    if (userTierData && userTierData.totalEarned !== undefined) {
-      return userTierData.totalEarned;
-    }
-    return 0;
-  };
-
-  const getProgressGradient = () => {
-    const currentTier = getCurrentTier();
-    const nextTier = getNextTier();
-    
-    if (nextTier) {
-      return `linear-gradient(90deg, ${currentTier.color}, ${nextTier.color})`;
-    }
-    return `linear-gradient(90deg, ${currentTier.color}, ${currentTier.color})`;
-  };
-
+  // Загрузка компаний
   useEffect(() => {
     const fetchCompanies = async () => {
       setLoadingCompanies(true);
@@ -154,6 +81,11 @@ export function App() {
         const companies = await response.json();
         if (companies && companies.length > 0) {
           setAvailableCompanies(companies);
+        } else {
+          setAvailableCompanies([
+            { id: 1, company: 'Пиццерия "Маргарита"', brandColor: '#e74c3c', description: 'Итальянская кухня' },
+            { id: 2, company: 'Кофейня "Кофеин"', brandColor: '#8e44ad', description: 'Ароматный кофе' }
+          ]);
         }
       } catch (error) {
         console.error('Ошибка загрузки компаний:', error);
@@ -167,6 +99,27 @@ export function App() {
     };
     fetchCompanies();
   }, []);
+
+  // Загрузка уровней с сервера
+  useEffect(() => {
+    const loadTiersFromServer = async (companyId) => {
+        try {
+            const response = await fetch(`${API_URL}/api/companies/${companyId}/tiers`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.tiers && data.tiers.length > 0) {
+                setTiers(data.tiers);
+              }
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки уровней:', error);
+        }
+    };
+    
+    if (selectedGroup?.id) {
+        loadTiersFromServer(selectedGroup.id);
+    }
+  }, [selectedGroup]);
 
   const loadUserData = async (companyId, vkUserId, userName) => {
     try {
@@ -183,14 +136,12 @@ export function App() {
       const data = await response.json();
       if (data.success) {
         setUserId(data.user.id);
-        
+        // Загружаем акции
         const promosResponse = await fetch(`${API_URL}/api/promotions/${companyId}`);
         if (promosResponse.ok) {
           const promos = await promosResponse.json();
           setPromotions(promos.filter(p => p.active));
         }
-        
-        await loadTiersFromServer(companyId, data.user.id);
         return data;
       }
     } catch (error) {
@@ -264,10 +215,6 @@ export function App() {
             description: type === 'earn' ? `Начисление ${change} бонусов` : `Списание ${Math.abs(change)} бонусов`
           })
         });
-        
-        if (type === 'earn') {
-          await refreshTierData();
-        }
       } catch (error) {
         console.error('Ошибка обновления баланса:', error);
       }
@@ -377,57 +324,41 @@ export function App() {
 
   const currentGroupData = getCurrentGroupData();
   const currentBalance = currentGroupData?.bonusBalance || 0;
-  const currentTier = getCurrentTier();
-  const nextTier = getNextTier();
-  const progressToNext = getProgressToNextTier();
-  const totalEarned = getTotalEarned();
-  const currentRewards = getRewardsForGroup(selectedGroup.id);
-  const progressGradient = getProgressGradient();
+  const currentTier = getCurrentTier(currentBalance);
+  const nextTier = getNextTier(currentBalance);
+  const progressToNext = getProgressToNextTier(currentBalance);
+  const currentRewards = getRewardsForGroup(selectedGroup?.id);
 
   return (
     <div style={{ maxWidth:500, margin:'0 auto', padding:'20px 16px 30px', background:'#1a1f2e', minHeight:'100vh' }}>
-      {/* Кнопка принудительного обновления */}
-      <div style={{ textAlign:'right', marginBottom:8 }}>
-        <button 
-          onClick={refreshTierData} 
-          style={{ background:'rgba(255,255,255,0.1)', border:'none', padding:'6px 12px', borderRadius:20, color:'white', fontSize:11, cursor:'pointer' }}
-          disabled={refreshing}
-        >
-          {refreshing ? '🔄 Обновление...' : '🔄 Обновить уровни'}
-        </button>
-      </div>
-
-      <header style={{ background:`linear-gradient(135deg, ${selectedGroup.color}40, rgba(30,35,48,0.9))`, borderRadius:28, padding:20, marginBottom:20, border:`1px solid ${selectedGroup.color}60` }}>
+      <header style={{ background:`linear-gradient(135deg, ${selectedGroup?.color}40, rgba(30,35,48,0.9))`, borderRadius:28, padding:20, marginBottom:20, border:`1px solid ${selectedGroup?.color}60` }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-            <div style={{ width:52, height:52, background:`linear-gradient(145deg, ${selectedGroup.color}, ${selectedGroup.color}cc)`, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28 }}>{selectedGroup.icon}</div>
+            <div style={{ width:52, height:52, background:`linear-gradient(145deg, ${selectedGroup?.color}, ${selectedGroup?.color}cc)`, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28 }}>{selectedGroup?.icon}</div>
             <div>
               <div style={{ fontWeight:700, fontSize:16, color:'white' }}>{userInfo?.first_name} {userInfo?.last_name}</div>
-              <div style={{ fontSize:11, opacity:0.7, color:'white' }}>{selectedGroup.name}</div>
+              <div style={{ fontSize:11, opacity:0.7, color:'white' }}>{selectedGroup?.name}</div>
             </div>
           </div>
           <button onClick={() => setStep('selectGroup')} style={{ background:'rgba(255,255,255,0.15)', border:'none', padding:'8px 12px', borderRadius:20, color:'white', fontSize:12, cursor:'pointer' }}>🔄 Сменить</button>
         </div>
         
-        {/* Карточка баланса */}
+        {/* Карточка баланса - кликабельная для просмотра уровней */}
         <div style={{ background:'rgba(0,0,0,0.4)', borderRadius:20, padding:16, marginBottom:12, cursor:'pointer' }} onClick={() => setShowTiersModal(true)}>
-          <div style={{ fontSize:16, fontWeight:600, marginBottom:8, color:'white', display:'flex', alignItems:'center', gap:8 }}>
-            <span>{currentTier.icon}</span>
-            <span>{currentTier.name}</span>
-          </div>
+          <div style={{ fontSize:13, opacity:0.8, marginBottom:8, color:'white' }}>💰 Текущий баланс</div>
           <div style={{ fontSize:36, fontWeight:800, marginBottom:12, color:'white' }}>
             {currentBalance.toLocaleString()} <span style={{ fontSize:14, fontWeight:400 }}>бонусов</span>
           </div>
           <div style={{ marginBottom:8 }}>
             <div style={{ background:'rgba(255,255,255,0.2)', height:8, borderRadius:20, overflow:'hidden' }}>
-              <div style={{ width:`${progressToNext}%`, height:'100%', background:progressGradient, borderRadius:20, transition:'width 0.3s ease' }} />
+              <div style={{ width:`${progressToNext}%`, height:'100%', background:`linear-gradient(90deg, ${currentTier?.color}, ${selectedGroup?.color})`, borderRadius:20, transition:'width 0.3s ease' }} />
             </div>
           </div>
           {nextTier ? (
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, opacity:0.7, color:'white' }}>
-              <span>{currentTier.name}</span>
+              <span>{currentTier?.name}</span>
               <span>до {nextTier.name}</span>
-              <span>{Math.max(0, nextTier.threshold - totalEarned).toLocaleString()} бонусов</span>
+              <span>{nextTier.threshold - currentBalance} бонусов</span>
             </div>
           ) : (
             <div style={{ fontSize:11, opacity:0.7, textAlign:'center', color:'white' }}>🏆 Максимальный уровень достигнут!</div>
@@ -438,15 +369,15 @@ export function App() {
         <div style={{ display:'flex', justifyContent:'center', gap:16, background:'rgba(0,0,0,0.3)', borderRadius:16, padding:'8px 12px' }}>
           <div style={{ textAlign:'center' }}>
             <div style={{ fontSize:11, opacity:0.7, color:'white' }}>Множитель</div>
-            <div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>x{currentTier.multiplier}</div>
+            <div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>x{currentTier?.multiplier || 1}</div>
           </div>
           <div style={{ textAlign:'center' }}>
             <div style={{ fontSize:11, opacity:0.7, color:'white' }}>Кешбэк</div>
-            <div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>{currentTier.cashback || (currentTier.multiplier * 5)}%</div>
+            <div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>{currentTier?.cashback || (currentTier?.multiplier * 5) || 5}%</div>
           </div>
           <div style={{ textAlign:'center' }}>
             <div style={{ fontSize:11, opacity:0.7, color:'white' }}>Всего заработано</div>
-            <div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>{totalEarned.toLocaleString()}</div>
+            <div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalEarned || 0}</div>
           </div>
         </div>
       </header>
@@ -459,19 +390,9 @@ export function App() {
         ))}
       </nav>
 
-      {activeTab === 'card' && (
-        <LoyaltyCard 
-          userInfo={userInfo} 
-          userBalance={currentBalance} 
-          selectedGroup={selectedGroup} 
-          onBalanceUpdate={updateBalanceAndStats} 
-          tiers={tiers} 
-          userTierData={userTierData}
-          onRefresh={refreshTierData}
-        />
-      )}
+      {activeTab === 'card' && selectedGroup && <LoyaltyCard userInfo={userInfo} userBalance={currentBalance} selectedGroup={selectedGroup} onBalanceUpdate={updateBalanceAndStats} />}
       
-      {activeTab === 'home' && (
+      {activeTab === 'home' && selectedGroup && (
         <>
           <div style={{ background:`linear-gradient(135deg, ${selectedGroup.color}20, rgba(30,35,48,0.7))`, borderRadius:28, padding:20, marginBottom:20, textAlign:'center' }}>
             <div style={{ fontSize:48, marginBottom:8 }}>{selectedGroup.icon}</div>
@@ -483,11 +404,11 @@ export function App() {
             <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📊 Моя статистика</h3>
             <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
               <span>Всего заработано:</span>
-              <span style={{ fontWeight:700, color:'#ffd966' }}>{totalEarned.toLocaleString()}</span>
+              <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalEarned || 0}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
               <span>Потрачено бонусов:</span>
-              <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalSpent?.toLocaleString() || 0}</span>
+              <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalSpent || 0}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', color:'white' }}>
               <span>Дата регистрации:</span>
@@ -554,13 +475,13 @@ export function App() {
         />
       )}
       
-      {activeTab === 'referral' && <ReferralSystem onBalanceUpdate={updateBalanceAndStats} userId={userInfo?.id} selectedGroupId={selectedGroup?.id} />}
+      {activeTab === 'referral' && selectedGroup && <ReferralSystem onBalanceUpdate={updateBalanceAndStats} userId={userInfo?.id} selectedGroupId={selectedGroup?.id} />}
       
       {activeTab === 'history' && (
         <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
           <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📋 История операций</h3>
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            {currentGroupData?.history?.length>0 ? currentGroupData.history.map(item => (
+            {currentGroupData?.history?.length > 0 ? currentGroupData.history.map(item => (
               <div key={item.id} style={{ background:'rgba(0,0,0,0.3)', borderRadius:20, padding:'14px 16px' }}>
                 <div style={{ fontWeight:500, color:'white' }}>{item.desc}</div>
                 <div style={{ fontSize:11, opacity:0.5, marginTop:4, color:'white' }}>{item.date}</div>
@@ -575,41 +496,34 @@ export function App() {
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => setShowTiersModal(false)}>
           <div style={{ background:'linear-gradient(135deg,#1e2538,#131825)', borderRadius:32, maxWidth:400, width:'100%', maxHeight:'80vh', overflow:'auto', position:'relative' }} onClick={e=>e.stopPropagation()}>
             <div style={{ padding:24 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-                <h3 style={{ color:'white', margin:0 }}>Все уровни</h3>
-                <button onClick={refreshTierData} style={{ background:'rgba(255,255,255,0.1)', border:'none', padding:'8px 12px', borderRadius:20, color:'white', fontSize:12, cursor:'pointer' }}>
-                  🔄 Обновить
-                </button>
-              </div>
-              {tiers && tiers.length > 0 ? tiers.map((tier, idx) => {
-                const isCurrent = currentTier && currentTier.name === tier.name;
-                return (
-                  <div key={idx} style={{ 
-                    marginBottom:16, 
-                    padding:12, 
-                    background: isCurrent ? `${tier.color}40` : `${tier.color}20`, 
-                    borderRadius:16, 
-                    borderLeft: `4px solid ${tier.color}`,
-                    border: isCurrent ? `2px solid ${tier.color}` : 'none'
-                  }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <span style={{ fontSize:24 }}>{tier.icon}</span>
-                      <div>
-                        <div style={{ fontWeight:700, color:'white' }}>
-                          {tier.name}
-                          {isCurrent && <span style={{ fontSize:10, marginLeft:8, color: tier.color }}>▼ Текущий</span>}
-                        </div>
-                        <div style={{ fontSize:12, color:'#aaa' }}>
-                          {tier.threshold.toLocaleString()} ₽ • x{tier.multiplier} бонусов • {tier.cashback || (tier.multiplier * 5)}% кешбэк
-                        </div>
+              <h3 style={{ color:'white', marginBottom:20, fontSize:20 }}>🏆 Все уровни программы</h3>
+              <p style={{ color:'#aaa', fontSize:12, marginBottom:16 }}>Чем больше тратите, тем выше уровень и больше преимуществ!</p>
+              {tiers.map((tier, idx) => (
+                <div key={idx} style={{ marginBottom:12, padding:12, background:`${tier.color}20`, borderRadius:16, borderLeft:`4px solid ${tier.color}`, transition:'all 0.2s' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ fontSize:28 }}>{tier.icon}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:700, color:'white', fontSize:16 }}>{tier.name}</div>
+                      <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>
+                        <span>💰 от {tier.threshold.toLocaleString()} ₽</span>
+                        <span style={{ marginLeft:12 }}>⚡ x{tier.multiplier}</span>
+                        <span style={{ marginLeft:12 }}>💸 {tier.cashback || tier.multiplier * 5}%</span>
                       </div>
                     </div>
+                    {idx === tiers.findIndex(t => t.name === getCurrentTier(currentBalance).name) && (
+                      <span style={{ background:'#ffd966', color:'#1a1f2e', padding:'4px 8px', borderRadius:12, fontSize:10, fontWeight:600 }}>Текущий</span>
+                    )}
                   </div>
-                );
-              }) : (
-                <div style={{ textAlign:'center', color:'white', padding:20 }}>Нет настроенных уровней</div>
-              )}
-              <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>Закрыть</button>
+                </div>
+              ))}
+              <div style={{ background:'rgba(255,255,255,0.05)', borderRadius:16, padding:12, marginTop:16 }}>
+                <div style={{ fontSize:12, color:'#aaa', textAlign:'center' }}>
+                  💡 Подсказка: Уровень повышается автоматически при достижении порога трат
+                </div>
+              </div>
+              <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
+                Закрыть
+              </button>
             </div>
           </div>
         </div>

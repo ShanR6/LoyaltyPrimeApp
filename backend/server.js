@@ -26,9 +26,10 @@ const {
     getAllUserQuestProgress,
     checkDailyBonusClaimed,
     claimDailyBonus,
-    getCompanyTiers,
+    query,
+    getCompanyTiers,      
     updateCompanyTiers,
-    query
+    getPresetQuests
 } = require('./database-pg');
 
 const app = express();
@@ -107,8 +108,8 @@ app.get('/api/promotions/:companyId', async (req, res) => {
 
 app.post('/api/promotions', async (req, res) => {
     try {
-        const { companyId, name, emoji1, emoji2, description, active } = req.body;
-        const promotion = await addPromotion(companyId, { name, emoji1, emoji2, description, active });
+        const { companyId, name, emoji, description, startDate, endDate, active } = req.body;
+        const promotion = await addPromotion(companyId, { name, emoji, description, startDate, endDate, active });
         res.json({ success: true, promotion });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -117,8 +118,8 @@ app.post('/api/promotions', async (req, res) => {
 
 app.put('/api/promotions/:id', async (req, res) => {
     try {
-        const { name, emoji1, emoji2, description, active } = req.body;
-        const promotion = await updatePromotion(req.params.id, { name, emoji1, emoji2, description, active });
+        const { name, emoji, description, startDate, endDate, active } = req.body;
+        const promotion = await updatePromotion(req.params.id, { name, emoji, description, startDate, endDate, active });
         res.json({ success: true, promotion });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -134,12 +135,36 @@ app.delete('/api/promotions/:id', async (req, res) => {
     }
 });
 
+// ============ API ДЛЯ ПРЕДУСТАНОВЛЕННЫХ ЗАДАНИЙ ============
+
+app.get('/api/preset-quests', async (req, res) => {
+    try {
+        const presetQuests = getPresetQuests();
+        res.json({ success: true, quests: presetQuests });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============ API ДЛЯ ЗАДАНИЙ (CRM) ============
 
 app.get('/api/quests/:companyId', async (req, res) => {
     try {
         const quests = await getQuests(req.params.companyId);
-        res.json(quests);
+        // Проверяем истекшие задания
+        const now = new Date();
+        const updatedQuests = quests.map(quest => {
+            const createdAt = new Date(quest.created_at);
+            const expiresDays = quest.expires_days || 30;
+            const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
+            const isExpired = expiresAt < now;
+            return {
+                ...quest,
+                isExpired,
+                status: isExpired ? 'expired' : (quest.active ? 'active' : 'inactive')
+            };
+        });
+        res.json(updatedQuests);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -147,13 +172,13 @@ app.get('/api/quests/:companyId', async (req, res) => {
 
 app.post('/api/quests', async (req, res) => {
     try {
-        const { companyId, emoji, title, description, reward, active } = req.body;
+        const { companyId, emoji, title, description, reward, active, expiresDays } = req.body;
         
         if (!title || !reward) {
             return res.status(400).json({ success: false, message: 'Название и награда обязательны' });
         }
         
-        const quest = await addQuest(companyId, { emoji, title, description, reward, active });
+        const quest = await addQuest(companyId, { emoji, title, description, reward, active, expiresDays });
         res.json({ success: true, quest });
     } catch (error) {
         console.error('Ошибка добавления задания:', error);
@@ -163,8 +188,8 @@ app.post('/api/quests', async (req, res) => {
 
 app.put('/api/quests/:id', async (req, res) => {
     try {
-        const { emoji, title, description, reward, active } = req.body;
-        const quest = await updateQuest(req.params.id, { emoji, title, description, reward, active });
+        const { emoji, title, description, reward, active, expiresDays } = req.body;
+        const quest = await updateQuest(req.params.id, { emoji, title, description, reward, active, expiresDays });
         res.json({ success: true, quest });
     } catch (error) {
         console.error('Ошибка обновления задания:', error);
@@ -194,7 +219,15 @@ app.post('/api/users/getOrCreate', async (req, res) => {
         }
         
         const allQuests = await getQuests(companyId);
-        const activeQuests = allQuests.filter(q => q.active === true);
+        const now = new Date();
+        const activeQuests = allQuests.filter(q => {
+            if (!q.active) return false;
+            const createdAt = new Date(q.created_at);
+            const expiresDays = q.expires_days || 30;
+            const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
+            return expiresAt > now;
+        });
+        
         const userProgress = await getAllUserQuestProgress(user.id);
         const completedQuests = await getUserCompletedQuests(user.id);
         const progress = await getUserProgress(user.id, companyId);
@@ -257,6 +290,17 @@ app.post('/api/users/completeQuest', async (req, res) => {
     try {
         const { userId, questId, reward } = req.body;
         
+        // Проверяем, не истекло ли задание
+        const quest = await query('SELECT * FROM quests WHERE id = $1', [questId]);
+        if (quest.rows.length > 0) {
+            const createdAt = new Date(quest.rows[0].created_at);
+            const expiresDays = quest.rows[0].expires_days || 30;
+            const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
+            if (expiresAt < new Date()) {
+                return res.status(400).json({ error: 'Срок действия задания истек' });
+            }
+        }
+        
         const existing = await query(
             'SELECT * FROM user_quests WHERE user_id = $1 AND quest_id = $2',
             [userId, questId]
@@ -285,11 +329,35 @@ app.post('/api/users/updateBalance', async (req, res) => {
     try {
         const { userId, change, type, description } = req.body;
         const newBalance = await updateUserBalance(userId, change, type, description);
-        res.json({ success: true, newBalance });
+        
+        const user = await getUserById(userId);
+        const tiers = await getCompanyTiers(user.company_id);
+        
+        let currentTier = tiers[0];
+        for (let i = tiers.length - 1; i >= 0; i--) {
+            if (newBalance >= tiers[i].threshold) {
+                currentTier = tiers[i];
+                break;
+            }
+        }
+        
+        res.json({ 
+            success: true, 
+            newBalance,
+            currentTier,
+            nextTier: getNextTier(tiers, newBalance)
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
+
+function getNextTier(tiers, balance) {
+    for (let i = 0; i < tiers.length; i++) {
+        if (balance < tiers[i].threshold) return tiers[i];
+    }
+    return null;
+}
 
 app.post('/api/users/dailyBonus/check', async (req, res) => {
     try {
@@ -335,111 +403,110 @@ app.get('/api/analytics/dashboard', async (req, res) => {
 
 app.get('/api/companies/:companyId/tiers', async (req, res) => {
     try {
-        const tiers = await getCompanyTiers(req.params.companyId);
-        console.log(`✅ Получены уровни для компании ${req.params.companyId}:`, tiers);
-        res.json({ success: true, tiers });
+        const companyId = parseInt(req.params.companyId);
+        console.log('📝 Получение уровней для компании:', companyId);
+        
+        const tiers = await getCompanyTiers(companyId);
+        
+        res.json({ 
+            success: true, 
+            tiers: tiers 
+        });
     } catch (error) {
-        console.error('Ошибка получения уровней:', error);
-        res.status(500).json({ error: error.message });
+        console.error('❌ Ошибка получения уровней:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
 app.put('/api/companies/:companyId/tiers', async (req, res) => {
     try {
+        const companyId = parseInt(req.params.companyId);
         const { tiers } = req.body;
         
+        console.log('📝 Получен запрос на сохранение уровней для компании:', companyId);
+        
         if (!tiers || !Array.isArray(tiers)) {
-            return res.status(400).json({ success: false, message: 'Неверный формат данных' });
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Неверный формат данных. Ожидается массив уровней.' 
+            });
         }
         
-        for (const tier of tiers) {
-            if (!tier.name || typeof tier.threshold !== 'number' || 
-                typeof tier.multiplier !== 'number' || typeof tier.cashback !== 'number') {
-                return res.status(400).json({ success: false, message: 'Неверные данные уровня' });
-            }
+        if (tiers.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Должен быть хотя бы один уровень' 
+            });
         }
         
-        const updatedTiers = await updateCompanyTiers(req.params.companyId, tiers);
-        console.log(`✅ Обновлены уровни для компании ${req.params.companyId}:`, updatedTiers);
-        res.json({ success: true, tiers: updatedTiers });
+        const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
+        const updatedTiers = await updateCompanyTiers(companyId, sortedTiers);
+        
+        console.log('✅ Уровни успешно сохранены');
+        
+        res.json({ 
+            success: true, 
+            tiers: updatedTiers,
+            message: 'Настройки уровней сохранены'
+        });
     } catch (error) {
-        console.error('Ошибка обновления уровней:', error);
-        res.status(500).json({ error: error.message });
+        console.error('❌ Ошибка обновления уровней:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            message: 'Ошибка при сохранении уровней: ' + error.message
+        });
     }
 });
 
-// ============ API ДЛЯ ПОЛУЧЕНИЯ УРОВНЯ ПОЛЬЗОВАТЕЛЯ ============
-app.get('/api/users/:userId/tier', async (req, res) => {
+// ============ ПОЛУЧЕНИЕ ТЕКУЩЕГО УРОВНЯ ПОЛЬЗОВАТЕЛЯ ============
+app.get('/api/users/:userId/currentTier', async (req, res) => {
     try {
         const user = await getUserById(req.params.userId);
         if (!user) {
-            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+            return res.status(404).json({ error: 'Пользователь не найден' });
         }
         
-        let tiers = await getCompanyTiers(user.company_id);
-        console.log(`📊 Уровни компании ${user.company_id}:`, JSON.stringify(tiers, null, 2));
+        const tiers = await getCompanyTiers(user.company_id);
+        const balance = user.bonus_balance;
         
-        // Проверяем, что tiers не пустой
-        if (!tiers || tiers.length === 0) {
-            tiers = [
-                { name: "Новичок", threshold: 0, multiplier: 1, cashback: 5, color: "#95a5a6", icon: "🌱" },
-                { name: "Серебро", threshold: 1000, multiplier: 1.2, cashback: 6, color: "#bdc3c7", icon: "🥈" },
-                { name: "Золото", threshold: 5000, multiplier: 1.5, cashback: 7.5, color: "#f1c40f", icon: "🥇" },
-                { name: "Платина", threshold: 20000, multiplier: 2, cashback: 10, color: "#3498db", icon: "💎" }
-            ];
+        let currentTier = tiers[0];
+        for (let i = tiers.length - 1; i >= 0; i--) {
+            if (balance >= tiers[i].threshold) {
+                currentTier = tiers[i];
+                break;
+            }
         }
         
-        const progress = await getUserProgress(user.id, user.company_id);
-        const totalEarned = progress?.total_earned || user.total_earned || 0;
-        
-        console.log(`💰 Всего заработано пользователем ${user.id}: ${totalEarned}`);
-        
-        // Сортируем уровни по порогу
-        const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
-        
-        let currentTier = sortedTiers[0];
         let nextTier = null;
-        
-        // Находим текущий уровень (последний, у которого порог <= totalEarned)
-        for (let i = sortedTiers.length - 1; i >= 0; i--) {
-            if (totalEarned >= sortedTiers[i].threshold) {
-                currentTier = sortedTiers[i];
+        for (let i = 0; i < tiers.length; i++) {
+            if (balance < tiers[i].threshold) {
+                nextTier = tiers[i];
                 break;
             }
         }
         
-        // Находим следующий уровень (первый, у которого порог > totalEarned)
-        for (let i = 0; i < sortedTiers.length; i++) {
-            if (totalEarned < sortedTiers[i].threshold) {
-                nextTier = sortedTiers[i];
-                break;
-            }
-        }
-        
-        let progressToNext = 100;
+        let progress = 100;
         if (nextTier) {
-            const prevThreshold = currentTier.threshold;
-            const nextThreshold = nextTier.threshold;
-            const earnedInCurrent = totalEarned - prevThreshold;
-            const neededForNext = nextThreshold - prevThreshold;
-            progressToNext = neededForNext > 0 ? (earnedInCurrent / neededForNext) * 100 : 100;
-            progressToNext = Math.min(Math.max(progressToNext, 0), 100);
+            const tierStart = currentTier.threshold;
+            const tierEnd = nextTier.threshold;
+            const tierRange = tierEnd - tierStart;
+            const userProgress = balance - tierStart;
+            progress = Math.min(100, Math.max(0, (userProgress / tierRange) * 100));
         }
-        
-        console.log(`📈 Текущий уровень: ${currentTier.name}, Следующий: ${nextTier?.name || 'нет'}, Прогресс: ${progressToNext}%`);
         
         res.json({
             success: true,
             currentTier,
             nextTier,
-            progressToNext,
-            totalEarned,
-            allTiers: sortedTiers,
-            progressColor: currentTier.color,
-            nextColor: nextTier ? nextTier.color : currentTier.color
+            progress,
+            balance
         });
     } catch (error) {
-        console.error('Ошибка получения уровня пользователя:', error);
+        console.error('Ошибка получения уровня:', error);
         res.status(500).json({ error: error.message });
     }
 });
