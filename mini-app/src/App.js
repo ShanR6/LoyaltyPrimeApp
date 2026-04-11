@@ -32,6 +32,7 @@ export function App() {
   const [showTiersModal, setShowTiersModal] = useState(false);
   const [promotions, setPromotions] = useState([]);
   const [userId, setUserId] = useState(null);
+  const [brandColor, setBrandColor] = useState('#ff4d4d');
 
   const getCurrentTier = (balance) => {
     // Если уровни загружены из БД, используем их
@@ -262,10 +263,12 @@ export function App() {
   }, []);
 
   const handleSelectGroup = async (company) => {
+    const color = company.brand_color || company.brandColor || '#ff4d4d';
+    setBrandColor(color);
     setSelectedGroup({ 
       id: company.id, 
       name: company.company, 
-      color: company.brandColor, 
+      color: color, 
       icon: '🏢', 
       description: company.description 
     });
@@ -297,10 +300,10 @@ export function App() {
     return (
       <div style={{ maxWidth:500, margin:'0 auto', padding:20, minHeight:'100vh', display:'flex', flexDirection:'column', justifyContent:'center', background:'#1a1f2e' }}>
         <div style={{ textAlign:'center' }}>
-          <div style={{ width:100, height:100, background:'linear-gradient(145deg,#ff7e5e,#ff4d4d)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, margin:'0 auto 24px' }}>{initials}</div>
+          <div style={{ width:100, height:100, background:`linear-gradient(145deg, ${brandColor}, ${brandColor}cc)`, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, margin:'0 auto 24px' }}>{initials}</div>
           <h1 style={{ fontSize:28, marginBottom:8, color:'white' }}>Добро пожаловать!</h1>
           <p style={{ fontSize:16, opacity:0.8, marginBottom:32, color:'white' }}>{userInfo?.first_name}, рады видеть вас в LoyaltyPrime</p>
-          <button onClick={() => setStep('selectGroup')} style={{ background:'#ff4d4d', border:'none', padding:'16px 32px', borderRadius:40, color:'white', fontSize:18, fontWeight:600, cursor:'pointer', width:'100%', maxWidth:280 }}>Начать →</button>
+          <button onClick={() => setStep('selectGroup')} style={{ background:brandColor, border:'none', padding:'16px 32px', borderRadius:40, color:'white', fontSize:18, fontWeight:600, cursor:'pointer', width:'100%', maxWidth:280 }}>Начать →</button>
         </div>
       </div>
     );
@@ -384,7 +387,7 @@ export function App() {
 
       <nav style={{ display:'flex', gap:8, background:'rgba(0,0,0,0.3)', padding:6, borderRadius:60, marginBottom:24, flexWrap:'wrap', justifyContent:'center' }}>
         {['home','card','offers','games','quests','referral','history'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex:'0 1 auto', background:activeTab===tab ? '#ff4d4d' : 'transparent', border:'none', padding:'10px 12px', borderRadius:40, fontSize:12, fontWeight:600, color:activeTab===tab ? 'white' : '#aaa', cursor:'pointer', whiteSpace:'nowrap' }}>
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex:'0 1 auto', background:activeTab===tab ? brandColor : 'transparent', border:'none', padding:'10px 12px', borderRadius:40, fontSize:12, fontWeight:600, color:activeTab===tab ? 'white' : '#aaa', cursor:'pointer', whiteSpace:'nowrap' }}>
             {tab==='home'?'🏠 Главная':tab==='card'?'🎫 Карта':tab==='offers'?'🎁 Акции':tab==='games'?'🎮 Игры':tab==='quests'?'📋 Задания':tab==='referral'?'👥 Друзья':'📜 История'}
           </button>
         ))}
@@ -427,7 +430,7 @@ export function App() {
                     </div>
                     <div style={{ fontSize:12, opacity:0.7, color:'white' }}>{reward.cost} баллов • {reward.description}</div>
                   </div>
-                  <button onClick={() => exchangeReward(reward)} style={{ background:'#ff4d4d', border:'none', padding:'8px 16px', borderRadius:40, color:'white', fontWeight:600, fontSize:13, cursor:'pointer' }}>Обменять</button>
+                  <button onClick={() => exchangeReward(reward)} style={{ background:brandColor, border:'none', padding:'8px 16px', borderRadius:40, color:'white', fontWeight:600, fontSize:13, cursor:'pointer' }}>Обменять</button>
                 </div>
               ))}
             </div>
@@ -521,7 +524,7 @@ export function App() {
                   💡 Подсказка: Уровень повышается автоматически при достижении порога трат
                 </div>
               </div>
-              <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
+              <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:brandColor, border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
                 Закрыть
               </button>
             </div>

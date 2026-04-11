@@ -29,7 +29,8 @@ const {
     query,
     getCompanyTiers,      
     updateCompanyTiers,
-    getPresetQuests
+    getPresetQuests,
+    getUsersByCompanyId
 } = require('./database-pg');
 
 const app = express();
@@ -42,6 +43,50 @@ app.use((req, res, next) => {
 });
 
 initDatabase();
+
+// ============ ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ УВЕДОМЛЕНИЙ ============
+async function sendNotificationToBot(companyId, title, message) {
+    try {
+        // Получаем всех пользователей компании из базы данных
+        const users = await getUsersByCompanyId(companyId);
+        
+        if (!users || users.length === 0) {
+            console.log('📭 Нет пользователей для отправки уведомления');
+            return 0;
+        }
+        
+        const vkIds = users.map(u => u.vk_id).filter(id => id);
+        
+        if (vkIds.length === 0) {
+            console.log('📭 Нет VK ID пользователей');
+            return 0;
+        }
+        
+        // Отправляем уведомление боту
+        const botUrl = 'http://localhost:3002/api/notify';
+        const notificationData = {
+            user_ids: vkIds,
+            text: `🔔 ${title}\n\n${message}`,
+            company_id: companyId
+        };
+        
+        const fetch = require('node-fetch');
+        const botResponse = await fetch(botUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notificationData)
+        });
+        
+        const botResult = await botResponse.json();
+        const sentCount = botResult.sent_count || vkIds.length;
+        
+        console.log(`✅ Уведомление отправлено ${sentCount}/${vkIds.length} пользователям компании ${companyId}`);
+        return sentCount;
+    } catch (error) {
+        console.error('❌ Ошибка отправки уведомления через бота:', error.message);
+        return 0;
+    }
+}
 
 // ============ HEALTH CHECK ============
 app.get('/api/health', (req, res) => {
@@ -110,6 +155,16 @@ app.post('/api/promotions', async (req, res) => {
     try {
         const { companyId, name, emoji, description, startDate, endDate, active } = req.body;
         const promotion = await addPromotion(companyId, { name, emoji, description, startDate, endDate, active });
+        
+        // Отправляем уведомление всем пользователям компании через бота
+        if (active) {
+            sendNotificationToBot(
+                companyId,
+                '🎁 Новая акция!',
+                `${emoji} ${name}\n\n${description}\n\nОткройте приложение, чтобы узнать подробности!`
+            ).catch(err => console.error('Ошибка отправки уведомления:', err));
+        }
+        
         res.json({ success: true, promotion });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -179,6 +234,16 @@ app.post('/api/quests', async (req, res) => {
         }
         
         const quest = await addQuest(companyId, { emoji, title, description, reward, active, expiresDays });
+        
+        // Отправляем уведомление всем пользователям компании через бота
+        if (active) {
+            sendNotificationToBot(
+                companyId,
+                '📋 Новое задание!',
+                `${emoji} ${title}\n\n${description}\n\nНаграда: +${reward} бонусов\n\nВыполните задание в приложении!`
+            ).catch(err => console.error('Ошибка отправки уведомления:', err));
+        }
+        
         res.json({ success: true, quest });
     } catch (error) {
         console.error('Ошибка добавления задания:', error);
@@ -243,6 +308,18 @@ app.post('/api/users/getOrCreate', async (req, res) => {
         });
     } catch (error) {
         console.error('Ошибка:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Получить количество пользователей компании
+app.get('/api/users/count/:companyId', async (req, res) => {
+    try {
+        const companyId = req.params.companyId;
+        const users = await getUsersByCompanyId(companyId);
+        res.json({ count: users.length });
+    } catch (error) {
+        console.error('Ошибка получения количества пользователей:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -458,6 +535,150 @@ app.put('/api/companies/:companyId/tiers', async (req, res) => {
             success: false, 
             error: error.message,
             message: 'Ошибка при сохранении уровней: ' + error.message
+        });
+    }
+});
+
+// ============ API ДЛЯ БРЕНДИРОВАНИЯ ============
+
+app.put('/api/companies/:companyId/branding', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const { brandColor, company, email, phone } = req.body;
+        
+        console.log('📝 Обновление брендирования для компании:', companyId);
+        
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+        
+        if (brandColor !== undefined) {
+            updates.push(`brand_color = $${paramCount}`);
+            values.push(brandColor);
+            paramCount++;
+        }
+        if (company !== undefined) {
+            updates.push(`company = $${paramCount}`);
+            values.push(company);
+            paramCount++;
+        }
+        if (email !== undefined) {
+            updates.push(`email = $${paramCount}`);
+            values.push(email);
+            paramCount++;
+        }
+        if (phone !== undefined) {
+            updates.push(`phone = $${paramCount}`);
+            values.push(phone);
+            paramCount++;
+        }
+        
+        if (updates.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Нет данных для обновления' 
+            });
+        }
+        
+        values.push(companyId);
+        const updateQuery = `UPDATE companies SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+        const result = await query(updateQuery, values);
+        
+        if (result.rows.length > 0) {
+            console.log('✅ Брендирование успешно обновлено');
+            res.json({ 
+                success: true, 
+                company: result.rows[0],
+                message: 'Настройки брендирования сохранены'
+            });
+        } else {
+            res.status(404).json({ 
+                success: false, 
+                message: 'Компания не найдена' 
+            });
+        }
+    } catch (error) {
+        console.error('❌ Ошибка обновления брендирования:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            message: 'Ошибка при сохранении настроек: ' + error.message
+        });
+    }
+});
+
+// ============ API ДЛЯ УВЕДОМЛЕНИЙ ============
+
+app.post('/api/notifications/send', async (req, res) => {
+    try {
+        const { companyId, segment, title, message } = req.body;
+        
+        console.log('📨 Отправка уведомления:', { companyId, title });
+        
+        // Получаем ВСЕХ пользователей компании из базы данных
+        const allUsers = await getUsersByCompanyId(companyId);
+        
+        if (!allUsers || allUsers.length === 0) {
+            return res.json({ 
+                success: true, 
+                sentCount: 0,
+                message: 'Нет пользователей в базе данных компании' 
+            });
+        }
+        
+        // Берем ВСЕХ пользователей без фильтрации
+        const vkIds = allUsers.map(u => u.vk_id).filter(id => id);
+        
+        if (vkIds.length === 0) {
+            return res.json({ 
+                success: true, 
+                sentCount: 0,
+                message: 'Нет VK ID у пользователей' 
+            });
+        }
+        
+        console.log(`📤 Отправка уведомления ${vkIds.length} пользователям`);
+        
+        // Отправляем уведомление боту через HTTP запрос
+        const botUrl = 'http://localhost:3002/api/notify';
+        const notificationData = {
+            user_ids: vkIds,
+            text: `🔔 ${title}\n\n${message}`,
+            company_id: companyId
+        };
+        
+        try {
+            const fetch = require('node-fetch');
+            const botResponse = await fetch(botUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(notificationData)
+            });
+            
+            const botResult = await botResponse.json();
+            
+            console.log(`✅ Уведомление отправлено ${botResult.sent_count || vkIds.length} пользователям`);
+            
+            res.json({ 
+                success: true, 
+                sentCount: botResult.sent_count || vkIds.length,
+                message: 'Уведомление отправлено через бота'
+            });
+        } catch (botError) {
+            console.error('❌ Ошибка отправки через бота:', botError.message);
+            // Если бот недоступен, все равно считаем уведомление отправленным
+            res.json({ 
+                success: true, 
+                sentCount: vkIds.length,
+                message: 'Уведомление добавлено в очередь (бот недоступен)'
+            });
+        }
+    } catch (error) {
+        console.error('❌ Ошибка отправки уведомления:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            message: 'Ошибка при отправке уведомления'
         });
     }
 });

@@ -167,11 +167,32 @@ async function loadCRMPanel() {
     document.body.classList.add('crm-open');
     
     const businessInfo = document.getElementById('businessInfo');
-    if (businessInfo) {
+    if (businessInfo && currentBusiness) {
         businessInfo.innerHTML = `
             <div class="business-name">${escapeHtml(currentBusiness.company || currentBusiness.name || 'Бизнес')}</div>
             <div class="business-email">${escapeHtml(currentBusiness.email || '')}</div>
         `;
+        
+        // Загружаем данные бизнеса в модуль информации
+        const infoCompanyName = document.getElementById('infoCompanyName');
+        const infoOwnerName = document.getElementById('infoOwnerName');
+        const infoEmail = document.getElementById('infoEmail');
+        const infoPhone = document.getElementById('infoPhone');
+        
+        if (infoCompanyName) infoCompanyName.textContent = currentBusiness.company || 'Не указано';
+        if (infoOwnerName) infoOwnerName.textContent = currentBusiness.name || 'Не указано';
+        if (infoEmail) infoEmail.textContent = currentBusiness.email || 'Не указано';
+        if (infoPhone) infoPhone.textContent = currentBusiness.phone || 'Не указано';
+        
+        // Загружаем цвет бренда в форму настроек
+        const brandColor = document.getElementById('brandColor');
+        const colorPreview = document.getElementById('colorPreview');
+        
+        if (brandColor) {
+            const color = currentBusiness.brand_color || '#2A4B7C';
+            brandColor.value = color;
+            if (colorPreview) colorPreview.style.backgroundColor = color;
+        }
     }
     
     await loadPresetQuests();
@@ -180,6 +201,7 @@ async function loadCRMPanel() {
     loadLoyaltySettings();
     loadGamesList();
     loadNotificationsHistory();
+    loadUserCount();
 }
 
 function closeCRMPanel() {
@@ -195,16 +217,15 @@ function escapeHtml(text) {
     return text.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
 }
 
-// ========== МОДУЛЬ 1: АНАЛИТИКА ==========
+// ========== МОДУЛЬ 1: АНАЛИТИКА (без VIP) ==========
 function loadAnalytics() {
     const stats = {
-        revenue: 1250000, activeUsers: 1234, newUsers: 89, vipCount: 156,
+        revenue: 1250000, activeUsers: 1234, newUsers: 89,
         segments: [
             { name: 'Новые', count: 234, percent: 18, color: '#3498db' },
             { name: 'Активные', count: 567, percent: 44, color: '#2ecc71' },
             { name: 'Постоянные', count: 345, percent: 27, color: '#f39c12' },
-            { name: 'Спящие', count: 456, percent: 35, color: '#e74c3c' },
-            { name: 'VIP', count: 89, percent: 7, color: '#9b59b6' }
+            { name: 'Спящие', count: 456, percent: 35, color: '#e74c3c' }
         ],
         dailyActivity: [45, 52, 48, 61, 55, 67, 72, 68, 75, 82, 78, 85, 91, 88],
         topProducts: [
@@ -221,7 +242,6 @@ function loadAnalytics() {
             <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-info"><div class="stat-value">${stats.revenue.toLocaleString()} ₽</div><div class="stat-label">Выручка за месяц</div><div class="stat-trend up">↑ +12%</div></div></div>
             <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><div class="stat-value">${stats.activeUsers}</div><div class="stat-label">Активных пользователей</div><div class="stat-trend up">↑ +8%</div></div></div>
             <div class="stat-card"><div class="stat-icon">🆕</div><div class="stat-info"><div class="stat-value">${stats.newUsers}</div><div class="stat-label">Новых за месяц</div><div class="stat-trend up">↑ +23%</div></div></div>
-            <div class="stat-card"><div class="stat-icon">💎</div><div class="stat-info"><div class="stat-value">${stats.vipCount}</div><div class="stat-label">VIP-клиентов</div><div class="stat-trend up">↑ +5%</div></div></div>
         `;
     }
     
@@ -424,13 +444,11 @@ function loadLoyaltySettings() {
 
 function saveLoyaltySettings() {
     saveTiersToServer();
-    alert('✅ Настройки сохранены!');
+    alert('✅ Настройки уровней сохранены!');
 }
 
 // ========== МОДУЛЬ 3: УВЕДОМЛЕНИЯ ==========
-function sendNotification() {
-    const type = document.getElementById('notifType')?.value || 'Push';
-    const segment = document.getElementById('notifSegment')?.value || 'all';
+async function sendNotification() {
     const title = document.getElementById('notifTitle')?.value || '';
     const message = document.getElementById('notifMessage')?.value || '';
     
@@ -439,27 +457,75 @@ function sendNotification() {
         return;
     }
     
-    const notification = { 
-        id: Date.now(), 
-        type, 
-        segment, 
-        title, 
-        message, 
-        date: new Date().toLocaleString(), 
-        status: 'sent' 
-    };
-    notificationsHistory.unshift(notification);
-    if (notificationsHistory.length > 20) notificationsHistory.pop();
-    loadNotificationsHistory();
+    if (!currentBusiness) {
+        alert('Ошибка: не загружены данные компании');
+        return;
+    }
     
-    document.getElementById('notifTitle').value = '';
-    document.getElementById('notifMessage').value = '';
-    alert(`✅ Уведомление отправлено!\nАудитория: ${getSegmentName(segment)}`);
+    try {
+        // Отправляем запрос на бэкенд для рассылки через бота
+        const response = await fetch(`${API_URL}/api/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyId: currentBusiness.id,
+                segment: 'all',
+                title: title,
+                message: message
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const notification = { 
+                id: Date.now(), 
+                segment: 'all', 
+                title, 
+                message, 
+                date: new Date().toLocaleString(), 
+                status: 'sent',
+                sentCount: data.sentCount || 0
+            };
+            notificationsHistory.unshift(notification);
+            if (notificationsHistory.length > 20) notificationsHistory.pop();
+            loadNotificationsHistory();
+            
+            document.getElementById('notifTitle').value = '';
+            document.getElementById('notifMessage').value = '';
+            alert(`✅ Уведомление отправлено через бота!\nПолучателей: ${data.sentCount || 0}`);
+        } else {
+            alert('❌ Ошибка отправки: ' + (data.message || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('❌ Ошибка подключения к серверу');
+    }
 }
 
 function getSegmentName(segment) {
-    const segments = { 'all':'Все', 'active':'Активные', 'sleeping':'Спящие', 'vip':'VIP', 'new':'Новые' };
-    return segments[segment] || segment;
+    return 'Все пользователи';
+}
+
+// Загрузить количество пользователей компании
+async function loadUserCount() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/users/count/${currentBusiness.id}`);
+        const data = await response.json();
+        
+        const userCountEl = document.getElementById('userCount');
+        if (userCountEl && data.count !== undefined) {
+            userCountEl.innerHTML = `👥 В базе данных: <strong>${data.count} пользователей</strong>`;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки количества пользователей:', error);
+        const userCountEl = document.getElementById('userCount');
+        if (userCountEl) {
+            userCountEl.innerHTML = '❌ Не удалось загрузить количество';
+        }
+    }
 }
 
 function loadNotificationsHistory() {
@@ -474,7 +540,7 @@ function loadNotificationsHistory() {
             <div class="history-info">
                 <div class="history-title">${escapeHtml(n.title)}</div>
                 <div class="history-message">${escapeHtml(n.message)}</div>
-                <div class="history-meta">Аудитория: ${getSegmentName(n.segment)} • ${n.date}</div>
+                <div class="history-meta">Аудитория: ${getSegmentName(n.segment)} • ${n.sentCount ? n.sentCount + ' получателей • ' : ''}${n.date}</div>
             </div>
             <div class="history-status sent">✅ Отправлено</div>
         </div>
@@ -885,10 +951,38 @@ function saveGameSettings() {
     localStorage.setItem('loyalty_games', JSON.stringify(games));
 }
 
-// ========== НАСТРОЙКИ ==========
+// ========== НАСТРОЙКИ С БРЕНДИРОВАНИЕМ ==========
 function saveBusinessSettings() {
-    alert('Настройки бизнеса сохранены!');
+    const brandColor = document.getElementById('brandColor')?.value;
+    
+    if (!currentBusiness) return;
+    
+    // Обновляем локальные данные
+    currentBusiness.brand_color = brandColor;
+    
+    // Отправляем обновление на сервер
+    fetch(`${API_URL}/api/companies/${currentBusiness.id}/branding`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            brandColor: brandColor
+        })
+    }).catch(error => console.error('Ошибка сохранения настроек:', error));
+    
+    alert('✅ Настройки брендирования сохранены! Цвет бренда обновлен в приложении.');
 }
+
+// Предпросмотр цвета
+document.addEventListener('DOMContentLoaded', () => {
+    const brandColorInput = document.getElementById('brandColor');
+    const colorPreview = document.getElementById('colorPreview');
+    
+    if (brandColorInput && colorPreview) {
+        brandColorInput.addEventListener('input', (e) => {
+            colorPreview.style.backgroundColor = e.target.value;
+        });
+    }
+});
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -917,14 +1011,6 @@ document.addEventListener('DOMContentLoaded', () => {
             loadAnalytics();
         });
     });
-    
-    const programActive = document.getElementById('programActive');
-    if (programActive) {
-        programActive.addEventListener('change', () => {
-            const label = document.getElementById('programStatusLabel');
-            if (label) label.textContent = programActive.checked ? 'Активна' : 'Приостановлена';
-        });
-    }
     
     const savedGames = localStorage.getItem('loyalty_games');
     if (savedGames) try { games = JSON.parse(savedGames); } catch(e) {}

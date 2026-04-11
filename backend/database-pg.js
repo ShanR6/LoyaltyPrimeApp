@@ -204,6 +204,20 @@ async function getCompanyTiers(companyId) {
     }
 }
 
+// Получить всех пользователей компании для рассылки уведомлений
+async function getUsersByCompanyId(companyId) {
+    try {
+        const result = await query(
+            'SELECT id, vk_id, name, bonus_balance, total_spent, last_daily, created_at FROM users WHERE company_id = $1',
+            [companyId]
+        );
+        return result.rows;
+    } catch (error) {
+        console.error('❌ Ошибка getUsersByCompanyId:', error);
+        return [];
+    }
+}
+
 async function updateCompanyTiers(companyId, tiersSettings) {
     try {
         if (!Array.isArray(tiersSettings)) {
@@ -651,5 +665,6 @@ module.exports = {
     claimDailyBonus,
     getCompanyTiers,
     updateCompanyTiers,
-    getPresetQuests
+    getPresetQuests,
+    getUsersByCompanyId
 };
