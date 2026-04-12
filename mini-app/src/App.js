@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import vkBridge from '@vkontakte/vk-bridge';
 import './App.css';
 import { GameWheel } from './components/GameWheel';
-import { ScratchCard } from './components/ScratchCard';
 import { DailyQuests } from './components/DailyQuests';
 import { ReferralSystem } from './components/ReferralSystem';
 import { LoyaltyCard } from './components/LoyaltyCard';
+import { DiceRoll } from './components/DiceRoll';
+import { ScratchCard } from './components/ScratchCard';
+
 
 const API_URL = 'http://localhost:3001';
 
@@ -32,10 +34,10 @@ export function App() {
   const [showTiersModal, setShowTiersModal] = useState(false);
   const [promotions, setPromotions] = useState([]);
   const [userId, setUserId] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [brandColor, setBrandColor] = useState('#ff4d4d');
-
+  
   const getCurrentTier = (balance) => {
-    // Если уровни загружены из БД, используем их
     if (tiers && tiers.length > 0) {
         let current = tiers[0];
         for (let i = tiers.length - 1; i >= 0; i--) {
@@ -46,7 +48,6 @@ export function App() {
         }
         return current;
     }
-    // Fallback на дефолтные 5 уровней
     let current = DEFAULT_TIERS[0];
     for (let i = DEFAULT_TIERS.length - 1; i >= 0; i--) {
         if (balance >= DEFAULT_TIERS[i].threshold) {
@@ -73,33 +74,78 @@ export function App() {
     return Math.min(Math.max(progress, 0), 100);
   };
 
-  // Загрузка компаний
+  // Загрузка компаний ТОЛЬКО из базы данных
   useEffect(() => {
     const fetchCompanies = async () => {
       setLoadingCompanies(true);
       try {
         const response = await fetch(`${API_URL}/api/companies/list`);
-        const companies = await response.json();
-        if (companies && companies.length > 0) {
-          setAvailableCompanies(companies);
+        if (response.ok) {
+          const companies = await response.json();
+          if (companies && companies.length > 0) {
+            setAvailableCompanies(companies);
+          } else {
+            setAvailableCompanies([]);
+          }
         } else {
-          setAvailableCompanies([
-            { id: 1, company: 'Пиццерия "Маргарита"', brandColor: '#e74c3c', description: 'Итальянская кухня' },
-            { id: 2, company: 'Кофейня "Кофеин"', brandColor: '#8e44ad', description: 'Ароматный кофе' }
-          ]);
+          console.error('Ошибка загрузки компаний:', response.status);
+          setAvailableCompanies([]);
         }
       } catch (error) {
         console.error('Ошибка загрузки компаний:', error);
-        setAvailableCompanies([
-          { id: 1, company: 'Пиццерия "Маргарита"', brandColor: '#e74c3c', description: 'Итальянская кухня' },
-          { id: 2, company: 'Кофейня "Кофеин"', brandColor: '#8e44ad', description: 'Ароматный кофе' }
-        ]);
+        setAvailableCompanies([]);
       } finally {
         setLoadingCompanies(false);
       }
     };
     fetchCompanies();
   }, []);
+  
+
+useEffect(() => {
+  // Обновляем акции при переключении на вкладку offers или при изменении userId/selectedGroup
+  if ((activeTab === 'offers' || activeTab === 'home') && userId && selectedGroup?.id) {
+    const refreshActivePromotions = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/promotions/${selectedGroup.id}`);
+        if (response.ok) {
+          const allPromos = await response.json();
+          const now = new Date();
+          
+          const activePromotions = allPromos.filter(promo => {
+            if (!promo.active) return false;
+            if (!promo.start_date || !promo.end_date) return false;
+            
+            const startDate = new Date(promo.start_date);
+            const endDate = new Date(promo.end_date);
+            
+            // Проверяем с учетом времени
+            return now >= startDate && now <= endDate;
+          });
+          
+          setPromotions(activePromotions);
+        }
+      } catch (error) {
+        console.error('Ошибка обновления акций:', error);
+      }
+    };
+    
+    refreshActivePromotions();
+    
+    // Добавляем интервал для автоматического обновления каждую минуту
+    const interval = setInterval(refreshActivePromotions, 60000);
+    
+    return () => clearInterval(interval);
+  }
+}, [activeTab, userId, selectedGroup?.id]);
+useEffect(() => {
+  const timer = setInterval(() => {
+    setCurrentTime(new Date());
+  }, 1000);
+  
+  return () => clearInterval(timer);
+}, []);
+
 
   // Загрузка уровней с сервера
   useEffect(() => {
@@ -122,7 +168,41 @@ export function App() {
     }
   }, [selectedGroup]);
 
-  const loadUserData = async (companyId, vkUserId, userName) => {
+// Добавьте эту функцию после getProgressToNextTier и перед getMinutesWord
+function getHoursWord(hours) {
+  const lastDigit = hours % 10;
+  const lastTwoDigits = hours % 100;
+  
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+    return 'часов';
+  }
+  
+  switch (lastDigit) {
+    case 1: return 'час';
+    case 2:
+    case 3:
+    case 4: return 'часа';
+    default: return 'часов';
+  }
+}
+
+function getMinutesWord(minutes) {
+  const lastDigit = minutes % 10;
+  const lastTwoDigits = minutes % 100;
+  
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+    return 'минут';
+  }
+  
+  switch (lastDigit) {
+    case 1: return 'минута';
+    case 2:
+    case 3:
+    case 4: return 'минуты';
+    default: return 'минут';
+  }
+}
+const loadUserData = async (companyId, vkUserId, userName) => {
     try {
       const response = await fetch(`${API_URL}/api/users/getOrCreate`, {
         method: 'POST',
@@ -137,11 +217,31 @@ export function App() {
       const data = await response.json();
       if (data.success) {
         setUserId(data.user.id);
-        // Загружаем акции
         const promosResponse = await fetch(`${API_URL}/api/promotions/${companyId}`);
         if (promosResponse.ok) {
-          const promos = await promosResponse.json();
-          setPromotions(promos.filter(p => p.active));
+          const allPromos = await promosResponse.json();
+          
+          // Фильтруем ТОЛЬКО активные акции для VK Mini App (с учетом времени)
+          const now = new Date();
+          
+          const activePromotions = allPromos.filter(promo => {
+            // 1. Проверяем флаг активности
+            if (!promo.active) return false;
+            
+            // 2. Проверяем наличие дат
+            if (!promo.start_date || !promo.end_date) return false;
+            
+            const startDate = new Date(promo.start_date);
+            const endDate = new Date(promo.end_date);
+            
+            // 3. Проверяем, что текущее время в диапазоне (с учетом часов и минут)
+            const isActive = now >= startDate && now <= endDate;
+            
+            return isActive;
+          });
+          
+          setPromotions(activePromotions);
+          console.log('Активные акции для VK Mini App:', activePromotions.length);
         }
         return data;
       }
@@ -149,7 +249,7 @@ export function App() {
       console.error('Ошибка загрузки данных:', error);
     }
     return null;
-  };
+};
 
   const saveAllGroupsData = (userId, data) => {
     if (userId) localStorage.setItem(`loyaltyPrime_groups_${userId}`, JSON.stringify(data));
@@ -161,17 +261,7 @@ export function App() {
     if (saved) {
       try { setUserGroupsData(JSON.parse(saved)); } catch(e) {}
     } else {
-      const initial = {};
-      availableCompanies.forEach(c => {
-        initial[c.id] = {
-          bonusBalance: 100, totalEarned: 100, totalSpent: 0,
-          regDate: new Date().toLocaleDateString('ru-RU'), lastDaily: null,
-          participatedRaffles: {},
-          history: [{ id: Date.now(), desc: `Приветственные бонусы в "${c.company}"`, points: '+100', date: new Date().toLocaleString(), type: 'earn' }]
-        };
-      });
-      setUserGroupsData(initial);
-      saveAllGroupsData(userId, initial);
+      setUserGroupsData({});
     }
   };
   
@@ -263,8 +353,10 @@ export function App() {
   }, []);
 
   const handleSelectGroup = async (company) => {
+    // Извлекаем цвет бренда из компании (поддерживаем оба формата)
     const color = company.brand_color || company.brandColor || '#ff4d4d';
     setBrandColor(color);
+    
     setSelectedGroup({ 
       id: company.id, 
       name: company.company, 
@@ -279,14 +371,6 @@ export function App() {
     setStep('profile');
   };
 
-  const getRewardsForGroup = (groupId) => {
-    return [
-      { id: 1, title: '🍕 Маленькая пицца', cost: 100, description: '30% скидка', popular: true },
-      { id: 2, title: '🥤 Бесплатный напиток', cost: 50, description: 'в подарок' },
-      { id: 3, title: '🍰 Десерт', cost: 75, description: 'Чизкейк или мороженое' }
-    ];
-  };
-  
   const getInitials = (firstName, lastName) => {
     if (firstName && lastName) return (firstName[0] + lastName[0]).toUpperCase();
     return firstName ? firstName[0].toUpperCase() : '?';
@@ -311,15 +395,37 @@ export function App() {
   
   if (step === 'selectGroup') {
     if (loadingCompanies) return <div style={{ padding:20, textAlign:'center', color:'white', background:'#1a1f2e', minHeight:'100vh' }}>Загрузка списка заведений...</div>;
+    
+    if (availableCompanies.length === 0) {
+      return (
+        <div style={{ maxWidth:500, margin:'0 auto', padding:20, background:'#1a1f2e', minHeight:'100vh' }}>
+          <div style={{ textAlign:'center', marginBottom:30 }}>
+            <h2 style={{ fontSize:24, marginBottom:8, color:'white' }}>Нет доступных заведений</h2>
+            <p style={{ opacity:0.7, color:'white' }}>Пожалуйста, добавьте заведения в базу данных</p>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div style={{ maxWidth:500, margin:'0 auto', padding:20, background:'#1a1f2e', minHeight:'100vh' }}>
         <div style={{ textAlign:'center', marginBottom:30 }}><h2 style={{ fontSize:24, marginBottom:8, color:'white' }}>Выберите заведение</h2><p style={{ opacity:0.7, color:'white' }}>В каком заведении хотите копить бонусы?</p></div>
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          {availableCompanies.map(company => (
-            <div key={company.id} style={{ background:'rgba(30,35,48,0.8)', borderRadius:24, border:`1px solid ${company.brandColor}40`, cursor:'pointer' }} onClick={() => handleSelectGroup(company)}>
-              <div style={{ display:'flex', alignItems:'center', padding:16 }}><div style={{ fontSize:48, marginRight:16 }}>🏢</div><div style={{ flex:1 }}><div style={{ fontWeight:700, fontSize:18, color:'white' }}>{company.company}</div><div style={{ fontSize:12, opacity:0.7, color:'white' }}>{company.description}</div></div><div style={{ fontSize:24, color:'white' }}>→</div></div>
+          {availableCompanies.map(company => {
+            const compColor = company.brand_color || company.brandColor || '#ff4d4d';
+            return (
+            <div key={company.id} style={{ background:'rgba(30,35,48,0.8)', borderRadius:24, border:`1px solid ${compColor}40`, cursor:'pointer' }} onClick={() => handleSelectGroup(company)}>
+              <div style={{ display:'flex', alignItems:'center', padding:16 }}>
+                <div style={{ fontSize:48, marginRight:16 }}>🏢</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700, fontSize:18, color:'white' }}>{company.company}</div>
+                  <div style={{ fontSize:12, opacity:0.7, color:'white' }}>{company.description}</div>
+                </div>
+                <div style={{ fontSize:24, color:'white' }}>→</div>
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -330,7 +436,6 @@ export function App() {
   const currentTier = getCurrentTier(currentBalance);
   const nextTier = getNextTier(currentBalance);
   const progressToNext = getProgressToNextTier(currentBalance);
-  const currentRewards = getRewardsForGroup(selectedGroup?.id);
 
   return (
     <div style={{ maxWidth:500, margin:'0 auto', padding:'20px 16px 30px', background:'#1a1f2e', minHeight:'100vh' }}>
@@ -346,7 +451,6 @@ export function App() {
           <button onClick={() => setStep('selectGroup')} style={{ background:'rgba(255,255,255,0.15)', border:'none', padding:'8px 12px', borderRadius:20, color:'white', fontSize:12, cursor:'pointer' }}>🔄 Сменить</button>
         </div>
         
-        {/* Карточка баланса - кликабельная для просмотра уровней */}
         <div style={{ background:'rgba(0,0,0,0.4)', borderRadius:20, padding:16, marginBottom:12, cursor:'pointer' }} onClick={() => setShowTiersModal(true)}>
           <div style={{ fontSize:13, opacity:0.8, marginBottom:8, color:'white' }}>💰 Текущий баланс</div>
           <div style={{ fontSize:36, fontWeight:800, marginBottom:12, color:'white' }}>
@@ -393,80 +497,262 @@ export function App() {
         ))}
       </nav>
 
-      {activeTab === 'card' && selectedGroup && <LoyaltyCard userInfo={userInfo} userBalance={currentBalance} selectedGroup={selectedGroup} onBalanceUpdate={updateBalanceAndStats} />}
+      {activeTab === 'card' && selectedGroup && <LoyaltyCard userInfo={userInfo} selectedGroup={selectedGroup} />}
       
       {activeTab === 'home' && selectedGroup && (
-        <>
-          <div style={{ background:`linear-gradient(135deg, ${selectedGroup.color}20, rgba(30,35,48,0.7))`, borderRadius:28, padding:20, marginBottom:20, textAlign:'center' }}>
-            <div style={{ fontSize:48, marginBottom:8 }}>{selectedGroup.icon}</div>
-            <h2 style={{ fontSize:22, marginBottom:4, color:'white' }}>{selectedGroup.name}</h2>
-            <p style={{ opacity:0.8, fontSize:14, color:'white' }}>{selectedGroup.description}</p>
-          </div>
-          
-          <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20, marginBottom:20 }}>
-            <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📊 Моя статистика</h3>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
-              <span>Всего заработано:</span>
-              <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalEarned || 0}</span>
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
-              <span>Потрачено бонусов:</span>
-              <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalSpent || 0}</span>
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', color:'white' }}>
-              <span>Дата регистрации:</span>
-              <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.regDate}</span>
-            </div>
-          </div>
-          
-          <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
-            <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>🎁 Обмен бонусов</h3>
-            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-              {currentRewards.map(reward => (
-                <div key={reward.id} style={{ background:'rgba(0,0,0,0.3)', borderRadius:20, padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <div>
-                    <div style={{ fontWeight:700, color:'white' }}>
-                      {reward.title} {reward.popular && <span style={{ fontSize:10, background:'#ffd966', color:'#1a1f2e', padding:'2px 6px', borderRadius:12, marginLeft:6 }}>🔥 Популярное</span>}
-                    </div>
-                    <div style={{ fontSize:12, opacity:0.7, color:'white' }}>{reward.cost} баллов • {reward.description}</div>
+  <>
+    <div style={{ background:`linear-gradient(135deg, ${selectedGroup.color}20, rgba(30,35,48,0.7))`, borderRadius:28, padding:20, marginBottom:20, textAlign:'center' }}>
+      <div style={{ fontSize:48, marginBottom:8 }}>{selectedGroup.icon}</div>
+      <h2 style={{ fontSize:22, marginBottom:4, color:'white' }}>{selectedGroup.name}</h2>
+      <p style={{ opacity:0.8, fontSize:14, color:'white' }}>{selectedGroup.description}</p>
+    </div>
+    
+    <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
+      <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📊 Моя статистика</h3>
+      <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
+        <span>Потрачено бонусов:</span>
+        <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalSpent || 0}</span>
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', color:'white' }}>
+        <span>Дата регистрации:</span>
+        <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.regDate}</span>
+      </div>
+    </div>
+    
+    {/* Блок с активными акциями на главной */}
+    {promotions.length > 0 && (
+      <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20, marginTop:20 }}>
+        <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>🎁 Активные акции</h3>
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {promotions.slice(0, 3).map(offer => {
+            const endDate = offer.end_date ? new Date(offer.end_date) : null;
+            const now = currentTime;
+            
+            const timeLeftMs = endDate ? endDate - now : 0;
+            let timeLeftText = '';
+            let totalSeconds = 0;
+            let totalMinutes = 0;
+            let totalHours = 0;
+            
+            if (timeLeftMs > 0) {
+              totalSeconds = Math.floor(timeLeftMs / 1000);
+              totalMinutes = Math.floor(totalSeconds / 60);
+              totalHours = Math.floor(totalMinutes / 60);
+              const hours = totalHours;
+              const minutes = totalMinutes % 60;
+              const seconds = totalSeconds % 60;
+              
+              if (hours > 0) {
+                if (minutes > 0) {
+                  timeLeftText = `${hours} ${getHoursWord(hours)} ${minutes} ${getMinutesWord(minutes)}`;
+                } else {
+                  timeLeftText = `${hours} ${getHoursWord(hours)}`;
+                }
+              } else if (minutes > 0) {
+                timeLeftText = `${minutes} ${getMinutesWord(minutes)} ${seconds} сек`;
+              } else {
+                timeLeftText = `${seconds} секунд`;
+              }
+            } else {
+              timeLeftText = 'Акция завершена';
+            }
+            
+            const showTimeLeft = timeLeftMs > 0;
+            
+            return (
+              <div key={offer.id} style={{ background:'rgba(0,0,0,0.3)', borderRadius:16, padding:'10px 14px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <span style={{ fontSize:24 }}>{offer.emoji || '🎯'}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:600, color:'white', fontSize:14 }}>{offer.name}</div>
+                    <div style={{ fontSize:11, opacity:0.7, color:'white' }}>{offer.description?.substring(0, 50)}...</div>
+                    {showTimeLeft && (
+                      <div style={{ 
+                        fontSize:11, 
+                        color: totalHours < 1 ? '#ff6b6b' : '#ffd966', 
+                        marginTop:4,
+                        fontWeight: 500,
+                        fontFamily: totalHours > 0 ? 'inherit' : 'monospace'
+                      }}>
+                        ⏰ Осталось: {timeLeftText}
+                      </div>
+                    )}
+                    {!showTimeLeft && (
+                      <div style={{ fontSize:11, color: '#e74c3c', marginTop:4, fontWeight: 500 }}>
+                        ❌ {timeLeftText}
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => exchangeReward(reward)} style={{ background:brandColor, border:'none', padding:'8px 16px', borderRadius:40, color:'white', fontWeight:600, fontSize:13, cursor:'pointer' }}>Обменять</button>
+                  <button 
+                    onClick={() => setActiveTab('offers')}
+                    style={{ background:'#ff4d4d', border:'none', padding:'6px 12px', borderRadius:20, color:'white', fontSize:11, cursor:'pointer' }}
+                  >
+                    Подробнее
+                  </button>
                 </div>
-              ))}
+              </div>
+            );
+          })}
+          {promotions.length > 3 && (
+            <div style={{ textAlign:'center', marginTop:8 }}>
+              <button 
+                onClick={() => setActiveTab('offers')}
+                style={{ background:'transparent', border:'1px solid #ff4d4d', padding:'8px 16px', borderRadius:20, color:'#ff4d4d', fontSize:12, cursor:'pointer' }}
+              >
+                + ещё {promotions.length - 3} акций
+              </button>
             </div>
-          </div>
-        </>
-      )}
-      
-      {activeTab === 'offers' && (
-        <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
-          <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>🔥 Акции и скидки</h3>
-          {promotions.length > 0 ? (
-            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-              {promotions.map(offer => (
-                <div key={offer.id} style={{ background:'rgba(0,0,0,0.3)', borderRadius:20, padding:'14px 16px' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:24 }}>{offer.emoji1} {offer.emoji2}</span>
-                    <div>
-                      <div style={{ fontWeight:700, color:'white' }}>{offer.name}</div>
-                      <div style={{ fontSize:12, opacity:0.7, marginTop:4, color:'white' }}>{offer.description}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ textAlign:'center', padding:20, opacity:0.7, color:'white' }}>Нет активных акций</div>
           )}
         </div>
-      )}
+      </div>
+    )}
+  </>
+)}
       
-      {activeTab === 'games' && (
-        <>
-          <GameWheel onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
-          <ScratchCard onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
-        </>
-      )}
+     {activeTab === 'offers' && (
+  <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+      <h3 style={{ fontSize:18, color:'white' }}>🔥 Акции и скидки</h3>
+      <div style={{ fontSize:11, color: '#ffd966', fontFamily: 'monospace' }}>
+        🕐 {currentTime.toLocaleTimeString('ru-RU')}
+      </div>
+    </div>
+    {promotions.length > 0 ? (
+      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        {promotions.map(offer => {
+          const rewardType = offer.reward_type || 'bonus';
+          const rewardValue = offer.reward_value || 0;
+          const rewardText = rewardType === 'bonus' ? `+${rewardValue} бонусов` : `${rewardValue}% скидка`;
+          
+          const startDate = offer.start_date ? new Date(offer.start_date) : null;
+          const endDate = offer.end_date ? new Date(offer.end_date) : null;
+          const now = currentTime;
+          
+          // Вычисляем оставшееся время
+          const timeLeftMs = endDate ? endDate - now : 0;
+          let timeLeftText = '';
+          let totalSeconds = 0;
+          let totalMinutes = 0;
+          let totalHours = 0;
+          
+          if (timeLeftMs > 0) {
+            totalSeconds = Math.floor(timeLeftMs / 1000);
+            totalMinutes = Math.floor(totalSeconds / 60);
+            totalHours = Math.floor(totalMinutes / 60);
+            const hours = totalHours;
+            const minutes = totalMinutes % 60;
+            const seconds = totalSeconds % 60;
+            
+            if (hours > 0) {
+              // Если есть часы - показываем только часы и минуты
+              if (minutes > 0) {
+                timeLeftText = `Осталось: ${hours}ч ${minutes}м`;
+              } else {
+                timeLeftText = `Осталось: ${hours}ч`;
+              }
+            } else if (minutes > 0) {
+              // Если только минуты - показываем минуты и секунды
+              timeLeftText = `Осталось: ${minutes}м ${seconds}с`;
+            } else {
+              // Если только секунды
+              timeLeftText = `Осталось: ${seconds}с`;
+            }
+          } else if (timeLeftMs <= 0 && endDate) {
+            timeLeftText = 'Акция завершена';
+          }
+          
+          const formatDateTime = (date) => {
+            if (!date) return '';
+            return date.toLocaleDateString('ru-RU') + ' ' + date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          };
+          
+          const isCurrentlyActive = startDate && endDate && now >= startDate && now <= endDate;
+          const showTimeLeft = timeLeftMs > 0 && timeLeftMs < 24 * 60 * 60 * 1000;
+          
+          return (
+            <div key={offer.id} style={{ 
+              background:'rgba(0,0,0,0.3)', 
+              borderRadius:20, 
+              padding:'14px 16px',
+              borderLeft: isCurrentlyActive ? '4px solid #2ecc71' : '4px solid #e74c3c'
+            }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                <span style={{ fontSize:32 }}>{offer.emoji || '🎯'}</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700, color:'white', fontSize:16 }}>{offer.name}</div>
+                  <div style={{ fontSize:12, opacity:0.8, marginTop:4, color:'white' }}>{offer.description}</div>
+                  {startDate && endDate && (
+                    <div style={{ 
+                      fontSize:11, 
+                      marginTop:8,
+                      padding: '6px 10px',
+                      background: 'rgba(0,0,0,0.3)',
+                      borderRadius: 12,
+                      display: 'inline-block'
+                    }}>
+                      <span style={{ opacity:0.6 }}>🕐 Действует:</span>{' '}
+                      <strong style={{ color: '#ffd966' }}>{formatDateTime(startDate)}</strong>
+                      <span style={{ opacity:0.6 }}> → </span>
+                      <strong style={{ color: '#ffd966' }}>{formatDateTime(endDate)}</strong>
+                    </div>
+                  )}
+                  {showTimeLeft && isCurrentlyActive && (
+                    <div style={{ 
+                      fontSize:12, 
+                      marginTop:8,
+                      color: totalHours < 1 ? '#ff6b6b' : '#ffd966',
+                      fontWeight: 600,
+                      fontFamily: totalHours > 0 ? 'inherit' : 'monospace',
+                      background: 'rgba(0,0,0,0.2)',
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      display: 'inline-block'
+                    }}>
+                      ⏰ {timeLeftText}
+                    </div>
+                  )}
+                  {!isCurrentlyActive && endDate && now > endDate && (
+                    <div style={{ fontSize:11, marginTop:6, color: '#e74c3c' }}>
+                      ❌ Акция завершена
+                    </div>
+                  )}
+                </div>
+                <div style={{ 
+                  background: rewardType === 'bonus' ? '#2ecc71' : '#f39c12', 
+                  padding:'6px 14px', 
+                  borderRadius:20, 
+                  fontSize:13, 
+                  fontWeight:700, 
+                  color:'white',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {rewardText}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      <div style={{ textAlign:'center', padding:40, opacity:0.6, color:'white' }}>
+        <div style={{ fontSize:48, marginBottom:12 }}>📭</div>
+        <div>На данный момент нет активных акций</div>
+        <div style={{ fontSize:12, marginTop:8, opacity:0.5 }}>Загляните позже!</div>
+      </div>
+    )}
+  </div>
+)}
+      
+
+
+
+{activeTab === 'games' && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <GameWheel onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
+        <DiceRoll onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
+        <ScratchCard onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
+    </div>
+)}
       
       {activeTab === 'quests' && (
         <DailyQuests 
@@ -524,7 +810,7 @@ export function App() {
                   💡 Подсказка: Уровень повышается автоматически при достижении порога трат
                 </div>
               </div>
-              <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:brandColor, border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
+              <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
                 Закрыть
               </button>
             </div>

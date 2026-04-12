@@ -1,29 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 
-export function LoyaltyCard({ userInfo, userBalance, selectedGroup, onBalanceUpdate }) {
+export function LoyaltyCard({ userInfo, selectedGroup }) {
     const [qrCodeUrl, setQrCodeUrl] = useState('');
     const [qrData, setQrData] = useState('');
-    const [lastUpdated, setLastUpdated] = useState(null);
     const [countdown, setCountdown] = useState(0);
     const [copySuccess, setCopySuccess] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     
-    // Генерация QR-кода с данными пользователя
+    // Генерация QR-кода
     const generateQRCode = async () => {
         if (!userInfo || !selectedGroup) return;
         
         setIsGenerating(true);
         
-        // Формируем данные для QR-кода
         const qrDataString = JSON.stringify({
             vkId: userInfo.id,
             userName: `${userInfo.first_name} ${userInfo.last_name}`,
             companyId: selectedGroup.id,
             companyName: selectedGroup.name,
-            balance: userBalance,
             timestamp: Date.now(),
-            expiresIn: 5 * 60 * 1000, // 5 минут
+            expiresIn: 5 * 60 * 1000,
             version: '1.0'
         });
         
@@ -40,16 +37,7 @@ export function LoyaltyCard({ userInfo, userBalance, selectedGroup, onBalanceUpd
                 errorCorrectionLevel: 'H'
             });
             setQrCodeUrl(qrDataUrl);
-            setLastUpdated(Date.now());
             setCountdown(300);
-            
-            // Сохраняем в localStorage для синхронизации
-            localStorage.setItem('lastQRData', JSON.stringify({
-                qrDataUrl,
-                qrDataString,
-                timestamp: Date.now(),
-                userInfo: { id: userInfo.id, name: `${userInfo.first_name} ${userInfo.last_name}` }
-            }));
         } catch (err) {
             console.error('Ошибка генерации QR-кода:', err);
         } finally {
@@ -57,27 +45,19 @@ export function LoyaltyCard({ userInfo, userBalance, selectedGroup, onBalanceUpd
         }
     };
     
-    // Таймер обратного отсчёта
+    // Таймер
     useEffect(() => {
         if (countdown <= 0) return;
-        
-        const timer = setInterval(() => {
-            setCountdown(prev => prev - 1);
-        }, 1000);
-        
+        const timer = setInterval(() => setCountdown(prev => prev - 1), 1000);
         return () => clearInterval(timer);
     }, [countdown]);
     
-    // Автоматическое обновление QR-кода каждые 5 минут
+    // Автообновление
     useEffect(() => {
         generateQRCode();
-        
-        const interval = setInterval(() => {
-            generateQRCode();
-        }, 5 * 60 * 1000);
-        
+        const interval = setInterval(() => generateQRCode(), 5 * 60 * 1000);
         return () => clearInterval(interval);
-    }, [userInfo, selectedGroup, userBalance]);
+    }, [userInfo, selectedGroup]);
     
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60);
@@ -85,34 +65,31 @@ export function LoyaltyCard({ userInfo, userBalance, selectedGroup, onBalanceUpd
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
     
-    // Копирование QR-кода в буфер обмена
-    const copyQRCode = async () => {
-        if (!qrCodeUrl && !qrData) {
+    // Копирование JSON данных QR-кода
+    const copyQRData = async () => {
+        if (!qrData) {
             await generateQRCode();
         }
         
         try {
-            // Копируем текст QR-данных
             await navigator.clipboard.writeText(qrData);
             setCopySuccess(true);
             setTimeout(() => setCopySuccess(false), 2000);
             
-            // Вибрация при успешном копировании (если доступно)
+            // Вибрация при успехе
             if (navigator.vibrate) {
                 navigator.vibrate(100);
             }
         } catch (err) {
-            // Fallback: показываем alert с данными
-            alert('QR-данные:\n' + qrData);
-        }
-    };
-    
-    const saveQRCode = () => {
-        if (qrCodeUrl) {
-            const link = document.createElement('a');
-            link.href = qrCodeUrl;
-            link.download = `loyalty_qr_${userInfo?.id}_${selectedGroup?.id}.png`;
-            link.click();
+            // Fallback для старых браузеров
+            const textarea = document.createElement('textarea');
+            textarea.value = qrData;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            setCopySuccess(true);
+            setTimeout(() => setCopySuccess(false), 2000);
         }
     };
     
@@ -146,57 +123,18 @@ export function LoyaltyCard({ userInfo, userBalance, selectedGroup, onBalanceUpd
                 </div>
             </div>
             
-            {/* Кнопки копирования и сохранения */}
-            <div style={styles.actionButtons}>
-                <button 
-                    onClick={copyQRCode} 
-                    style={{...styles.actionBtn, ...styles.copyBtn}}
-                    disabled={!qrCodeUrl}
-                >
-                    {copySuccess ? '✅ Скопировано!' : '📋 Скопировать QR-код'}
-                </button>
-                <button 
-                    onClick={saveQRCode} 
-                    style={{...styles.actionBtn, ...styles.saveBtn}}
-                    disabled={!qrCodeUrl}
-                >
-                    💾 Сохранить QR
-                </button>
-            </div>
-            
-            <div style={styles.userInfo}>
-                <div style={styles.userName}>
-                    {userInfo?.first_name} {userInfo?.last_name}
-                </div>
-                <div style={styles.userId}>
-                    ID: {userInfo?.id}
-                </div>
-            </div>
-            
-            <div style={styles.balanceInfo}>
-                <div style={styles.balanceLabel}>💰 Баланс бонусов</div>
-                <div style={styles.balanceValue}>{userBalance}</div>
-                <div style={styles.balanceHint}>
-                    {selectedGroup?.name && `в ${selectedGroup.name}`}
-                </div>
-            </div>
-            
-            <div style={styles.cardFooter}>
-                <div style={styles.level}>
-                    {userBalance >= 1000 ? '💎 VIP' : userBalance >= 500 ? '🥇 Золото' : userBalance >= 200 ? '🥈 Серебро' : '🥉 Бронза'}
-                </div>
-                <div style={styles.multiplier}>
-                    Множитель: x{userBalance >= 1000 ? 2 : userBalance >= 500 ? 1.5 : 1.2}
-                </div>
-            </div>
+            {/* Кнопка копирования QR-данных */}
+            <button onClick={copyQRData} style={styles.copyButton} disabled={!qrData}>
+                {copySuccess ? '✅ Данные скопированы!' : '📋 Скопировать QR-данные'}
+            </button>
             
             <div style={styles.instruction}>
                 <div style={styles.instructionTitle}>📖 Как использовать:</div>
                 <ol style={styles.instructionList}>
-                    <li>Покажите QR-код кассиру</li>
-                    <li>Кассир сканирует код</li>
-                    <li>Бонусы автоматически начислятся</li>
-                    <li>QR-код обновляется каждые 5 минут</li>
+                    <li>Покажите QR-код кассиру ИЛИ</li>
+                    <li>Нажмите "Скопировать QR-данные" и отправьте кассиру</li>
+                    <li>Кассир вставит данные в систему</li>
+                    <li>Бонусы начислятся автоматически</li>
                 </ol>
             </div>
         </div>
@@ -221,7 +159,8 @@ const styles = {
     title: {
         fontSize: 18,
         fontWeight: 700,
-        margin: 0
+        margin: 0,
+        color: 'white'
     },
     refreshBtn: {
         background: 'rgba(255,255,255,0.1)',
@@ -261,102 +200,32 @@ const styles = {
         textAlign: 'center',
         marginTop: 12,
         fontSize: 12,
-        opacity: 0.8
+        opacity: 0.8,
+        color: 'white'
     },
     timer: {
         fontSize: 11,
         color: '#ffd966',
         marginTop: 4
     },
-    actionButtons: {
-        display: 'flex',
-        gap: 12,
-        justifyContent: 'center',
-        marginBottom: 20
-    },
-    actionBtn: {
-        padding: '10px 20px',
-        borderRadius: 30,
-        fontSize: 13,
-        fontWeight: 600,
-        cursor: 'pointer',
+    copyButton: {
+        background: 'linear-gradient(135deg, #ff4d4d, #cc0000)',
         border: 'none',
-        transition: 'all 0.2s ease'
-    },
-    copyBtn: {
-        background: 'linear-gradient(135deg, #3498db, #2980b9)',
+        padding: '14px 20px',
+        borderRadius: 40,
         color: 'white',
-        flex: 1
-    },
-    saveBtn: {
-        background: 'rgba(255,255,255,0.1)',
-        color: 'white',
-        border: '1px solid rgba(255,255,255,0.2)',
-        flex: 1
-    },
-    userInfo: {
-        textAlign: 'center',
-        marginBottom: 16,
-        paddingBottom: 16,
-        borderBottom: '1px solid rgba(255,255,255,0.1)'
-    },
-    userName: {
-        fontWeight: 700,
-        fontSize: 18,
-        marginBottom: 4
-    },
-    userId: {
-        fontSize: 11,
-        opacity: 0.6
-    },
-    balanceInfo: {
-        textAlign: 'center',
-        marginBottom: 16,
-        padding: 16,
-        background: 'rgba(0,0,0,0.2)',
-        borderRadius: 20
-    },
-    balanceLabel: {
-        fontSize: 12,
-        opacity: 0.7,
-        marginBottom: 8
-    },
-    balanceValue: {
-        fontSize: 36,
-        fontWeight: 800,
-        color: '#ffd966'
-    },
-    balanceHint: {
-        fontSize: 10,
-        opacity: 0.5,
-        marginTop: 4
-    },
-    cardFooter: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-        flexWrap: 'wrap',
-        gap: 8
-    },
-    level: {
-        padding: '6px 12px',
-        background: 'rgba(255,215,0,0.15)',
-        borderRadius: 20,
-        fontSize: 12
-    },
-    multiplier: {
-        padding: '6px 12px',
-        background: 'rgba(46,204,113,0.15)',
-        borderRadius: 20,
-        fontSize: 12,
-        color: '#2ecc71'
+        fontWeight: 600,
+        fontSize: 16,
+        cursor: 'pointer',
+        width: '100%',
+        marginBottom: 20
     },
     instruction: {
         background: 'rgba(0,0,0,0.2)',
         borderRadius: 16,
         padding: 12,
-        fontSize: 11
+        fontSize: 11,
+        color: 'white'
     },
     instructionTitle: {
         fontWeight: 600,

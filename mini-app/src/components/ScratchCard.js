@@ -1,207 +1,330 @@
-import React, { useState } from 'react';
+// ScratchCard.js - 3x3, 3 попытки, найди 3 одинаковых
+import { useState } from 'react';
+import './ScratchCard.css';
 
-export function ScratchCard({ onWin, userBalance, onBalanceUpdate }) {
-  const [scratched, setScratched] = useState(false);
-  const [prize, setPrize] = useState(null);
-  const [isScratching, setIsScratching] = useState(false);
-  const [scratchProgress, setScratchProgress] = useState(0);
-  const [canScratch, setCanScratch] = useState(true);
+const CARD_COST = 20;
 
-  const prizes = [
-    { value: 5, probability: 35, label: '5 бонусов' },
-    { value: 10, probability: 25, label: '10 бонусов' },
-    { value: 20, probability: 15, label: '20 бонусов' },
-    { value: 50, probability: 10, label: '50 бонусов' },
-    { value: 100, probability: 8, label: '100 бонусов' },
-    { value: 200, probability: 4, label: '200 бонусов' },
-    { value: 0, probability: 3, label: '0 бонусов' }
-  ];
 
-  const getRandomPrize = () => {
-    const random = Math.random() * 100;
-    let cumulative = 0;
-    for (const p of prizes) {
-      cumulative += p.probability;
-      if (random <= cumulative) {
-        return p;
-      }
-    }
-    return prizes[0];
-  };
-
-  const startScratching = () => {
-    if (!canScratch || isScratching) return;
-    
-    setIsScratching(true);
-    setScratchProgress(0);
-    
-    // Имитация процесса стирания
-    const interval = setInterval(() => {
-      setScratchProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          completeScratch();
-          return 100;
+async function loadScratchSettingsFromServer(companyId) {
+    try {
+        const response = await fetch(`${API_URL}/api/games/${companyId}/scratch`);
+        const data = await response.json();
+        if (data.success) {
+            return {
+                cost: data.settings.cost || 20,
+                maxAttempts: data.settings.maxAttempts || 3,
+                symbols: data.settings.symbols || SYMBOLS,
+                hintCost: data.settings.hintCost || 15,
+                active: data.active
+            };
         }
-        return prev + 10;
-      });
-    }, 150);
-  };
-
-  const completeScratch = async () => {
-    const wonPrize = getRandomPrize();
-    setPrize(wonPrize);
-    setScratched(true);
-    setIsScratching(false);
-    setCanScratch(false);
-    
-    if (wonPrize.value > 0 && onBalanceUpdate) {
-      await onBalanceUpdate(wonPrize.value, 'earn');
-      if (onWin) onWin(wonPrize.value);
+    } catch (error) {
+        console.error('Ошибка загрузки настроек:', error);
     }
-    
-    // Сохраняем время последней скретч-карты
-    localStorage.setItem('lastScratch', Date.now().toString());
-  };
-
-  // Проверка доступности (раз в день)
-  React.useEffect(() => {
-    const lastScratch = localStorage.getItem('lastScratch');
-    if (lastScratch) {
-      const lastDate = new Date(parseInt(lastScratch));
-      const now = new Date();
-      const hoursDiff = (now - lastDate) / (1000 * 60 * 60);
-      if (hoursDiff < 24) {
-        setCanScratch(false);
-      }
-    }
-  }, []);
-
-  return (
-    <div style={styles.container}>
-      <h3 style={styles.title}>🎫 Скретч-карта дня</h3>
-      
-      <div
-        style={{
-          ...styles.card,
-          background: scratched ? 'linear-gradient(135deg, #2c3e50, #34495e)' : 'linear-gradient(135deg, #7f8c8d, #95a5a6)'
-        }}
-        onClick={startScratching}
-      >
-        {!scratched ? (
-          <div style={styles.cardFront}>
-            {isScratching ? (
-              <div style={styles.scratchingProgress}>
-                <div style={{ ...styles.progressBar, width: `${scratchProgress}%` }} />
-                <span>Стираем... {scratchProgress}%</span>
-              </div>
-            ) : (
-              <div style={styles.scratchInstruction}>
-                <div style={styles.scratchIcon}>🎲</div>
-                <div>Нажми, чтобы стереть</div>
-                {!canScratch && <div style={styles.unavailable}>Доступно завтра</div>}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={styles.cardBack}>
-            {prize && (
-              <>
-                <div style={styles.prizeIcon}>🎁</div>
-                <div style={styles.prizeValue}>
-                  {prize.value > 0 ? `+${prize.value}` : prize.label}
-                </div>
-                {prize.value > 0 && <div style={styles.prizeLabel}>бонусов</div>}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      
-      {!canScratch && !scratched && (
-        <div style={styles.nextAvailable}>
-          Новая скретч-карта будет доступна завтра
-        </div>
-      )}
-    </div>
-  );
+    return { cost: 20, maxAttempts: 3, symbols: SYMBOLS, hintCost: 15, active: true };
 }
+// Символы для игры
+const SYMBOLS = [
+    { id: '🍒', name: 'Вишня', value: 10, multiplier: 1, color: '#e74c3c' },
+    { id: '🍋', name: 'Лимон', value: 15, multiplier: 1.5, color: '#f1c40f' },
+    { id: '🍊', name: 'Апельсин', value: 20, multiplier: 2, color: '#e67e22' },
+    { id: '🍉', name: 'Арбуз', value: 25, multiplier: 2.5, color: '#2ecc71' },
+    { id: '⭐', name: 'Звезда', value: 50, multiplier: 5, color: '#f39c12' },
+    { id: '💎', name: 'Алмаз', value: 100, multiplier: 10, color: '#9b59b6' },
+    { id: '7️⃣', name: 'Семёрка', value: 200, multiplier: 20, color: '#e74c3c' },
+    { id: '🎰', name: 'ДЖЕКПОТ', value: 500, multiplier: 50, color: '#ff4d4d' }
+];
 
-const styles = {
-  container: {
-    background: 'rgba(30, 35, 48, 0.7)',
-    borderRadius: 28,
-    padding: 20,
-    marginBottom: 20
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 700,
-    marginBottom: 15
-  },
-  card: {
-    width: '100%',
-    height: 180,
-    borderRadius: 20,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.3s'
-  },
-  cardFront: {
-    textAlign: 'center',
-    color: 'white',
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'column'
-  },
-  scratchInstruction: {
-    textAlign: 'center'
-  },
-  scratchIcon: {
-    fontSize: 48,
-    marginBottom: 10
-  },
-  scratchingProgress: {
-    textAlign: 'center',
-    width: '80%'
-  },
-  progressBar: {
-    height: 4,
-    background: '#ffd966',
-    borderRadius: 2,
-    marginBottom: 10,
-    transition: 'width 0.1s'
-  },
-  cardBack: {
-    textAlign: 'center',
-    color: '#ffd966'
-  },
-  prizeIcon: {
-    fontSize: 48,
-    marginBottom: 10
-  },
-  prizeValue: {
-    fontSize: 36,
-    fontWeight: 'bold'
-  },
-  prizeLabel: {
-    fontSize: 14,
-    opacity: 0.8
-  },
-  unavailable: {
-    fontSize: 12,
-    marginTop: 10,
-    color: '#aaa'
-  },
-  nextAvailable: {
-    marginTop: 10,
-    textAlign: 'center',
-    fontSize: 12,
-    opacity: 0.7
-  }
+// Создание игрового поля 3x3
+const createBoard = () => {
+    // Выбираем случайный символ для победы
+    const winningSymbol = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+    
+    // Создаем массив из 9 ячеек
+    const board = [];
+    
+    // Добавляем 3 выигрышных символа
+    for (let i = 0; i < 3; i++) {
+        board.push({
+            id: `${winningSymbol.id}_win_${i}`,
+            symbol: winningSymbol,
+            revealed: false,
+            isWinning: true
+        });
+    }
+    
+    // Добавляем 6 проигрышных символов (случайные, но не выигрышный)
+    const otherSymbols = SYMBOLS.filter(s => s.id !== winningSymbol.id);
+    for (let i = 0; i < 6; i++) {
+        const randomSymbol = otherSymbols[Math.floor(Math.random() * otherSymbols.length)];
+        board.push({
+            id: `${randomSymbol.id}_lose_${i}`,
+            symbol: randomSymbol,
+            revealed: false,
+            isWinning: false
+        });
+    }
+    
+    // Перемешиваем массив
+    for (let i = board.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [board[i], board[j]] = [board[j], board[i]];
+    }
+    
+    return board;
 };
+
+export function ScratchCard({ onBalanceUpdate, userBalance }) {
+    const [board, setBoard] = useState([]);
+    const [gameActive, setGameActive] = useState(true);
+    const [isRevealing, setIsRevealing] = useState(false);
+    const [result, setResult] = useState(null);
+    const [lastWin, setLastWin] = useState(null);
+    const [showConfetti, setShowConfetti] = useState(false);
+    const [attemptsLeft, setAttemptsLeft] = useState(3);
+    const [foundWinning, setFoundWinning] = useState(0);
+    const [selectedSymbol, setSelectedSymbol] = useState(null);
+
+    // Новая игра
+    const newGame = () => {
+        if (isRevealing) return;
+        
+        if (userBalance < CARD_COST) {
+            alert(`❌ Недостаточно бонусов! Нужно ${CARD_COST} бонусов.`);
+            return;
+        }
+        
+        onBalanceUpdate(-CARD_COST, 'spend');
+        
+        const newBoard = createBoard();
+        // Находим выигрышный символ
+        const winningSym = newBoard.find(cell => cell.isWinning)?.symbol;
+        
+        setBoard(newBoard);
+        setSelectedSymbol(winningSym);
+        setGameActive(true);
+        setResult(null);
+        setLastWin(null);
+        setShowConfetti(false);
+        setAttemptsLeft(3);
+        setFoundWinning(0);
+    };
+
+    // Открыть ячейку
+    const revealCell = (index) => {
+        if (!gameActive) return;
+        if (isRevealing) return;
+        if (board[index].revealed) return;
+        if (attemptsLeft <= 0) return;
+        
+        setIsRevealing(true);
+        
+        setTimeout(() => {
+            const newBoard = [...board];
+            newBoard[index].revealed = true;
+            setBoard(newBoard);
+            
+            const newAttemptsLeft = attemptsLeft - 1;
+            setAttemptsLeft(newAttemptsLeft);
+            
+            // Проверяем, выигрышная ли ячейка
+            if (newBoard[index].isWinning) {
+                const newFoundWinning = foundWinning + 1;
+                setFoundWinning(newFoundWinning);
+                
+                // Если нашли 3 выигрышных символа - ПОБЕДА!
+                if (newFoundWinning === 3) {
+                    const winAmount = newBoard[index].symbol.value * newBoard[index].symbol.multiplier;
+                    onBalanceUpdate(winAmount, 'earn');
+                    setLastWin(winAmount);
+                    setShowConfetti(true);
+                    setTimeout(() => setShowConfetti(false), 3000);
+                    setResult({
+                        type: 'win',
+                        value: winAmount,
+                        message: `🎉 ПОБЕДА! Вы нашли 3 ${newBoard[index].symbol.name} и выиграли ${winAmount} бонусов! 🎉`
+                    });
+                    setGameActive(false);
+                    try { navigator.vibrate?.(200); } catch(e) {}
+                }
+            }
+            
+            // Если кончились попытки и не собрали 3 одинаковых - ПРОИГРЫШ
+            if (newAttemptsLeft === 0 && foundWinning < 2) {
+                setResult({
+                    type: 'lose',
+                    value: 0,
+                    message: `😢 Вы не нашли 3 одинаковых символа за 3 попытки. Попробуйте ещё раз!`
+                });
+                setGameActive(false);
+            }
+            
+            setIsRevealing(false);
+            
+            if (typeof window.updateQuestProgress === 'function') {
+                window.updateQuestProgress('scratch_card', 1);
+            }
+        }, 200);
+    };
+
+    // Подсказка - показать одну выигрышную ячейку (за бонусы)
+    const showHint = () => {
+        if (!gameActive) return;
+        if (isRevealing) return;
+        if (attemptsLeft <= 0) return;
+        
+        // Находим неоткрытую выигрышную ячейку
+        const unrevealedWinning = board.findIndex(cell => cell.isWinning && !cell.revealed);
+        
+        if (unrevealedWinning !== -1 && userBalance >= 15) {
+            onBalanceUpdate(-15, 'spend');
+            revealCell(unrevealedWinning);
+        } else if (unrevealedWinning === -1) {
+            alert('❌ Нет доступных подсказок!');
+        } else {
+            alert(`❌ Недостаточно бонусов! Нужно 15 бонусов за подсказку.`);
+        }
+    };
+
+    return (
+        <div className="scratch-card-3x3">
+            {showConfetti && (
+                <div className="confetti-overlay">
+                    {Array.from({ length: 100 }).map((_, i) => (
+                        <div
+                            key={i}
+                            className="confetti-piece"
+                            style={{
+                                '--x': `${Math.random() * 200 - 100}%`,
+                                '--delay': `${Math.random() * 3}s`,
+                                '--color': `hsl(${Math.random() * 360}, 80%, 60%)`
+                            }}
+                        />
+                    ))}
+                    <div className="confetti-text">🎉 ПОБЕДА! 🎉</div>
+                </div>
+            )}
+            
+            <div className="scratch-header">
+                <h3>🎰 НАЙДИ 3 ОДИНАКОВЫХ</h3>
+                <div className="scratch-cost">
+                    <span className="cost-icon">🎟️</span>
+                    <span className="cost-value">{CARD_COST}</span>
+                </div>
+            </div>
+            
+            <div className="game-rules">
+                <div className="rule-item">🎯 Найдите 3 одинаковых символа</div>
+                <div className="rule-item">🖱️ У вас всего 3 попытки!</div>
+                <div className="rule-item">🏆 Соберите все 3 и выиграйте множитель!</div>
+            </div>
+            
+            {/* Прогресс */}
+            <div className="game-progress">
+                <div className="progress-text">
+                    🎲 Попыток осталось: {attemptsLeft} / 3
+                </div>
+                <div className="progress-bar">
+                    <div 
+                        className="progress-fill" 
+                        style={{ width: `${(3 - attemptsLeft) / 3 * 100}%` }}
+                    />
+                </div>
+            </div>
+            
+            {/* Найдено одинаковых */}
+            <div className="found-progress">
+                <div className="found-text">
+                    🔍 Найдено одинаковых: {foundWinning} / 3
+                </div>
+                <div className="found-bar">
+                    <div 
+                        className="found-fill" 
+                        style={{ width: `${(foundWinning / 3) * 100}%` }}
+                    />
+                </div>
+            </div>
+            
+            {/* Выигрышный символ (скрыт до победы) */}
+            {selectedSymbol && foundWinning < 3 && gameActive && (
+                <div className="hint-symbol">
+                    💡 Подсказка: ищите символ <span style={{ fontSize: '20px' }}>{selectedSymbol.id}</span>
+                </div>
+            )}
+            
+            {/* Игровое поле 3x3 */}
+            <div className="game-board-3x3">
+                {board.map((cell, index) => (
+                    <div
+                        key={cell.id}
+                        className={`game-cell ${cell.revealed ? 'revealed' : 'hidden'} ${cell.revealed && cell.isWinning ? 'winning' : ''}`}
+                        onClick={() => revealCell(index)}
+                    >
+                        {cell.revealed ? (
+                            <div className="cell-content" style={{ background: cell.symbol.color }}>
+                                <div className="cell-emoji">{cell.symbol.id}</div>
+                                <div className="cell-name">{cell.symbol.name}</div>
+                                {cell.isWinning && (
+                                    <div className="cell-value">x{cell.symbol.multiplier}</div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="cell-cover">
+                                <div className="cover-icon">❓</div>
+                                <div className="cover-text">открыть</div>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+            
+            {/* Кнопки */}
+            <div className="game-buttons">
+                <button
+                    className="new-game-btn"
+                    onClick={newGame}
+                    disabled={isRevealing}
+                >
+                    🎲 НОВАЯ ИГРА
+                </button>
+                {gameActive && attemptsLeft > 0 && foundWinning < 3 && (
+                    <button
+                        className="hint-btn"
+                        onClick={showHint}
+                        disabled={isRevealing}
+                    >
+                        💡 ПОДСКАЗКА (15)
+                    </button>
+                )}
+            </div>
+            
+            {/* Результат */}
+            {result && (
+                <div className={`game-result ${result.type === 'win' ? 'win' : 'lose'} show`}>
+                    <div className="result-icon">{result.type === 'win' ? '🏆' : '😢'}</div>
+                    <div className="result-text">{result.message}</div>
+                </div>
+            )}
+            
+            {/* Последний выигрыш */}
+            {lastWin && !result && lastWin > 0 && (
+                <div className="last-win">
+                    🏆 ПОСЛЕДНИЙ ВЫИГРЫШ: +{lastWin}
+                </div>
+            )}
+            
+            {/* Информация о множителях */}
+            <div className="multiplier-info">
+                <div className="info-title">🎁 Множители выигрыша:</div>
+                <div className="multiplier-list">
+                    {SYMBOLS.map(sym => (
+                        <div key={sym.id} className="multiplier-item">
+                            <span>{sym.id}</span>
+                            <span>x{sym.multiplier}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}

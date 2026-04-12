@@ -1,220 +1,494 @@
-.game-wheel-container {
-    background: linear-gradient(135deg, #1e2538, #131825);
-    border-radius: 28px;
-    padding: 20px;
+/* GameWheel.css - Кнопка по центру */
+.game-wheel-classic {
+    background: linear-gradient(145deg, #1a1f2e, #0f1420);
+    border-radius: 48px;
+    padding: 24px;
     margin-bottom: 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    position: relative;
+    overflow: hidden;
 }
 
-.wheel-header {
+.game-wheel-classic::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.classic-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 10px;
+    margin-bottom: 24px;
+    padding: 0 8px;
 }
 
-.wheel-header h3 {
+.header-left h3 {
     margin: 0;
     font-size: 20px;
+    background: linear-gradient(135deg, #fff, #ffd966);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 1px;
 }
 
-.wheel-stats {
+.stats-badge {
     display: flex;
     gap: 12px;
-    flex-wrap: wrap;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #aaa;
 }
 
-.cost-badge {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 6px 12px;
+.stats-badge span {
+    background: rgba(255,255,255,0.08);
+    padding: 2px 10px;
     border-radius: 20px;
-    font-size: 12px;
 }
 
-.free-spins-badge {
-    background: linear-gradient(135deg, #2ecc71, #27ae60);
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: bold;
+.classic-cost {
+    background: rgba(255, 77, 77, 0.15);
+    padding: 8px 18px;
+    border-radius: 40px;
+    font-size: 16px;
+    font-weight: 700;
+    border: 1px solid rgba(255, 77, 77, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-.wheel-wrapper {
+.cost-icon {
+    font-size: 18px;
+}
+
+.cost-value {
+    color: #ff4d4d;
+}
+
+.classic-wheel-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.classic-wheel-wrapper {
     position: relative;
-    width: 280px;
-    height: 280px;
-    margin: 0 auto 30px;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    background: #2a2f3f;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 0 3px rgba(255, 255, 255, 0.1);
 }
 
-.wheel {
+.classic-wheel {
     position: absolute;
     width: 100%;
     height: 100%;
     border-radius: 50%;
     overflow: hidden;
-    transition: transform 3s cubic-bezier(0.25, 0.1, 0.15, 1);
-    box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.1), 0 8px 32px rgba(0, 0, 0, 0.3);
+    transition: transform 3.5s cubic-bezier(0.2, 0.9, 0.3, 1.05);
 }
 
-.wheel-sector {
+.classic-wheel.spinning {
+    filter: drop-shadow(0 0 10px rgba(255,255,255,0.3));
+}
+
+.classic-sector {
     position: absolute;
     width: 50%;
     height: 50%;
     left: 50%;
     top: 50%;
     transform-origin: 0% 0%;
-    clip-path: polygon(0% 0%, 100% 0%, 0% 100%);
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
+    transition: filter 0.2s;
 }
 
-.sector-content {
+.classic-sector.highlight {
+    filter: brightness(1.2);
+    animation: pulse 0.5s ease-in-out;
+}
+
+@keyframes pulse {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.3); }
+}
+
+.classic-sector-content {
     position: absolute;
-    left: 35%;
-    top: 20%;
-    transform: rotate(45deg);
+    left: 32%;
+    top: 22%;
     text-align: center;
-    font-size: 11px;
-    font-weight: 600;
-    color: white;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
 }
 
-.sector-icon {
+.classic-icon {
+    font-size: 18px;
+    margin-bottom: 2px;
+}
+
+.classic-multiplier {
     font-size: 20px;
+    font-weight: 800;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    font-family: monospace;
 }
 
-.sector-name {
+.classic-bonus {
     font-size: 9px;
-    white-space: nowrap;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 20px;
 }
 
-.wheel-pointer {
+.classic-pointer {
     position: absolute;
-    top: -20px;
+    top: -28px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 40px;
-    color: #ff4d4d;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    width: 0;
+    height: 0;
+    border-left: 20px solid transparent;
+    border-right: 20px solid transparent;
+    border-top: 40px solid #ff4d4d;
     z-index: 10;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
 }
 
-.wheel-controls {
+.pointer-glow {
+    position: absolute;
+    top: -40px;
+    left: -20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ff4d4d, transparent);
+    opacity: 0.5;
+}
+
+.classic-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle, #3a4a6e, #1a1f2e);
+    border-radius: 50%;
+    z-index: 5;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 15px;
+    justify-content: center;
 }
 
-.free-spin-checkbox {
+.center-icon {
+    font-size: 28px;
+    animation: subtlePulse 2s infinite;
+}
+
+@keyframes subtlePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* Обертка для кнопки по центру */
+.classic-spin-wrapper {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: #aaa;
-    cursor: pointer;
+    justify-content: center;
+    margin: 16px 0 8px;
 }
 
-.free-spin-checkbox input {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-}
-
-.spin-btn {
+.classic-spin-btn {
     background: linear-gradient(135deg, #ff4d4d, #cc0000);
     border: none;
-    padding: 14px 32px;
-    border-radius: 40px;
+    padding: 14px 40px;
+    border-radius: 50px;
     color: white;
-    font-size: 18px;
-    font-weight: bold;
+    font-size: 16px;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 15px rgba(255, 77, 77, 0.3);
-}
-
-.spin-btn:hover:not(:disabled) {
-    transform: scale(1.05);
     box-shadow: 0 6px 20px rgba(255, 77, 77, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+    min-width: 180px;
 }
 
-.spin-btn:disabled {
+.classic-spin-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+}
+
+.classic-spin-btn:hover::before {
+    left: 100%;
+}
+
+.classic-spin-btn:hover:not(:disabled) {
+    transform: scale(1.02);
+    box-shadow: 0 8px 25px rgba(255, 77, 77, 0.5);
+}
+
+.classic-spin-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.spin-btn.spinning {
+.classic-spin-btn.spinning {
     background: linear-gradient(135deg, #666, #444);
+    animation: spinPulse 1s infinite;
 }
 
-.wheel-result {
-    margin-top: 20px;
-    padding: 14px;
-    border-radius: 16px;
-    text-align: center;
-    font-weight: bold;
-    animation: pulse 0.5s ease;
+@keyframes spinPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
 }
 
-.wheel-result.win {
-    background: linear-gradient(135deg, #2ecc71, #27ae60);
-    color: white;
+.btn-text {
+    font-weight: 700;
+}
+
+.btn-icon {
     font-size: 18px;
 }
 
-.wheel-result.discount {
-    background: linear-gradient(135deg, #e67e22, #d35400);
-    color: white;
-    font-size: 16px;
+.classic-result {
+    margin-top: 20px;
+    padding: 14px;
+    border-radius: 40px;
+    font-weight: 700;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
 }
 
-.wheel-result.lose {
-    background: rgba(255, 255, 255, 0.1);
+.classic-result.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.classic-result.win {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: white;
+    box-shadow: 0 4px 20px rgba(46, 204, 113, 0.3);
+}
+
+.classic-result.lose {
+    background: rgba(255, 255, 255, 0.08);
     color: #aaa;
 }
 
-.last-win {
-    margin-top: 12px;
-    text-align: center;
-    font-size: 12px;
-    color: #ffd966;
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
+.result-icon {
+    font-size: 28px;
 }
 
-@keyframes pulse {
-    0% { transform: scale(0.95); opacity: 0; }
+.result-text {
+    font-size: 16px;
+}
+
+.result-animation {
+    font-size: 20px;
+    animation: bounce 0.5s ease;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+.classic-last-win {
+    margin-top: 15px;
+    font-size: 12px;
+    color: #ffd966;
+    background: rgba(255, 215, 0, 0.1);
+    padding: 10px;
+    border-radius: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.last-icon {
+    font-size: 14px;
+}
+
+.classic-chances {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.chance-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: #888;
+}
+
+.chance-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.chance-dot.green { background: #2ecc71; }
+.chance-dot.red { background: #e74c3c; }
+.chance-dot.gray { background: #95a5a6; }
+
+.classic-glow-effect {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    z-index: 999;
+    animation: fadeOut 0.5s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+.classic-confetti {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.confetti-piece {
+    position: absolute;
+    top: -20px;
+    width: 10px;
+    height: 10px;
+    background: var(--color);
+    animation: confettiFall 2s ease-out forwards;
+    animation-delay: var(--delay);
+}
+
+@keyframes confettiFall {
+    0% {
+        transform: translateX(0) translateY(-20px) rotate(0deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translateX(var(--x)) translateY(100vh) rotate(720deg);
+        opacity: 0;
+    }
+}
+
+.confetti-text {
+    font-size: 32px;
+    font-weight: 800;
+    color: #ffd966;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+    animation: textPop 0.5s ease-out;
+    background: linear-gradient(135deg, #ffd966, #ff4d4d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+@keyframes textPop {
+    0% { transform: scale(0); opacity: 0; }
+    70% { transform: scale(1.2); }
     100% { transform: scale(1); opacity: 1; }
 }
 
 /* Адаптивность */
 @media (max-width: 480px) {
-    .wheel-wrapper {
-        width: 240px;
-        height: 240px;
+    .game-wheel-classic {
+        padding: 18px;
     }
     
-    .sector-icon {
+    .classic-wheel-wrapper {
+        width: 260px;
+        height: 260px;
+    }
+    
+    .classic-multiplier {
         font-size: 16px;
     }
     
-    .sector-name {
-        font-size: 7px;
+    .classic-bonus {
+        font-size: 8px;
     }
     
-    .spin-btn {
-        padding: 12px 28px;
+    .classic-icon {
+        font-size: 14px;
+    }
+    
+    .classic-sector-content {
+        left: 28%;
+        top: 18%;
+    }
+    
+    .classic-spin-btn {
+        padding: 12px 32px;
+        font-size: 14px;
+        min-width: 150px;
+    }
+    
+    .classic-header h3 {
         font-size: 16px;
+    }
+    
+    .stats-badge {
+        font-size: 9px;
+    }
+    
+    .classic-cost {
+        padding: 5px 12px;
+        font-size: 14px;
+    }
+    
+    .confetti-text {
+        font-size: 24px;
     }
 }

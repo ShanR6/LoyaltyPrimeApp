@@ -1,5 +1,4 @@
 const { Pool } = require('pg');
-
 const pool = new Pool({
     user: 'postgres',
     password: 'postgres',
@@ -137,12 +136,179 @@ async function initDatabase() {
         console.log('✅ Таблицы созданы/проверены');
         
         await addMissingColumns();
+        await addPromotionRewardColumns();
+        await addGameSettingsTable();  
+        await addGameSettingsColumns(); 
         await insertTestData();
 
     } catch (error) {
         console.error('❌ Ошибка инициализации БД:', error);
     }
 }
+// Добавьте эту функцию в database-pg.js после initDatabase()
+
+async function addGameSettingsTable() {
+    try {
+        await query(`
+            CREATE TABLE IF NOT EXISTS game_settings (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                game_type VARCHAR(50) NOT NULL,
+                settings JSONB DEFAULT '{}',
+                active BOOLEAN DEFAULT TRUE,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ Таблица game_settings создана/проверена');
+        
+        // Добавляем уникальное ограничение если его нет
+        try {
+            await query(`
+                ALTER TABLE game_settings ADD CONSTRAINT unique_company_game 
+                UNIQUE (company_id, game_type)
+            `);
+        } catch (e) {
+            // Ограничение уже существует - игнорируем
+            if (!e.message.includes('already exists')) {
+                console.log('⚠️ Уникальное ограничение уже существует');
+            }
+        }
+    } catch (error) {
+        console.error('❌ Ошибка создания game_settings:', error);
+    }
+}
+
+// Функция для получения настроек игры
+async function getGameSettings(companyId, gameType) {
+    try {
+        // Убеждаемся, что таблица и колонки существуют
+        await addGameSettingsTable();
+        await addGameSettingsColumns();
+        
+        const result = await query(
+            'SELECT settings, active FROM game_settings WHERE company_id = $1 AND game_type = $2',
+            [companyId, gameType]
+        );
+        
+        if (result.rows.length > 0) {
+            let settings = result.rows[0].settings;
+            if (typeof settings === 'string') {
+                settings = JSON.parse(settings);
+            }
+            return {
+                settings: settings,
+                active: result.rows[0].active
+            };
+        }
+        
+        // Возвращаем настройки по умолчанию для каждого типа игры
+        let defaultSettings = {};
+        
+        if (gameType === 'wheel') {
+            defaultSettings = {
+                spinCost: 25,
+                sectors: [
+                    { name: 'x5', value: 5, multiplier: 5, color: '#2ecc71', icon: '⭐', weight: 15 },
+                    { name: 'x2', value: 2, multiplier: 2, color: '#3498db', icon: '🎯', weight: 25 },
+                    { name: 'x10', value: 10, multiplier: 10, color: '#e74c3c', icon: '🔥', weight: 5 },
+                    { name: 'x0', value: 0, multiplier: 0, color: '#95a5a6', icon: '💀', weight: 30 },
+                    { name: 'x3', value: 3, multiplier: 3, color: '#f39c12', icon: '✨', weight: 20 },
+                    { name: 'x1', value: 1, multiplier: 1, color: '#1abc9c', icon: '🍀', weight: 35 },
+                    { name: 'x20', value: 20, multiplier: 20, color: '#9b59b6', icon: '💎', weight: 3 },
+                    { name: 'x15', value: 15, multiplier: 15, color: '#e67e22', icon: '🏆', weight: 10 }
+                ],
+                maxSpinsPerDay: 10,
+                freeSpinDaily: false
+            };
+        } else if (gameType === 'scratch') {
+            defaultSettings = {
+                cost: 20,
+                maxAttempts: 3,
+                symbols: [
+                    { id: '🍒', name: 'Вишня', value: 10, multiplier: 1, color: '#e74c3c', prob: 15 },
+                    { id: '🍋', name: 'Лимон', value: 15, multiplier: 1.5, color: '#f1c40f', prob: 14 },
+                    { id: '🍊', name: 'Апельсин', value: 20, multiplier: 2, color: '#e67e22', prob: 13 },
+                    { id: '🍉', name: 'Арбуз', value: 25, multiplier: 2.5, color: '#2ecc71', prob: 12 },
+                    { id: '⭐', name: 'Звезда', value: 50, multiplier: 5, color: '#f39c12', prob: 10 },
+                    { id: '💎', name: 'Алмаз', value: 100, multiplier: 10, color: '#9b59b6', prob: 8 },
+                    { id: '7️⃣', name: 'Семёрка', value: 200, multiplier: 20, color: '#e74c3c', prob: 5 },
+                    { id: '🎰', name: 'ДЖЕКПОТ', value: 500, multiplier: 50, color: '#ff4d4d', prob: 3 }
+                ],
+                hintCost: 15,
+                freeHintDaily: false
+            };
+        } else if (gameType === 'dice') {
+            defaultSettings = {
+                cost: 25,
+                jackpotBase: 1000,
+                betMultipliers: [1, 2, 3, 5, 10],
+                combinations: {
+                    '2': { name: 'Змеиные глаза', multiplier: 15, icon: '🐍', color: '#2ecc71', description: 'Редкая комбинация!', enabled: true },
+                    '3': { name: 'Тройка', multiplier: 4, icon: '3️⃣', color: '#f39c12', description: 'Счастливое число', enabled: true },
+                    '4': { name: 'Четверка', multiplier: 3, icon: '4️⃣', color: '#16a085', description: 'Хорошо!', enabled: true },
+                    '5': { name: 'Пятерка', multiplier: 2.5, icon: '5️⃣', color: '#27ae60', description: 'Неплохо!', enabled: true },
+                    '6': { name: 'Шестерка', multiplier: 2, icon: '6️⃣', color: '#2980b9', description: 'Средний результат', enabled: true },
+                    '7': { name: 'Счастливая семерка', multiplier: 8, icon: '🍀', color: '#f1c40f', description: 'Удача на вашей стороне!', enabled: true },
+                    '8': { name: 'Восьмерка', multiplier: 2.5, icon: '8️⃣', color: '#8e44ad', description: 'Хорошо!', enabled: true },
+                    '9': { name: 'Девятка', multiplier: 3, icon: '9️⃣', color: '#d35400', description: 'Отлично!', enabled: true },
+                    '10': { name: 'Десятка', multiplier: 4, icon: '🔟', color: '#c0392b', description: 'Прекрасно!', enabled: true },
+                    '11': { name: 'Одиннадцать', multiplier: 6, icon: '✨', color: '#e67e22', description: 'Отличная комбинация!', enabled: true },
+                    '12': { name: 'Боксерские перчатки', multiplier: 15, icon: '🥊', color: '#e74c3c', description: 'Максимальная удача!', enabled: true },
+                    'double': { name: 'Дубль', multiplier: 5, icon: '🎲', color: '#9b59b6', description: 'Одинаковые кости!', enabled: true },
+                    'even': { name: 'Четная сумма', multiplier: 1.5, icon: '📊', color: '#3498db', description: 'Хороший результат', enabled: true },
+                    'odd': { name: 'Нечетная сумма', multiplier: 1.2, icon: '🎯', color: '#1abc9c', description: 'Неплохо!', enabled: true }
+                },
+                jackpotChance: 1,
+                jackpotContribution: 10
+            };
+        }
+        
+        return {
+            settings: defaultSettings,
+            active: true
+        };
+    } catch (error) {
+        console.error('Ошибка getGameSettings:', error);
+        return { settings: {}, active: true };
+    }
+}
+
+// Функция для сохранения настроек игры
+async function saveGameSettings(companyId, gameType, settings, active) {
+    try {
+        // Убеждаемся, что таблица и колонки существуют
+        await addGameSettingsTable();
+        await addGameSettingsColumns();
+        
+        const settingsJson = JSON.stringify(settings);
+        const result = await query(
+            `INSERT INTO game_settings (company_id, game_type, settings, active, updated_at) 
+             VALUES ($1, $2, $3, $4, NOW())
+             ON CONFLICT (company_id, game_type) 
+             DO UPDATE SET 
+                settings = EXCLUDED.settings,
+                active = EXCLUDED.active,
+                updated_at = NOW()
+             RETURNING *`,
+            [companyId, gameType, settingsJson, active]
+        );
+        
+        let savedSettings = result.rows[0].settings;
+        if (typeof savedSettings === 'string') {
+            savedSettings = JSON.parse(savedSettings);
+        }
+        
+        return {
+            settings: savedSettings,
+            active: result.rows[0].active
+        };
+    } catch (error) {
+        console.error('Ошибка saveGameSettings:', error);
+        throw error;
+    }
+}
+
+// Добавьте вызов addGameSettingsTable() в initDatabase() после других CREATE TABLE
 
 // 20 предустановленных заданий
 function getPresetQuests() {
@@ -168,6 +334,60 @@ function getPresetQuests() {
         { emoji: '🔔', title: 'Включить уведомления', description: 'Включите push-уведомления', reward: 20 },
         { emoji: '🎬', title: 'Посмотреть видео', description: 'Просмотрите обучающее видео', reward: 15 }
     ];
+}
+function getPresetPromotions() {
+    return [
+        { name: 'Счастливые часы', emoji: '⏰', description: 'с 15:00 до 17:00 скидка 30% на всё меню' },
+        { name: 'День рождения', emoji: '🎂', description: '+200 бонусов имениннику в день рождения' },
+        { name: 'Семейный ужин', emoji: '👨‍👩‍👧', description: 'При заказе от 2000₽ - пицца в подарок' },
+        { name: 'Утренний кофе', emoji: '☕', description: 'С 8:00 до 11:00 второй кофе в подарок' },
+        { name: 'Пивная пятница', emoji: '🍺', description: 'Каждую пятницу скидка 20% на пиво' },
+        { name: 'Счастливый понедельник', emoji: '😊', description: 'Понедельник - двойные бонусы за покупки' },
+        { name: 'Happy Hour', emoji: '🎉', description: '17:00-19:00 коктейли по специальной цене' },
+        { name: 'Студенческая скидка', emoji: '🎓', description: 'Студентам скидка 15% по студенческому' },
+        { name: 'Клубная карта', emoji: '💳', description: 'Каждые 10 чеков - 11-й в подарок' },
+        { name: 'Новогодняя акция', emoji: '🎄', description: 'Новогоднее меню со скидкой 25%' },
+        { name: 'Летняя терраса', emoji: '☀️', description: 'Заказ на летней веранде + десерт в подарок' },
+        { name: 'Комбо-обед', emoji: '🍱', description: 'Комбо-обед со скидкой 20%' },
+        { name: 'Подарок за отзыв', emoji: '📝', description: 'Оставьте отзыв и получите 50 бонусов' },
+        { name: 'Приведи друга', emoji: '👥', description: 'Приведи друга и получи 100 бонусов' },
+        { name: 'Первый заказ', emoji: '🎁', description: 'Первый заказ - скидка 30%' },
+        { name: 'Happy Birthday Week', emoji: '🎈', description: 'Неделя скидок 15% для именинников' },
+        { name: 'Бизнес-ланч', emoji: '💼', description: 'Бизнес-ланч с 12:00 до 16:00 - скидка 10%' },
+        { name: 'Выходные с семьёй', emoji: '🏠', description: 'В выходные скидка 15% при заказе от 1500₽' },
+        { name: 'Сладкая пятница', emoji: '🍰', description: 'Десерты со скидкой 25% по пятницам' },
+        { name: 'Бонус за регистрацию', emoji: '📱', description: 'При регистрации в приложении +50 бонусов' }
+    ];
+}
+// Добавьте эту функцию после getPresetPromotions():
+
+async function addPresetDataForCompany(companyId) {
+    try {
+        console.log(`📝 Добавление предустановленных данных для компании ${companyId}...`);
+        
+        // Добавляем 20 предустановленных акций
+        const presetPromotions = getPresetPromotions();
+        for (const promo of presetPromotions) {
+            await query(`
+                INSERT INTO promotions (company_id, name, emoji, description, active, created_at, updated_at) 
+                VALUES ($1, $2, $3, $4, true, NOW(), NOW())
+            `, [companyId, promo.name, promo.emoji, promo.description]);
+        }
+        console.log(`✅ Добавлено ${presetPromotions.length} акций`);
+        
+        // Добавляем 20 предустановленных заданий
+        const presetQuests = getPresetQuests();
+        for (const quest of presetQuests) {
+            await query(`
+                INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
+                VALUES ($1, $2, $3, $4, $5, true, 30, NOW(), NOW())
+            `, [companyId, quest.emoji, quest.title, quest.description, quest.reward]);
+        }
+        console.log(`✅ Добавлено ${presetQuests.length} заданий`);
+        
+    } catch (error) {
+        console.error('❌ Ошибка добавления предустановленных данных:', error);
+    }
 }
 
 async function getCompanyTiers(companyId) {
@@ -201,20 +421,6 @@ async function getCompanyTiers(companyId) {
             { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
             { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
         ];
-    }
-}
-
-// Получить всех пользователей компании для рассылки уведомлений
-async function getUsersByCompanyId(companyId) {
-    try {
-        const result = await query(
-            'SELECT id, vk_id, name, bonus_balance, total_spent, last_daily, created_at FROM users WHERE company_id = $1',
-            [companyId]
-        );
-        return result.rows;
-    } catch (error) {
-        console.error('❌ Ошибка getUsersByCompanyId:', error);
-        return [];
     }
 }
 
@@ -316,6 +522,7 @@ async function addMissingColumns() {
     }
 }
 
+
 async function insertTestData() {
     try {
         const result = await query('SELECT COUNT(*) FROM companies');
@@ -331,30 +538,51 @@ async function insertTestData() {
                 {"name": "💎 Бриллиант", "threshold": 20000, "multiplier": 2.5, "cashback": 15, "color": "#00b4d8", "icon": "💎"}
             ]);
             
-            await query(`
-                INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings) VALUES 
-                ('Пиццерия "Маргарита"', 'Иван Петров', 'pizza@test.com', '+7 (999) 123-45-67', '123456', '#e74c3c', 'Итальянская кухня, пицца, паста', $1),
-                ('Кофейня "Кофеин"', 'Анна Сидорова', 'coffee@test.com', '+7 (999) 234-56-78', '123456', '#8e44ad', 'Ароматный кофе, десерты, выпечка', $1)
+            // Добавляем первую компанию
+            const result1 = await query(`
+                INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings) 
+                VALUES ('Пиццерия "Маргарита"', 'Иван Петров', 'pizza@test.com', '+7 (999) 123-45-67', '123456', '#e74c3c', 'Итальянская кухня, пицца, паста', $1)
+                RETURNING id
             `, [defaultTiers]);
             
-            await query(`
-                INSERT INTO promotions (company_id, name, emoji, description, active) VALUES 
-                (1, 'Счастливые часы', '⏰', 'с 15:00 до 17:00 скидка 30%', true),
-                (1, 'День рождения', '🎂', '+200 бонусов имениннику', true),
-                (1, 'Семейный ужин', '👨‍👩‍👧', 'При заказе от 2000₽ - пицца в подарок', true)
-            `);
+            // Добавляем вторую компанию
+            const result2 = await query(`
+                INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings) 
+                VALUES ('Кофейня "Кофеин"', 'Анна Сидорова', 'coffee@test.com', '+7 (999) 234-56-78', '123456', '#8e44ad', 'Ароматный кофе, десерты, выпечка', $1)
+                RETURNING id
+            `, [defaultTiers]);
             
-            const presetQuests = getPresetQuests();
-            for (const quest of presetQuests) {
-                await query(`
-                    INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days) 
-                    VALUES ($1, $2, $3, $4, $5, true, $6)
-                `, [1, quest.emoji, quest.title, quest.description, quest.reward, 30]);
-            }
+            // Добавляем предустановленные данные для обеих компаний
+            await addPresetDataForCompany(result1.rows[0].id);
+            await addPresetDataForCompany(result2.rows[0].id);
             
-            console.log('✅ Тестовые данные добавлены с 20 заданиями');
+            console.log('✅ Тестовые данные добавлены с 20 акциями и 20 заданиями для каждой компании');
         } else {
             console.log(`📊 В базе уже есть ${count} компаний`);
+            
+            // Проверяем, есть ли у существующих компаний акции и задания
+            const companies = await getAllCompanies();
+            for (const company of companies) {
+                const promotionsCount = await query('SELECT COUNT(*) FROM promotions WHERE company_id = $1', [company.id]);
+                const questsCount = await query('SELECT COUNT(*) FROM quests WHERE company_id = $1', [company.id]);
+                
+                if (parseInt(promotionsCount.rows[0].count) === 0) {
+                    console.log(`📝 Добавляем предустановленные акции для компании ${company.id}...`);
+                    await addPresetDataForCompany(company.id);
+                }
+                
+                if (parseInt(questsCount.rows[0].count) === 0) {
+                    console.log(`📝 Добавляем предустановленные задания для компании ${company.id}...`);
+                    const presetQuests = getPresetQuests();
+                    for (const quest of presetQuests) {
+                        await query(`
+                            INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
+                            VALUES ($1, $2, $3, $4, $5, true, 30, NOW(), NOW())
+                        `, [company.id, quest.emoji, quest.title, quest.description, quest.reward]);
+                    }
+                    console.log(`✅ Добавлено ${presetQuests.length} заданий для компании ${company.id}`);
+                }
+            }
         }
     } catch (error) {
         console.error('❌ Ошибка вставки тестовых данных:', error);
@@ -446,6 +674,12 @@ async function addCompany(companyData) {
          RETURNING id, company, email, brand_color as "brandColor", description, created_at`,
         [company, name, email, phone || '', password, brandColor || '#2A4B7C', description || `Добро пожаловать в ${company}!`, defaultTiers]
     );
+    
+    const newCompanyId = result.rows[0].id;
+    
+    // Добавляем предустановленные акции и задания для новой компании
+    await addPresetDataForCompany(newCompanyId);
+    
     return result.rows[0];
 }
 
@@ -634,6 +868,122 @@ async function claimDailyBonus(userId, companyId, bonusAmount, newStreak) {
     
     return result.rows[0];
 }
+// Добавьте эту функцию в addMissingColumns() или выполните отдельно:
+async function addPromotionRewardColumns() {
+    try {
+        const checkRewardType = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'reward_type'
+        `);
+        
+        if (checkRewardType.rows.length === 0) {
+            console.log('📝 Добавляем колонку reward_type в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN reward_type VARCHAR(50) DEFAULT 'bonus'`);
+            console.log('✅ Колонка reward_type добавлена');
+        }
+        
+        const checkRewardValue = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'reward_value'
+        `);
+        
+        if (checkRewardValue.rows.length === 0) {
+            console.log('📝 Добавляем колонку reward_value в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN reward_value INTEGER DEFAULT 0`);
+            console.log('✅ Колонка reward_value добавлена');
+        }
+    } catch (error) {
+        console.error('❌ Ошибка добавления колонок:', error);
+    }
+}
+
+async function addGameSettingsColumns() {
+    try {
+        // Проверяем существование таблицы
+        const checkTable = await query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'game_settings'
+            )
+        `);
+        
+        if (!checkTable.rows[0].exists) {
+            console.log('📝 Таблица game_settings не существует, будет создана при первом использовании');
+            return;
+        }
+        
+        // Проверяем и добавляем колонку game_type если её нет
+        const checkGameType = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'game_settings' AND column_name = 'game_type'
+        `);
+        
+        if (checkGameType.rows.length === 0) {
+            console.log('📝 Добавляем колонку game_type в таблицу game_settings...');
+            await query(`ALTER TABLE game_settings ADD COLUMN game_type VARCHAR(50)`);
+            console.log('✅ Колонка game_type добавлена');
+        }
+        
+        // Проверяем и добавляем колонку settings если её нет
+        const checkSettings = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'game_settings' AND column_name = 'settings'
+        `);
+        
+        if (checkSettings.rows.length === 0) {
+            console.log('📝 Добавляем колонку settings в таблицу game_settings...');
+            await query(`ALTER TABLE game_settings ADD COLUMN settings JSONB DEFAULT '{}'`);
+            console.log('✅ Колонка settings добавлена');
+        }
+        
+        // Проверяем и добавляем колонку active если её нет
+        const checkActive = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'game_settings' AND column_name = 'active'
+        `);
+        
+        if (checkActive.rows.length === 0) {
+            console.log('📝 Добавляем колонку active в таблицу game_settings...');
+            await query(`ALTER TABLE game_settings ADD COLUMN active BOOLEAN DEFAULT TRUE`);
+            console.log('✅ Колонка active добавлена');
+        }
+        
+        // Проверяем и добавляем колонку company_id если её нет
+        const checkCompanyId = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'game_settings' AND column_name = 'company_id'
+        `);
+        
+        if (checkCompanyId.rows.length === 0) {
+            console.log('📝 Добавляем колонку company_id в таблицу game_settings...');
+            await query(`ALTER TABLE game_settings ADD COLUMN company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE`);
+            console.log('✅ Колонка company_id добавлена');
+        }
+        
+        // Проверяем и добавляем колонку updated_at если её нет
+        const checkUpdated = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'game_settings' AND column_name = 'updated_at'
+        `);
+        
+        if (checkUpdated.rows.length === 0) {
+            console.log('📝 Добавляем колонку updated_at в таблицу game_settings...');
+            await query(`ALTER TABLE game_settings ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+            console.log('✅ Колонка updated_at добавлена');
+        }
+        
+        console.log('✅ Все колонки game_settings проверены');
+    } catch (error) {
+        console.error('❌ Ошибка добавления колонок game_settings:', error);
+    }
+}
 
 module.exports = {
     pool,
@@ -666,5 +1016,10 @@ module.exports = {
     getCompanyTiers,
     updateCompanyTiers,
     getPresetQuests,
-    getUsersByCompanyId
+	getPresetPromotions,
+	addPresetDataForCompany,
+	getGameSettings,
+	saveGameSettings,
+	addGameSettingsTable,
+    addGameSettingsColumns
 };

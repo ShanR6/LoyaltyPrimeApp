@@ -30,7 +30,7 @@ const {
     getCompanyTiers,      
     updateCompanyTiers,
     getPresetQuests,
-    getUsersByCompanyId
+	getGameSettings 
 } = require('./database-pg');
 
 const app = express();
@@ -43,50 +43,6 @@ app.use((req, res, next) => {
 });
 
 initDatabase();
-
-// ============ ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ УВЕДОМЛЕНИЙ ============
-async function sendNotificationToBot(companyId, title, message) {
-    try {
-        // Получаем всех пользователей компании из базы данных
-        const users = await getUsersByCompanyId(companyId);
-        
-        if (!users || users.length === 0) {
-            console.log('📭 Нет пользователей для отправки уведомления');
-            return 0;
-        }
-        
-        const vkIds = users.map(u => u.vk_id).filter(id => id);
-        
-        if (vkIds.length === 0) {
-            console.log('📭 Нет VK ID пользователей');
-            return 0;
-        }
-        
-        // Отправляем уведомление боту
-        const botUrl = 'http://localhost:3002/api/notify';
-        const notificationData = {
-            user_ids: vkIds,
-            text: `🔔 ${title}\n\n${message}`,
-            company_id: companyId
-        };
-        
-        const fetch = require('node-fetch');
-        const botResponse = await fetch(botUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(notificationData)
-        });
-        
-        const botResult = await botResponse.json();
-        const sentCount = botResult.sent_count || vkIds.length;
-        
-        console.log(`✅ Уведомление отправлено ${sentCount}/${vkIds.length} пользователям компании ${companyId}`);
-        return sentCount;
-    } catch (error) {
-        console.error('❌ Ошибка отправки уведомления через бота:', error.message);
-        return 0;
-    }
-}
 
 // ============ HEALTH CHECK ============
 app.get('/api/health', (req, res) => {
@@ -155,16 +111,6 @@ app.post('/api/promotions', async (req, res) => {
     try {
         const { companyId, name, emoji, description, startDate, endDate, active } = req.body;
         const promotion = await addPromotion(companyId, { name, emoji, description, startDate, endDate, active });
-        
-        // Отправляем уведомление всем пользователям компании через бота
-        if (active) {
-            sendNotificationToBot(
-                companyId,
-                '🎁 Новая акция!',
-                `${emoji} ${name}\n\n${description}\n\nОткройте приложение, чтобы узнать подробности!`
-            ).catch(err => console.error('Ошибка отправки уведомления:', err));
-        }
-        
         res.json({ success: true, promotion });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -173,10 +119,50 @@ app.post('/api/promotions', async (req, res) => {
 
 app.put('/api/promotions/:id', async (req, res) => {
     try {
-        const { name, emoji, description, startDate, endDate, active } = req.body;
-        const promotion = await updatePromotion(req.params.id, { name, emoji, description, startDate, endDate, active });
-        res.json({ success: true, promotion });
+        const { startDate, endDate, active, reward_type, reward_value, description } = req.body;
+        
+        const updates = [];
+        const values = [];
+        let paramIndex = 1;
+        
+        if (startDate !== undefined) {
+            updates.push(`start_date = $${paramIndex++}`);
+            values.push(startDate || null);
+        }
+        if (endDate !== undefined) {
+            updates.push(`end_date = $${paramIndex++}`);
+            values.push(endDate || null);
+        }
+        if (active !== undefined) {
+            updates.push(`active = $${paramIndex++}`);
+            values.push(active);
+        }
+        if (reward_type !== undefined) {
+            updates.push(`reward_type = $${paramIndex++}`);
+            values.push(reward_type);
+        }
+        if (reward_value !== undefined) {
+            updates.push(`reward_value = $${paramIndex++}`);
+            values.push(reward_value);
+        }
+        if (description !== undefined) {
+            updates.push(`description = $${paramIndex++}`);
+            values.push(description);
+        }
+        
+        updates.push(`updated_at = NOW()`);
+        values.push(req.params.id);
+        
+        const queryText = `UPDATE promotions SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+        const result = await query(queryText, values);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Акция не найдена' });
+        }
+        
+        res.json({ success: true, promotion: result.rows[0] });
     } catch (error) {
+        console.error('Ошибка обновления акции:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -234,16 +220,6 @@ app.post('/api/quests', async (req, res) => {
         }
         
         const quest = await addQuest(companyId, { emoji, title, description, reward, active, expiresDays });
-        
-        // Отправляем уведомление всем пользователям компании через бота
-        if (active) {
-            sendNotificationToBot(
-                companyId,
-                '📋 Новое задание!',
-                `${emoji} ${title}\n\n${description}\n\nНаграда: +${reward} бонусов\n\nВыполните задание в приложении!`
-            ).catch(err => console.error('Ошибка отправки уведомления:', err));
-        }
-        
         res.json({ success: true, quest });
     } catch (error) {
         console.error('Ошибка добавления задания:', error);
@@ -308,18 +284,6 @@ app.post('/api/users/getOrCreate', async (req, res) => {
         });
     } catch (error) {
         console.error('Ошибка:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Получить количество пользователей компании
-app.get('/api/users/count/:companyId', async (req, res) => {
-    try {
-        const companyId = req.params.companyId;
-        const users = await getUsersByCompanyId(companyId);
-        res.json({ count: users.length });
-    } catch (error) {
-        console.error('Ошибка получения количества пользователей:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -540,145 +504,46 @@ app.put('/api/companies/:companyId/tiers', async (req, res) => {
 });
 
 // ============ API ДЛЯ БРЕНДИРОВАНИЯ ============
-
 app.put('/api/companies/:companyId/branding', async (req, res) => {
     try {
         const companyId = parseInt(req.params.companyId);
-        const { brandColor, company, email, phone } = req.body;
+        const { brandColor } = req.body;
         
-        console.log('📝 Обновление брендирования для компании:', companyId);
+        console.log('🎨 Получен запрос на обновление брендирования для компании:', companyId, brandColor);
         
-        const updates = [];
-        const values = [];
-        let paramCount = 1;
-        
-        if (brandColor !== undefined) {
-            updates.push(`brand_color = $${paramCount}`);
-            values.push(brandColor);
-            paramCount++;
-        }
-        if (company !== undefined) {
-            updates.push(`company = $${paramCount}`);
-            values.push(company);
-            paramCount++;
-        }
-        if (email !== undefined) {
-            updates.push(`email = $${paramCount}`);
-            values.push(email);
-            paramCount++;
-        }
-        if (phone !== undefined) {
-            updates.push(`phone = $${paramCount}`);
-            values.push(phone);
-            paramCount++;
-        }
-        
-        if (updates.length === 0) {
+        if (!brandColor) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Нет данных для обновления' 
+                message: 'Цвет бренда обязателен' 
             });
         }
         
-        values.push(companyId);
-        const updateQuery = `UPDATE companies SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-        const result = await query(updateQuery, values);
+        // Обновляем цвет бренда в базе данных
+        const result = await query(
+            'UPDATE companies SET brand_color = $1 WHERE id = $2 RETURNING *',
+            [brandColor, companyId]
+        );
         
-        if (result.rows.length > 0) {
-            console.log('✅ Брендирование успешно обновлено');
-            res.json({ 
-                success: true, 
-                company: result.rows[0],
-                message: 'Настройки брендирования сохранены'
-            });
-        } else {
-            res.status(404).json({ 
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
                 success: false, 
                 message: 'Компания не найдена' 
             });
         }
+        
+        console.log('✅ Цвет бренда успешно обновлен:', brandColor);
+        
+        res.json({ 
+            success: true, 
+            brandColor: result.rows[0].brand_color,
+            message: 'Цвет бренда сохранен и будет применен в mini-app'
+        });
     } catch (error) {
         console.error('❌ Ошибка обновления брендирования:', error);
         res.status(500).json({ 
             success: false, 
             error: error.message,
-            message: 'Ошибка при сохранении настроек: ' + error.message
-        });
-    }
-});
-
-// ============ API ДЛЯ УВЕДОМЛЕНИЙ ============
-
-app.post('/api/notifications/send', async (req, res) => {
-    try {
-        const { companyId, segment, title, message } = req.body;
-        
-        console.log('📨 Отправка уведомления:', { companyId, title });
-        
-        // Получаем ВСЕХ пользователей компании из базы данных
-        const allUsers = await getUsersByCompanyId(companyId);
-        
-        if (!allUsers || allUsers.length === 0) {
-            return res.json({ 
-                success: true, 
-                sentCount: 0,
-                message: 'Нет пользователей в базе данных компании' 
-            });
-        }
-        
-        // Берем ВСЕХ пользователей без фильтрации
-        const vkIds = allUsers.map(u => u.vk_id).filter(id => id);
-        
-        if (vkIds.length === 0) {
-            return res.json({ 
-                success: true, 
-                sentCount: 0,
-                message: 'Нет VK ID у пользователей' 
-            });
-        }
-        
-        console.log(`📤 Отправка уведомления ${vkIds.length} пользователям`);
-        
-        // Отправляем уведомление боту через HTTP запрос
-        const botUrl = 'http://localhost:3002/api/notify';
-        const notificationData = {
-            user_ids: vkIds,
-            text: `🔔 ${title}\n\n${message}`,
-            company_id: companyId
-        };
-        
-        try {
-            const fetch = require('node-fetch');
-            const botResponse = await fetch(botUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(notificationData)
-            });
-            
-            const botResult = await botResponse.json();
-            
-            console.log(`✅ Уведомление отправлено ${botResult.sent_count || vkIds.length} пользователям`);
-            
-            res.json({ 
-                success: true, 
-                sentCount: botResult.sent_count || vkIds.length,
-                message: 'Уведомление отправлено через бота'
-            });
-        } catch (botError) {
-            console.error('❌ Ошибка отправки через бота:', botError.message);
-            // Если бот недоступен, все равно считаем уведомление отправленным
-            res.json({ 
-                success: true, 
-                sentCount: vkIds.length,
-                message: 'Уведомление добавлено в очередь (бот недоступен)'
-            });
-        }
-    } catch (error) {
-        console.error('❌ Ошибка отправки уведомления:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message,
-            message: 'Ошибка при отправке уведомления'
+            message: 'Ошибка при сохранении цвета бренда: ' + error.message
         });
     }
 });
@@ -732,9 +597,327 @@ app.get('/api/users/:userId/currentTier', async (req, res) => {
     }
 });
 
+// ============ POS API ДЛЯ КАССЫ ============
+
+// Получение уровня пользователя по балансу
+async function getUserTier(balance, companyId) {
+    const tiers = await getCompanyTiers(companyId);
+    let currentTier = tiers[0];
+    for (let i = tiers.length - 1; i >= 0; i--) {
+        if (balance >= tiers[i].threshold) {
+            currentTier = tiers[i];
+            break;
+        }
+    }
+    return currentTier;
+}
+
+// Проверка QR-кода и получение данных пользователя
+app.post('/api/pos/verify-qr', async (req, res) => {
+    try {
+        const { qrData, amount } = req.body;
+        
+        // Парсим QR данные
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        // Проверяем обязательные поля
+        if (!userData.vkId || !userData.companyId) {
+            return res.status(400).json({ success: false, message: 'Неверные данные QR-кода' });
+        }
+        
+        // Проверяем валидность timestamp (не старше 5 минут)
+        if (userData.timestamp && Date.now() - userData.timestamp > (userData.expiresIn || 300000)) {
+            return res.status(400).json({ success: false, message: 'QR-код просрочен. Обновите QR-код в приложении' });
+        }
+        
+        // Получаем пользователя из базы
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден. Попросите клиента зарегистрироваться' });
+        }
+        
+        // Получаем уровень пользователя
+        const tier = await getUserTier(user.bonus_balance, userData.companyId);
+        
+        // Рассчитываем бонусы если есть сумма
+        let bonusEarned = 0;
+        let bonusRate = (tier.multiplier || 1) * 10; // 10 бонусов за 1000₽ * множитель
+        
+        if (amount && amount > 0) {
+            bonusEarned = Math.floor(amount / 1000) * bonusRate;
+        }
+        
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                vkId: user.vk_id,
+                name: user.name,
+                balance: user.bonus_balance
+            },
+            bonusRate: bonusRate,
+            bonusEarned: bonusEarned,
+            tier: tier.name,
+            multiplier: tier.multiplier
+        });
+        
+    } catch (error) {
+        console.error('❌ Ошибка verify-qr:', error);
+        res.status(500).json({ success: false, message: 'Внутренняя ошибка сервера: ' + error.message });
+    }
+});
+
+// Начисление бонусов за покупку
+app.post('/api/pos/apply-bonus', async (req, res) => {
+    try {
+        const { qrData, amount, storeId, cashierId } = req.body;
+        
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ success: false, message: 'Введите сумму заказа' });
+        }
+        
+        // Парсим QR данные
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        // Получаем пользователя
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        // Получаем уровень для расчета бонусов
+        const tier = await getUserTier(user.bonus_balance, userData.companyId);
+        const bonusRate = (tier.multiplier || 1) * 10;
+        const bonusEarned = Math.floor(amount / 1000) * bonusRate;
+        
+        if (bonusEarned === 0 && amount > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Сумма ${amount}₽ слишком мала. Минимальная сумма для начисления бонусов: 1000₽`
+            });
+        }
+        
+        // Обновляем баланс пользователя
+        const newBalance = user.bonus_balance + bonusEarned;
+        
+        // Обновляем баланс в БД
+        await query(
+            'UPDATE users SET bonus_balance = $1, updated_at = NOW() WHERE id = $2',
+            [newBalance, user.id]
+        );
+        
+        // Записываем транзакцию
+        await query(
+            `INSERT INTO transactions (user_id, amount, type, description, store_id, cashier_id, created_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [user.id, bonusEarned, 'earn', `Покупка на ${amount}₽ в ${storeId || 'кассе'}`, storeId || 'unknown', cashierId || 'cashier_001']
+        );
+        
+        res.json({
+            success: true,
+            message: `✅ Начислено ${bonusEarned} бонусов!`,
+            newBalance: newBalance,
+            bonusEarned: bonusEarned,
+            amount: amount
+        });
+        
+    } catch (error) {
+        console.error('❌ Ошибка apply-bonus:', error);
+        res.status(500).json({ success: false, message: 'Внутренняя ошибка сервера: ' + error.message });
+    }
+});
+
+// Списание бонусов
+app.post('/api/pos/spend-bonus', async (req, res) => {
+    try {
+        const { qrData, bonusToSpend, storeId, cashierId } = req.body;
+        
+        if (!bonusToSpend || bonusToSpend <= 0) {
+            return res.status(400).json({ success: false, message: 'Введите сумму списания' });
+        }
+        
+        // Парсим QR данные
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        // Получаем пользователя
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        // Проверяем достаточно ли бонусов
+        if (user.bonus_balance < bonusToSpend) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `❌ Недостаточно бонусов. Доступно: ${user.bonus_balance}`
+            });
+        }
+        
+        // Обновляем баланс
+        const newBalance = user.bonus_balance - bonusToSpend;
+        
+        await query(
+            'UPDATE users SET bonus_balance = $1, updated_at = NOW() WHERE id = $2',
+            [newBalance, user.id]
+        );
+        
+        // Записываем транзакцию списания
+        await query(
+            `INSERT INTO transactions (user_id, amount, type, description, store_id, cashier_id, created_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [user.id, bonusToSpend, 'spend', `Списание ${bonusToSpend} бонусов в ${storeId || 'кассе'}`, storeId || 'unknown', cashierId || 'cashier_001']
+        );
+        
+        res.json({
+            success: true,
+            message: `✅ Списано ${bonusToSpend} бонусов!`,
+            newBalance: newBalance,
+            spent: bonusToSpend
+        });
+        
+    } catch (error) {
+        console.error('❌ Ошибка spend-bonus:', error);
+        res.status(500).json({ success: false, message: 'Внутренняя ошибка сервера: ' + error.message });
+    }
+});
+
+// Получение информации о пользователе по QR-данным
+app.post('/api/pos/get-user', async (req, res) => {
+    try {
+        const { qrData } = req.body;
+        
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        const tier = await getUserTier(user.bonus_balance, userData.companyId);
+        
+        res.json({
+            success: true,
+            user: {
+                name: user.name,
+                vkId: user.vk_id,
+                balance: user.bonus_balance,
+                tier: tier.name,
+                multiplier: tier.multiplier
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Ошибка get-user:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+app.get('/api/preset-promotions', async (req, res) => {
+    try {
+        const presetPromotions = getPresetPromotions();
+        res.json({ success: true, promotions: presetPromotions });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ КОНЕЦ POS API ============
+
+// Добавьте после других API эндпоинтов в server.js
+
+// ============ API ДЛЯ НАСТРОЕК ИГР ============
+
+// Получение настроек игры
+app.get('/api/games/:companyId/:gameType', async (req, res) => {
+    try {
+        const { companyId, gameType } = req.params;
+        const gameSettings = await getGameSettings(parseInt(companyId), gameType);
+        res.json({ 
+            success: true, 
+            settings: gameSettings.settings,
+            active: gameSettings.active
+        });
+    } catch (error) {
+        console.error('Ошибка получения настроек игры:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Сохранение настроек игры
+app.post('/api/games/:companyId/:gameType', async (req, res) => {
+    try {
+        const { companyId, gameType } = req.params;
+        const { settings, active } = req.body;
+        
+        const saved = await saveGameSettings(parseInt(companyId), gameType, settings, active);
+        res.json({ 
+            success: true, 
+            settings: saved.settings,
+            active: saved.active
+        });
+    } catch (error) {
+        console.error('Ошибка сохранения настроек игры:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение всех настроек игр для компании
+app.get('/api/games/:companyId/all', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const result = await query(
+            'SELECT game_type, settings, active FROM game_settings WHERE company_id = $1',
+            [companyId]
+        );
+        
+        const gamesConfig = {};
+        for (const row of result.rows) {
+            let settings = row.settings;
+            if (typeof settings === 'string') {
+                settings = JSON.parse(settings);
+            }
+            gamesConfig[row.game_type] = {
+                settings: settings,
+                active: row.active
+            };
+        }
+        
+        res.json({ success: true, games: gamesConfig });
+    } catch (error) {
+        console.error('Ошибка получения всех настроек игр:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
 const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`✅ Backend running on http://localhost:${PORT}`);
     console.log(`🐘 База данных: PostgreSQL`);
     console.log(`🔑 Тестовый вход: email: pizza@test.com, password: 123456`);
+    console.log(`💳 POS API доступны: /api/pos/verify-qr, /api/pos/apply-bonus, /api/pos/spend-bonus`);
 });
+

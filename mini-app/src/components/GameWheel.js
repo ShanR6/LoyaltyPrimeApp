@@ -1,226 +1,304 @@
+// GameWheel.js - Кнопка по центру
 import { useState, useRef, useEffect } from 'react';
 import './GameWheel.css';
 
 const SECTORS = [
-    { name: '50 бонусов', value: 50, color: '#2ecc71', icon: '🎁' },
-    { name: '10 бонусов', value: 10, color: '#3498db', icon: '💰' },
-    { name: '100 бонусов', value: 100, color: '#e74c3c', icon: '🎉' },
-    { name: 'Попробуй ещё', value: 0, color: '#95a5a6', icon: '😢' },
-    { name: '25 бонусов', value: 25, color: '#f39c12', icon: '⭐' },
-    { name: '5 бонусов', value: 5, color: '#1abc9c', icon: '🪙' },
-    { name: '200 бонусов', value: 200, color: '#9b59b6', icon: '🏆' },
-    { name: 'Скидка 10%', value: 'discount', color: '#e67e22', icon: '🎫' }
+    { name: 'x5', value: 5, multiplier: 5, color: '#2ecc71', icon: '⭐' },
+    { name: 'x2', value: 2, multiplier: 2, color: '#3498db', icon: '🎯' },
+    { name: 'x10', value: 10, multiplier: 10, color: '#e74c3c', icon: '🔥' },
+    { name: 'x0', value: 0, multiplier: 0, color: '#95a5a6', icon: '💀' },
+    { name: 'x3', value: 3, multiplier: 3, color: '#f39c12', icon: '✨' },
+    { name: 'x1', value: 1, multiplier: 1, color: '#1abc9c', icon: '🍀' },
+    { name: 'x20', value: 20, multiplier: 20, color: '#9b59b6', icon: '💎' },
+    { name: 'x15', value: 15, multiplier: 15, color: '#e67e22', icon: '🏆' }
 ];
 
 const SPIN_COST = 25;
-const FREE_SPIN_DAYS = 1; // Бесплатное вращение каждые N дней
+const SPIN_HISTORY_KEY = 'wheel_spin_history';
 
 export function GameWheel({ onBalanceUpdate, userBalance }) {
     const [isSpinning, setIsSpinning] = useState(false);
     const [result, setResult] = useState(null);
     const [lastWin, setLastWin] = useState(null);
-    const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
-    const [useFreeSpin, setUseFreeSpin] = useState(false);
     const [rotation, setRotation] = useState(0);
-    const wheelRef = useRef(null);
-    
-    // Загрузка данных о бесплатных вращениях
+    const [showConfetti, setShowConfetti] = useState(false);
+    const [showGlow, setShowGlow] = useState(false);
+    const [spinCount, setSpinCount] = useState(0);
+    const [bestWin, setBestWin] = useState(0);
+    const [particles, setParticles] = useState([]);
+
     useEffect(() => {
-        const lastSpinDate = localStorage.getItem('wheel_last_spin');
-        const savedFreeSpins = localStorage.getItem('wheel_free_spins');
-        
-        if (savedFreeSpins) {
-            setFreeSpinsLeft(parseInt(savedFreeSpins));
-        }
-        
-        if (lastSpinDate) {
-            const daysSinceLastSpin = Math.floor((Date.now() - new Date(lastSpinDate)) / (1000 * 60 * 60 * 24));
-            if (daysSinceLastSpin >= FREE_SPIN_DAYS && freeSpinsLeft === 0) {
-                setFreeSpinsLeft(1);
-                localStorage.setItem('wheel_free_spins', '1');
-            }
-        }
-    }, []);
-    
-    const saveFreeSpins = (spins) => {
-        setFreeSpinsLeft(spins);
-        localStorage.setItem('wheel_free_spins', spins.toString());
-    };
-    
-    const getPrize = (sectorIndex) => {
-        const sector = SECTORS[sectorIndex];
-        if (sector.value === 'discount') {
-            return { type: 'discount', value: 10, message: '🎫 Скидка 10% на следующий заказ!' };
-        }
-        if (sector.value === 0) {
-            return { type: 'lose', value: 0, message: '😢 Попробуйте ещё раз!' };
-        }
-        return { type: 'bonus', value: sector.value, message: `🎉 Вы выиграли ${sector.value} бонусов!` };
-    };
-    
-    const spin = () => {
-    if (isSpinning) return;
-    
-    // Проверка на бесплатное вращение
-    let cost = SPIN_COST;
-    let isFree = false;
-    
-    if (useFreeSpin && freeSpinsLeft > 0) {
-        cost = 0;
-        isFree = true;
-        saveFreeSpins(freeSpinsLeft - 1);
-        setUseFreeSpin(false);
-    } else if (userBalance < SPIN_COST) {
-        alert(`Недостаточно бонусов! Нужно ${SPIN_COST} бонусов.`);
-        return;
-    }
-    
-    // Списываем бонусы если платное вращение
-    if (!isFree && cost > 0) {
-        onBalanceUpdate(-cost, 'spend');
-    }
-    
-    setIsSpinning(true);
-    setResult(null);
-    
-    // Выбираем случайный сектор
-    const weights = [15, 25, 5, 30, 20, 35, 3, 10];
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    let random = Math.random() * totalWeight;
-    let sectorIndex = 0;
-    let cumulative = 0;
-    
-    for (let i = 0; i < weights.length; i++) {
-        cumulative += weights[i];
-        if (random <= cumulative) {
-            sectorIndex = i;
-            break;
-        }
-    }
-    
-    const sectorAngle = 360 / SECTORS.length;
-    const targetRotation = rotation + 360 * 5 + (360 - (sectorIndex * sectorAngle));
-    
-    setRotation(targetRotation);
-    
-    setTimeout(() => {
-        const prize = getPrize(sectorIndex);
-        
-        if (prize.type === 'bonus' && prize.value > 0) {
-            onBalanceUpdate(prize.value, 'earn');
-            setLastWin(prize.value);
-            
-            // 🔥 ОБНОВЛЯЕМ КВЕСТ "ПОКРУТИТЬ КОЛЕСО" 🔥
-            if (typeof window.updateQuestProgress === 'function') {
-                window.updateQuestProgress('spin_wheel', 1);
-                console.log('✅ Квест "Покрутить колесо" обновлен, выигрыш:', prize.value);
-            }
-        } else if (prize.type === 'discount') {
-            const discounts = JSON.parse(localStorage.getItem('user_discounts') || '[]');
-            discounts.push({
-                id: Date.now(),
-                value: prize.value,
-                expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-                used: false
-            });
-            localStorage.setItem('user_discounts', JSON.stringify(discounts));
-            setLastWin('10% скидка');
-            
-            // 🔥 ТОЖЕ ОБНОВЛЯЕМ КВЕСТ 🔥
-            if (typeof window.updateQuestProgress === 'function') {
-                window.updateQuestProgress('spin_wheel', 1);
-            }
-        }
-        
-        setResult(prize);
-        setIsSpinning(false);
-        
-        if (!isFree) {
-            localStorage.setItem('wheel_last_spin', new Date().toISOString());
-        }
-        
-        if (prize.type === 'bonus' && prize.value > 50) {
+        const saved = localStorage.getItem(SPIN_HISTORY_KEY);
+        if (saved) {
             try {
-                navigator.vibrate?.(200);
+                const data = JSON.parse(saved);
+                setSpinCount(data.spinCount || 0);
+                setBestWin(data.bestWin || 0);
             } catch(e) {}
         }
-    }, 3000);
-};
-    
-    return (
-        <div className="game-wheel-container">
-            <div className="wheel-header">
-                <h3>🎡 Колесо фортуны</h3>
-                <div className="wheel-stats">
-                    <div className="cost-badge">
-                        🎟️ Стоимость: {SPIN_COST} бонусов
-                    </div>
-                    {freeSpinsLeft > 0 && (
-                        <div className="free-spins-badge">
-                            🆓 Бесплатных вращений: {freeSpinsLeft}
-                        </div>
-                    )}
-                </div>
-            </div>
+    }, []);
+
+    const saveStats = (winAmount) => {
+        const newSpinCount = spinCount + 1;
+        const newBestWin = Math.max(bestWin, winAmount);
+        setSpinCount(newSpinCount);
+        setBestWin(newBestWin);
+        localStorage.setItem(SPIN_HISTORY_KEY, JSON.stringify({
+            spinCount: newSpinCount,
+            bestWin: newBestWin
+        }));
+    };
+
+    const createParticles = (x, y) => {
+        const newParticles = [];
+        for (let i = 0; i < 20; i++) {
+            newParticles.push({
+                id: Date.now() + i,
+                x: x || window.innerWidth / 2,
+                y: y || window.innerHeight / 2,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10 - 5,
+                life: 1,
+                color: `hsl(${Math.random() * 360}, 70%, 60%)`
+            });
+        }
+        setParticles(prev => [...prev, ...newParticles]);
+        
+        const interval = setInterval(() => {
+            setParticles(prev => prev.map(p => ({
+                ...p,
+                x: p.x + p.vx,
+                y: p.y + p.vy,
+                vy: p.vy + 0.3,
+                life: p.life - 0.02
+            })).filter(p => p.life > 0));
+        }, 16);
+        
+        setTimeout(() => clearInterval(interval), 1000);
+    };
+
+    const playSound = (type) => {
+        if (typeof window !== 'undefined') {
+            try {
+                navigator.vibrate?.(type === 'win' ? 100 : 50);
+            } catch(e) {}
+        }
+    };
+
+    const spin = () => {
+        if (isSpinning) return;
+        
+        if (userBalance < SPIN_COST) {
+            alert(`Недостаточно бонусов! Нужно ${SPIN_COST} бонусов.`);
+            return;
+        }
+        
+        onBalanceUpdate(-SPIN_COST, 'spend');
+        setIsSpinning(true);
+        setResult(null);
+        setShowConfetti(false);
+        setShowGlow(true);
+        setTimeout(() => setShowGlow(false), 500);
+        playSound('spin');
+        
+        const weights = [15, 25, 5, 30, 20, 35, 3, 10];
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let random = Math.random() * totalWeight;
+        let sectorIndex = 0;
+        let cumulative = 0;
+        
+        for (let i = 0; i < weights.length; i++) {
+            cumulative += weights[i];
+            if (random <= cumulative) {
+                sectorIndex = i;
+                break;
+            }
+        }
+        
+        const sectorAngle = 360 / SECTORS.length;
+        const spins = 8 + Math.floor(Math.random() * 5);
+        const targetRotation = rotation + 360 * spins + (360 - (sectorIndex * sectorAngle) - 15);
+        
+        setRotation(targetRotation);
+        
+        setTimeout(() => {
+            const sector = SECTORS[sectorIndex];
+            let prize = null;
             
-            <div className="wheel-wrapper">
-                <div 
-                    className="wheel"
-                    ref={wheelRef}
-                    style={{ transform: `rotate(${rotation}deg)` }}
-                >
-                    {SECTORS.map((sector, index) => (
-                        <div
-                            key={index}
-                            className="wheel-sector"
-                            style={{
-                                transform: `rotate(${index * (360 / SECTORS.length)}deg)`,
-                                backgroundColor: sector.color
-                            }}
-                        >
-                            <div className="sector-content">
-                                <span className="sector-icon">{sector.icon}</span>
-                                <span className="sector-name">{sector.name}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="wheel-pointer">▼</div>
-            </div>
-            
-            <div className="wheel-controls">
-                {freeSpinsLeft > 0 && (
-                    <label className="free-spin-checkbox">
-                        <input
-                            type="checkbox"
-                            checked={useFreeSpin}
-                            onChange={(e) => setUseFreeSpin(e.target.checked)}
-                            disabled={isSpinning}
-                        />
-                        Использовать бесплатное вращение
-                    </label>
-                )}
+            if (sector.value === 0) {
+                prize = { type: 'lose', value: 0, message: 'Попробуйте ещё раз!', sector: sector };
+                setLastWin('0');
+                playSound('lose');
+            } else {
+                const winAmount = sector.value;
+                onBalanceUpdate(winAmount, 'earn');
+                setLastWin(winAmount);
+                saveStats(winAmount);
+                setShowConfetti(true);
+                createParticles();
+                playSound('win');
                 
+                setTimeout(() => setShowConfetti(false), 2500);
+                prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
+                
+                if (typeof window.updateQuestProgress === 'function') {
+                    window.updateQuestProgress('spin_wheel', 1);
+                }
+            }
+            
+            setResult(prize);
+            setIsSpinning(false);
+            
+            if (sector.value > 10) {
+                try { navigator.vibrate?.(200); } catch(e) {}
+            }
+        }, 3500);
+    };
+
+    const getSectorGradient = (color, isWinning) => {
+        if (isWinning) return `radial-gradient(circle at 30% 30%, ${color}, ${color}cc)`;
+        return `linear-gradient(135deg, ${color}, ${color}dd)`;
+    };
+
+    return (
+        <div className="game-wheel-classic">
+            {particles.map(p => (
+                <div
+                    key={p.id}
+                    className="classic-particle"
+                    style={{
+                        position: 'fixed',
+                        left: p.x,
+                        top: p.y,
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: p.color,
+                        opacity: p.life,
+                        pointerEvents: 'none',
+                        zIndex: 2000
+                    }}
+                />
+            ))}
+
+            {showGlow && <div className="classic-glow-effect" />}
+
+            {showConfetti && (
+                <div className="classic-confetti">
+                    {Array.from({ length: 50 }).map((_, i) => (
+                        <div
+                            key={i}
+                            className="confetti-piece"
+                            style={{
+                                '--x': `${Math.random() * 200 - 100}%`,
+                                '--delay': `${Math.random() * 2}s`,
+                                '--color': `hsl(${Math.random() * 360}, 80%, 60%)`
+                            }}
+                        />
+                    ))}
+                    <div className="confetti-text">🎉 ПОБЕДА! 🎉</div>
+                </div>
+            )}
+            
+            <div className="classic-header">
+                <div className="header-left">
+                    <h3>🎡 КОЛЕСО ФОРТУНЫ</h3>
+                    <div className="stats-badge">
+                        <span>🎲 {spinCount}</span>
+                        <span>🏆 {bestWin}</span>
+                    </div>
+                </div>
+                <div className="classic-cost">
+                    <span className="cost-icon">🎟️</span>
+                    <span className="cost-value">{SPIN_COST}</span>
+                </div>
+            </div>
+            
+            <div className="classic-wheel-container">
+                <div className="classic-wheel-wrapper">
+                    <div className={`classic-wheel ${isSpinning ? 'spinning' : ''}`}
+                        style={{ transform: `rotate(${rotation}deg)` }}>
+                        {SECTORS.map((sector, index) => {
+                            const angle = index * (360 / SECTORS.length);
+                            const skewAngle = 90 - (360 / SECTORS.length);
+                            const isHighlight = result?.sector === sector && !isSpinning;
+                            
+                            return (
+                                <div
+                                    key={index}
+                                    className={`classic-sector ${isHighlight ? 'highlight' : ''}`}
+                                    style={{
+                                        transform: `rotate(${angle}deg) skewY(${skewAngle}deg)`,
+                                        background: getSectorGradient(sector.color, isHighlight)
+                                    }}
+                                >
+                                    <div className="classic-sector-content"
+                                        style={{ transform: `skewY(${-skewAngle}deg) rotate(15deg)` }}>
+                                        <span className="classic-icon">{sector.icon}</span>
+                                        <span className="classic-multiplier">{sector.name}</span>
+                                        {sector.value > 0 && (
+                                            <span className="classic-bonus">+{sector.value}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    
+                    <div className="classic-pointer">
+                        <div className="pointer-glow" />
+                    </div>
+                    <div className="classic-center">
+                        <div className="center-icon">🎲</div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Кнопка по центру под колесом */}
+            <div className="classic-spin-wrapper">
                 <button
-                    className={`spin-btn ${isSpinning ? 'spinning' : ''}`}
+                    className={`classic-spin-btn ${isSpinning ? 'spinning' : ''}`}
                     onClick={spin}
-                    disabled={isSpinning || (userBalance < SPIN_COST && freeSpinsLeft === 0)}
+                    disabled={isSpinning || userBalance < SPIN_COST}
                 >
-                    {isSpinning ? '🌀 Вращение...' : '🎲 Крутить!'}
+                    <span className="btn-text">{isSpinning ? 'ВРАЩЕНИЕ...' : 'КРУТИТЬ'}</span>
+                    {!isSpinning && <span className="btn-icon">🎲</span>}
                 </button>
             </div>
             
             {result && (
-                <div className={`wheel-result ${result.type === 'bonus' && result.value > 0 ? 'win' : result.type === 'discount' ? 'discount' : 'lose'}`}>
-                    {result.message}
+                <div className={`classic-result ${result.type === 'bonus' ? 'win' : 'lose'} ${!isSpinning ? 'show' : ''}`}>
+                    <div className="result-icon">{result.type === 'bonus' ? '🏆' : '😢'}</div>
+                    <div className="result-text">
+                        {result.type === 'bonus' ? `+${result.value} БОНУСОВ!` : result.message}
+                    </div>
+                    {result.type === 'bonus' && (
+                        <div className="result-animation">✨</div>
+                    )}
                 </div>
             )}
             
-            {lastWin && !result && (
-                <div className="last-win">
-                    🏆 Последний выигрыш: {typeof lastWin === 'number' ? `${lastWin} бонусов` : lastWin}
+            {!result && lastWin && lastWin !== '0' && (
+                <div className="classic-last-win">
+                    <span className="last-icon">🏆</span>
+                    <span>ПОСЛЕДНИЙ ВЫИГРЫШ: +{lastWin}</span>
                 </div>
             )}
+
+            <div className="classic-chances">
+                <div className="chance-item">
+                    <span className="chance-dot green" />
+                    <span>x1-x5: 60%</span>
+                </div>
+                <div className="chance-item">
+                    <span className="chance-dot red" />
+                    <span>x10+: 18%</span>
+                </div>
+                <div className="chance-item">
+                    <span className="chance-dot gray" />
+                    <span>Пропуск: 22%</span>
+                </div>
+            </div>
         </div>
     );
 }

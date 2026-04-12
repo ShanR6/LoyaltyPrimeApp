@@ -88,51 +88,72 @@
     </div>
 
     <!-- Модальное окно добавления/редактирования акции -->
-    <div id="promotionModal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeModal('promotion')">&times;</span>
-            <div class="modal-title" id="promotionModalTitle">Добавить акцию</div>
-            <div class="form-group">
-                <label>Название акции</label>
-                <input type="text" id="promoName" class="form-input" placeholder="Например: Счастливые часы">
-            </div>
-            <div class="form-group">
-                <label>Эмодзи</label>
-                <select id="promoEmoji" class="form-input">
-                    <option value="🎯">🎯</option>
-                    <option value="🎉">🎉</option>
-                    <option value="🔥">🔥</option>
-                    <option value="⚡">⚡</option>
-                    <option value="🎁">🎁</option>
-                    <option value="🏆">🏆</option>
-                    <option value="⭐">⭐</option>
-                    <option value="🎂">🎂</option>
-                    <option value="🍕">🍕</option>
-                    <option value="☕">☕</option>
-                    <option value="🍔">🍔</option>
-                    <option value="🍦">🍦</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Описание</label>
-                <textarea id="promoDesc" class="form-input" rows="2" placeholder="Подробности акции"></textarea>
-            </div>
-            <div class="form-group">
-                <label>Дата начала (необязательно)</label>
-                <input type="datetime-local" id="promoStartDate" class="form-input">
-            </div>
-            <div class="form-group">
-                <label>Дата окончания (необязательно)</label>
-                <input type="datetime-local" id="promoEndDate" class="form-input">
-            </div>
-            <div class="form-group">
-                <label>Активна</label>
-                <input type="checkbox" id="promoActive" checked>
-            </div>
-            <div class="error-message" id="promotionError"></div>
-            <button class="modal-btn" id="savePromotionBtn" onclick="savePromotion()">Сохранить</button>
+<!-- Модальное окно редактирования акции -->
+<div id="promotionModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal('promotion')">&times;</span>
+        <div class="modal-title" id="promotionModalTitle">✏️ Редактировать акцию</div>
+        
+        <div class="form-group">
+            <label>Название акции (не редактируется)</label>
+            <input type="text" id="promoName" class="form-input" disabled style="background:#f0f0f0; cursor:not-allowed;">
         </div>
+        <div class="form-group">
+            <label>Эмодзи (не редактируется)</label>
+            <select id="promoEmoji" class="form-input" disabled style="background:#f0f0f0; cursor:not-allowed;">
+                <option value="🎯">🎯</option>
+                <option value="🎉">🎉</option>
+                <option value="🎁">🎁</option>
+                <option value="🔥">🔥</option>
+                <option value="⭐">⭐</option>
+                <option value="💎">💎</option>
+                <option value="🍕">🍕</option>
+                <option value="☕">☕</option>
+            </select>
+        </div>
+        
+        <div style="border-top: 2px dashed #e9ecef; margin: 16px 0; padding-top: 8px;">
+            <p style="font-size: 12px; color: #2ecc71; margin-bottom: 12px;">✏️ Редактируемые поля:</p>
+        </div>
+        
+        <div class="form-group">
+            <label>Тип вознаграждения</label>
+            <select id="promoRewardType" class="form-input">
+                <option value="bonus">🎁 Бонусы</option>
+                <option value="discount">💰 Скидка (%)</option>
+            </select>
+        </div>
+        <div class="form-group" id="promoBonusGroup">
+            <label>Количество бонусов</label>
+            <input type="number" id="promoBonusValue" class="form-input" value="50" min="0">
+        </div>
+        <div class="form-group" id="promoDiscountGroup" style="display: none;">
+            <label>Скидка (%)</label>
+            <input type="number" id="promoDiscountValue" class="form-input" value="10" min="0" max="100">
+        </div>
+        <div class="form-group">
+            <label>Дата начала <span style="color: #ff4d4d;">*</span></label>
+            <input type="datetime-local" id="promoStartDate" class="form-input" required>
+        </div>
+        <div class="form-group">
+            <label>Дата окончания <span style="color: #ff4d4d;">*</span></label>
+            <input type="datetime-local" id="promoEndDate" class="form-input" required>
+        </div>
+        <div class="form-group">
+            <label>Активна (только в период дат)</label>
+            <input type="checkbox" id="promoActive" checked>
+            <small style="display: block; margin-top: 4px;">Акция будет активна только между указанными датами</small>
+        </div>
+        
+        <div style="border-top: 2px dashed #e9ecef; margin: 16px 0; padding-top: 8px;">
+            <p style="font-size: 12px; color: #e74c3c; margin-bottom: 12px;">📝 Предпросмотр описания (формируется автоматически):</p>
+            <div id="promoDescriptionPreview" style="background:#f8f9fa; padding:12px; border-radius:12px; font-size:13px; color:#555; margin-bottom:12px;"></div>
+        </div>
+        
+        <div class="error-message" id="promotionError"></div>
+        <button class="modal-btn" id="savePromotionBtn" onclick="savePromotion()">💾 Сохранить изменения</button>
     </div>
+</div>
 
     <!-- Модальное окно добавления/редактирования задания -->
     <div id="questModal" class="modal">
@@ -144,35 +165,6 @@
                 <select id="questPresetSelect" class="form-input">
                     <option value="">-- Выберите готовое задание --</option>
                 </select>
-            </div>
-            <div style="margin: 15px 0; text-align: center; color: #999;">или создайте свое</div>
-            <div class="form-group">
-                <label>Эмодзи</label>
-                <select id="questEmoji" class="form-input">
-                    <option value="✅">✅</option>
-                    <option value="🎡">🎡</option>
-                    <option value="👥">👥</option>
-                    <option value="💎">💎</option>
-                    <option value="💰">💰</option>
-                    <option value="🎁">🎁</option>
-                    <option value="🏆">🏆</option>
-                    <option value="⭐">⭐</option>
-                    <option value="🔥">🔥</option>
-                    <option value="🎯">🎯</option>
-                    <option value="📸">📸</option>
-                    <option value="📍">📍</option>
-                    <option value="🎂">🎂</option>
-                    <option value="📱">📱</option>
-                    <option value="⚡">⚡</option>
-                    <option value="👑">👑</option>
-                    <option value="📊">📊</option>
-                    <option value="🔔">🔔</option>
-                    <option value="🎬">🎬</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Название задания</label>
-                <input type="text" id="questTitle" class="form-input" placeholder="Например: Ежедневный вход">
             </div>
             <div class="form-group">
                 <label>Описание</label>
@@ -211,9 +203,6 @@
                     <button class="crm-nav-item" data-module="loyalty">
                         <span class="nav-icon">🎯</span> Лояльность
                     </button>
-                    <button class="crm-nav-item" data-module="information">
-                        <span class="nav-icon">ℹ️</span> Информация
-                    </button>
                     <button class="crm-nav-item" data-module="notifications">
                         <span class="nav-icon">📨</span> Уведомления
                     </button>
@@ -222,6 +211,9 @@
                     </button>
                     <button class="crm-nav-item" data-module="gamification">
                         <span class="nav-icon">🎮</span> Игры
+                    </button>
+                    <button class="crm-nav-item" data-module="information">
+                        <span class="nav-icon">ℹ️</span> Информация
                     </button>
                     <button class="crm-nav-item" data-module="settings">
                         <span class="nav-icon">⚙️</span> Настройки
@@ -235,7 +227,7 @@
                 </div>
             </div>
             <div class="crm-content">
-                <!-- Модуль 1: Аналитика (без VIP) -->
+                <!-- Модуль 1: Аналитика -->
                 <div id="analyticsModule" class="crm-module active">
                     <div class="module-header">
                         <h2>📊 Аналитика и сегментация</h2>
@@ -263,7 +255,7 @@
                     </div>
                 </div>
 
-                <!-- Модуль 2: Программа лояльности (только уровни) -->
+                <!-- Модуль 2: Программа лояльности -->
                 <div id="loyaltyModule" class="crm-module">
                     <div class="module-header">
                         <h2>🎯 Программа лояльности</h2>
@@ -283,195 +275,149 @@
                     </div>
                 </div>
 
-                <!-- Модуль 3: Информация о компании -->
-                <div id="informationModule" class="crm-module">
-                    <div class="module-header">
-                        <h2>ℹ️ Информация о компании</h2>
-                    </div>
-                    <div class="settings-card">
-                        <h3>🏢 Данные компании</h3>
-                        <div class="info-display">
-                            <div class="info-item">
-                                <div class="info-label">🏢 Название компании:</div>
-                                <div class="info-value" id="infoCompanyName">Загрузка...</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">👤 Владелец:</div>
-                                <div class="info-value" id="infoOwnerName">Загрузка...</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">📧 Email:</div>
-                                <div class="info-value" id="infoEmail">Загрузка...</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">📱 Телефон:</div>
-                                <div class="info-value" id="infoPhone">Загрузка...</div>
-                            </div>
-                        </div>
-                        <div class="info-notice">
-                            <p>⚠️ <strong>Важно:</strong></p>
-                            <p>Данные компании отображаются только для просмотра. Изменить их в этом разделе нельзя.</p>
-                            <p>Если вам необходимо обновить информацию о компании (название, email, телефон или владельца), пожалуйста, свяжитесь с нашей службой поддержки по электронной почте:</p>
-                            <p class="contact-email">📧 <a href="mailto:support@loyaltyprime.ru">support@loyaltyprime.ru</a></p>
-                            <p>Укажите в письме:</p>
-                            <ul>
-                                <li>Название вашей компании</li>
-                                <li>Какие данные нужно изменить</li>
-                                <li>Новые значения данных</li>
-                            </ul>
-                            <p>Наша команда обработает ваш запрос в течение 24 часов.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Модуль 4: Уведомления -->
+                <!-- Модуль 3: Уведомления -->
                 <div id="notificationsModule" class="crm-module">
                     <div class="module-header"><h2>📨 Умные уведомления</h2></div>
                     <div class="notifications-grid">
                         <div class="notification-card">
                             <h3>📱 Создать рассылку</h3>
-                            <div class="form-group">
-                                <label>Заголовок</label>
-                                <input type="text" id="notifTitle" placeholder="Специальное предложение!">
-                            </div>
-                            <div class="form-group">
-                                <label>Сообщение</label>
-                                <textarea id="notifMessage" rows="4" placeholder="Текст уведомления..."></textarea>
-                            </div>
-                            <div class="broadcast-info">
-                                <p>📊 Рассылка будет отправлена <strong>всем пользователям</strong>, зарегистрированным в базе данных вашей компании.</p>
-                                <p id="userCount">Загрузка количества пользователей...</p>
-                            </div>
-                            <button class="btn-send" onclick="sendNotification()">📤 Отправить всем через бота</button>
+                            <div class="form-group"><label>Тип</label><select id="notifType"><option>Push</option><option>SMS</option></select></div>
+                            <div class="form-group"><label>Аудитория</label><select id="notifSegment"><option value="all">Все</option><option value="sleeping">Спящие</option><option value="active">Активные</option><option value="vip">VIP</option></select></div>
+                            <div class="form-group"><label>Заголовок</label><input type="text" id="notifTitle" placeholder="Специальное предложение!"></div>
+                            <div class="form-group"><label>Сообщение</label><textarea id="notifMessage" rows="3" placeholder="Текст..."></textarea></div>
+                            <button class="btn-send" onclick="sendNotification()">📤 Отправить</button>
                         </div>
                         <div class="notification-card">
                             <h3>⚙️ Автоматические кампании</h3>
-                            <div class="auto-campaign">
-                                <div class="campaign-item">
-                                    <div>
-                                        <div class="campaign-title">🔄 Возвращение спящих</div>
-                                        <div class="campaign-desc">При неактивности 30 дней</div>
-                                    </div>
-                                    <div class="toggle-switch">
-                                        <input type="checkbox" id="autoReactivate" checked>
-                                        <span>Активна</span>
-                                    </div>
-                                </div>
-                                <div class="campaign-item">
-                                    <div>
-                                        <div class="campaign-title">🎂 День рождения</div>
-                                        <div class="campaign-desc">Поздравление с бонусом</div>
-                                        <div class="birthday-settings">
-                                            <label>Бонус:</label>
-                                            <input type="number" id="birthdayBonus" value="100" min="0" class="bonus-input">
-                                            <span>бонусов</span>
-                                        </div>
-                                    </div>
-                                    <div class="toggle-switch">
-                                        <input type="checkbox" id="autoBirthday" checked>
-                                        <span>Активна</span>
-                                    </div>
-                                </div>
-                                <div class="campaign-item">
-                                    <div>
-                                        <div class="campaign-title">🎁 Новые акции</div>
-                                        <div class="campaign-desc">Уведомление при создании акции</div>
-                                    </div>
-                                    <div class="toggle-switch">
-                                        <input type="checkbox" id="autoPromotions" checked>
-                                        <span>Активна</span>
-                                    </div>
-                                </div>
-                                <div class="campaign-item">
-                                    <div>
-                                        <div class="campaign-title">📋 Новые задания</div>
-                                        <div class="campaign-desc">Уведомление при создании задания</div>
-                                    </div>
-                                    <div class="toggle-switch">
-                                        <input type="checkbox" id="autoQuests" checked>
-                                        <span>Активна</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <div class="auto-campaign"><div class="campaign-item"><div><div class="campaign-title">🔄 Возвращение спящих</div><div class="campaign-desc">При неактивности 30 дней</div></div><div class="toggle-switch"><input type="checkbox" id="autoReactivate" checked><span>Активна</span></div></div>
+                            <div class="campaign-item"><div><div class="campaign-title">🎂 День рождения</div><div class="campaign-desc">Поздравление с бонусом</div></div><div class="toggle-switch"><input type="checkbox" id="autoBirthday" checked><span>Активна</span></div></div>
+                            <div class="campaign-item"><div><div class="campaign-title">📍 Geo-уведомления</div><div class="campaign-desc">При входе в радиусе 500м</div></div><div class="toggle-switch"><input type="checkbox" id="autoGeo" checked><span>Активна</span></div></div></div>
                         </div>
                     </div>
                     <div class="notification-history"><h3>📋 История рассылок</h3><div id="notificationsHistory"></div></div>
                 </div>
 
-                <!-- Модуль 5: Маркетинг (Акции и Задания) -->
-                <div id="marketingModule" class="crm-module">
-                    <div class="module-header">
-                        <h2>🎁 Управление акциями и заданиями</h2>
-                    </div>
-                    <div class="settings-card">
-                        <h3>🎯 Акции</h3>
-                        <div id="promotionsList"></div>
-                        <button class="btn-add" onclick="showAddPromotionModal()">+ Добавить акцию</button>
-                    </div>
-                    <div class="settings-card">
-                        <h3>📋 Задания</h3>
-                        <div id="questsManagerList"></div>
-                        <button class="btn-add" onclick="showAddQuestModal()">+ Добавить задание</button>
-                    </div>
-                </div>
+                <!-- Модуль 4: Маркетинг (Акции и Задания) -->
+<div id="marketingModule" class="crm-module">
+    <div class="module-header">
+        <h2>🎁 Управление акциями и заданиями</h2>
+    </div>
+    <div class="settings-card">
+        <h3>🎯 Акции</h3>
+        <div id="promotionsList"></div>
+        <!-- Кнопка добавления акции удалена -->
+    </div>
+    <div class="settings-card">
+        <h3>📋 Задания</h3>
+        <div id="questsManagerList"></div>
+        <button class="btn-add" onclick="showAddQuestModal()">+ Добавить задание</button>
+    </div>
+</div>
 
-                <!-- Модуль 6: Игры -->
-                <div id="gamificationModule" class="crm-module">
-                    <div class="module-header"><h2>🎮 Игровые механики</h2><button class="btn-save" onclick="saveGameSettings()">💾 Сохранить</button></div>
-                    <div class="games-grid">
-                        <div class="game-card"><h3>🎡 Игры</h3><div id="gamesList"></div></div>
-                        <div class="game-card">
-                            <h3>👥 Реферальная программа</h3>
-                            <div class="setting-row"><label>Бонус за приглашение:</label><input type="number" id="referralBonus" value="100"><span>бонусов</span></div>
-                            <div class="setting-row"><label>Бонус за регистрацию:</label><input type="number" id="welcomeBonus" value="50"><span>бонусов</span></div>
-                            <div class="referral-stats"><div class="stat"><div class="stat-value" id="referralTotal">0</div><div class="stat-label">Приглашений</div></div>
-                            <div class="stat"><div class="stat-value" id="referralActive">0</div><div class="stat-label">Активных</div></div>
-                            <div class="stat"><div class="stat-value" id="referralEarned">0</div><div class="stat-label">Начислено</div></div></div>
+
+                <!-- Модуль 5: Игры -->
+<div id="gamificationModule" class="crm-module">
+    <div class="module-header">
+        <h2>🎮 Игровые механики</h2>
+        <button class="btn-save" onclick="saveAllGameSettings()">💾 Сохранить всё</button>
+    </div>
+    
+    <!-- Контейнер для настроек колеса фортуны -->
+    <div id="wheelSettingsContainer"></div>
+	
+	<!-- Контейнер для настроек игры в кости -->
+    <div id="diceSettingsContainer"></div>
+    
+    <!-- Контейнер для настроек скретч-карты -->
+    <div id="scratchSettingsContainer"></div>
+    
+    
+    <!-- Реферальная программа -->
+    <div class="game-card" style="margin-top: 20px;">
+        <h3>👥 Реферальная программа</h3>
+        <div class="setting-row">
+            <label>Бонус за приглашение:</label>
+            <input type="number" id="referralBonus" value="100">
+            <span>бонусов</span>
+        </div>
+        <div class="setting-row">
+            <label>Бонус за регистрацию:</label>
+            <input type="number" id="welcomeBonus" value="50">
+            <span>бонусов</span>
+        </div>
+        <div class="referral-stats">
+            <div class="stat">
+                <div class="stat-value" id="referralTotal">0</div>
+                <div class="stat-label">Приглашений</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="referralActive">0</div>
+                <div class="stat-label">Активных</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="referralEarned">0</div>
+                <div class="stat-label">Начислено</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+                <!-- Модуль настроек -->
+                <div id="settingsModule" class="crm-module">
+                    <div class="module-header"><h2>⚙️ Настройки бизнеса</h2><button class="btn-save" onclick="saveBusinessSettings()">💾 Сохранить</button></div>
+                    <div class="settings-card"><h3>🎨 Брендирование</h3>
+                        <div class="branding-description">
+                            <p>🎯 <strong>Зачем нужно брендирование?</strong></p>
+                            <p>Брендирование позволяет настроить внешний вид вашего mini-app под стиль вашей компании. 
+                            При изменении основного цвета, он автоматически применяется во всём приложении:</p>
+                            <ul>
+                                <li>• Кнопки и навигация</li>
+                                <li>• Прогресс-бары и индикаторы</li>
+                                <li>• Заголовки и акцентные элементы</li>
+                                <li>• Карточки лояльности</li>
+                            </ul>
+                            <p>💡 <strong>Совет:</strong> Выберите цвет, который соответствует вашему бренду и логотипу.</p>
+                        </div>
+                        <div class="setting-row"><label>Основной цвет бренда:</label><input type="color" id="brandColor" value="#2A4B7C"></div>
+                        <div class="brand-preview">
+                            <div class="preview-label">Предпросмотр:</div>
+                            <div class="preview-elements">
+                                <button class="preview-btn">Кнопка</button>
+                                <div class="preview-bar"></div>
+                                <span class="preview-badge">Бейдж</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Модуль настроек (обновленное брендирование) -->
-                <div id="settingsModule" class="crm-module">
-                    <div class="module-header">
-                        <h2>⚙️ Настройки бизнеса</h2>
-                        <button class="btn-save" onclick="saveBusinessSettings()">💾 Сохранить</button>
-                    </div>
+                <!-- Модуль информации -->
+                <div id="informationModule" class="crm-module">
+                    <div class="module-header"><h2>ℹ️ Информация о компании</h2></div>
                     <div class="settings-card">
-                        <h3>🎨 Брендирование</h3>
-                        <div class="branding-info">
-                            <p class="info-text">
-                                🎨 <strong>Настройка фирменного цвета вашего бренда</strong><br>
-                                Выберите основной цвет, который будет использоваться во всех интерфейсах программы лояльности.
-                            </p>
-                            <div class="branding-benefits">
-                                <h4>✨ Где применяется фирменный цвет:</h4>
-                                <ul class="branding-features">
-                                    <li>🎨 Фон карточки лояльности в VK Mini App</li>
-                                    <li>📊 Прогресс-бар уровней программы лояльности</li>
-                                    <li>🎯 Акцентные элементы интерфейса (кнопки, иконки)</li>
-                                    <li>💳 QR-код для сканирования на кассе</li>
-                                    <li>🏷️ Визуальное оформление всех элементов приложения</li>
-                                </ul>
+                        <h3>🏢 Данные компании</h3>
+                        <div class="info-readonly">
+                            <div class="info-row">
+                                <label>🏢 Название компании:</label>
+                                <div class="info-value" id="infoCompanyName">-</div>
                             </div>
-                            <div class="branding-importance">
-                                <p>💡 <strong>Зачем это нужно:</strong></p>
-                                <ul>
-                                    <li>✅ <strong>Узнаваемость бренда</strong> - клиенты видят ваши фирменные цвета</li>
-                                    <li>✅ <strong>Профессиональный вид</strong> - приложение выглядит как часть вашего бренда</li>
-                                    <li>✅ <strong>Единый стиль</strong> - все элементы оформления согласованы</li>
-                                    <li>✅ <strong>Лояльность клиентов</strong> - знакомый цвет вызывает доверие</li>
-                                </ul>
+                            <div class="info-row">
+                                <label>👤 Владелец:</label>
+                                <div class="info-value" id="infoOwnerName">-</div>
                             </div>
-                            <div class="setting-row">
-                                <label>Основной цвет бренда:</label>
-                                <input type="color" id="brandColor" value="#2A4B7C">
-                                <div class="color-preview" id="colorPreview" style="background-color: #2A4B7C;"></div>
+                            <div class="info-row">
+                                <label>📧 Email:</label>
+                                <div class="info-value" id="infoEmail">-</div>
                             </div>
-                            <p class="info-hint">
-                                💡 <strong>Совет:</strong> Используйте цвет вашего логотипа для создания единого стиля. 
-                                Изменения применяются в VK Mini App сразу после сохранения.
-                            </p>
+                            <div class="info-row">
+                                <label>📞 Телефон:</label>
+                                <div class="info-value" id="infoPhone">-</div>
+                            </div>
+                        </div>
+                        <div class="info-notice">
+                            <p>⚠️ <strong>Внимание:</strong> Данные компании отображаются только для просмотра.</p>
+                            <p>📬 Если вам необходимо изменить информацию о компании (название, телефон, email, владельца), пожалуйста, свяжитесь с нами по электронной почте:</p>
+                            <p class="support-email">📧 <a href="mailto:support@loyaltyprime.ru">support@loyaltyprime.ru</a></p>
+                            <p>Укажите в письме вашу компанию и какие данные необходимо изменить.</p>
                         </div>
                     </div>
                 </div>
