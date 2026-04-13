@@ -59,6 +59,7 @@ async function initDatabase() {
                 reward INTEGER DEFAULT 10,
                 active BOOLEAN DEFAULT TRUE,
                 expires_days INTEGER DEFAULT 30,
+                end_date TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -138,13 +139,116 @@ async function initDatabase() {
         await addMissingColumns();
         await addPromotionRewardColumns();
         await addGameSettingsTable();  
-        await addGameSettingsColumns(); 
+        await addGameSettingsColumns();
+        await addDailyBonusSettings(); 
+        await ensureAllQuestsExist();
         await insertTestData();
 
     } catch (error) {
         console.error('❌ Ошибка инициализации БД:', error);
     }
 }
+async function addDailyBonusSettings() {
+    try {
+        const checkTable = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'companies' AND column_name = 'daily_bonus_settings'
+        `);
+        
+        if (checkTable.rows.length === 0) {
+            console.log('📝 Добавляем колонку daily_bonus_settings в таблицу companies...');
+            await query(`ALTER TABLE companies ADD COLUMN daily_bonus_settings JSONB DEFAULT '{"enabled": true, "baseAmount": 10, "streakBonus": 5}'`);
+            console.log('✅ Колонка daily_bonus_settings добавлена');
+        }
+    } catch (error) {
+        console.error('❌ Ошибка добавления daily_bonus_settings:', error);
+    }
+}
+
+async function getDailyBonusSettings(companyId) {
+    try {
+        const result = await query(
+            'SELECT daily_bonus_settings FROM companies WHERE id = $1',
+            [companyId]
+        );
+        
+        if (result.rows.length > 0) {
+            let settings = result.rows[0].daily_bonus_settings;
+            if (typeof settings === 'string') {
+                settings = JSON.parse(settings);
+            }
+            return settings || { enabled: true, baseAmount: 10, streakBonus: 5 };
+        }
+        
+        return { enabled: true, baseAmount: 10, streakBonus: 5 };
+    } catch (error) {
+        console.error('Ошибка получения настроек ежедневного бонуса:', error);
+        return { enabled: true, baseAmount: 10, streakBonus: 5 };
+    }
+}
+
+async function updateDailyBonusSettings(companyId, settings) {
+    try {
+        await query(
+            'UPDATE companies SET daily_bonus_settings = $1 WHERE id = $2',
+            [JSON.stringify(settings), companyId]
+        );
+        return { success: true };
+    } catch (error) {
+        console.error('Ошибка обновления настроек ежедневного бонуса:', error);
+        throw error;
+    }
+}
+
+// Функция для обеспечения наличия всех 20 заданий у каждой компании
+async function ensureAllQuestsExist() {
+    try {
+        console.log('🔍 Проверяем наличие всех заданий у компаний...');
+        
+        // Получаем все компании
+        const companiesResult = await query('SELECT id FROM companies');
+        const companies = companiesResult.rows;
+        
+        // Получаем список всех предустановленных заданий
+        const presetQuests = getPresetQuests();
+        
+        for (const company of companies) {
+            const companyId = company.id;
+            
+            // Получаем текущие задания компании
+            const currentQuestsResult = await query(
+                'SELECT title FROM quests WHERE company_id = $1',
+                [companyId]
+            );
+            const currentQuestTitles = currentQuestsResult.rows.map(row => row.title);
+            
+            // Проверяем, каких заданий не хватает
+            const missingQuests = presetQuests.filter(
+                preset => !currentQuestTitles.includes(preset.title)
+            );
+            
+            // Добавляем недостающие задания
+            if (missingQuests.length > 0) {
+                console.log(`📝 Компания ${companyId}: добавляем ${missingQuests.length} отсутствующих заданий`);
+                
+                for (const quest of missingQuests) {
+                    await query(`
+                        INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
+                        VALUES ($1, $2, $3, $4, $5, false, NULL, NOW(), NOW())
+                    `, [companyId, quest.emoji, quest.title, quest.description, quest.reward]);
+                }
+                
+                console.log(`✅ Компания ${companyId}: добавлено ${missingQuests.length} заданий`);
+            }
+        }
+        
+        console.log('✅ Проверка заданий завершена');
+    } catch (error) {
+        console.error('❌ Ошибка обеспечения наличия заданий:', error);
+    }
+}
+
 // Добавьте эту функцию в database-pg.js после initDatabase()
 
 async function addGameSettingsTable() {
@@ -329,10 +433,11 @@ function getPresetQuests() {
         { emoji: '🔥', title: 'Серия 7 дней', description: 'Заходите в приложение 7 дней подряд', reward: 100 },
         { emoji: '⚡', title: 'Быстрая покупка', description: 'Совершите покупку за 5 минут после входа', reward: 25 },
         { emoji: '🎯', title: 'Попадание в цель', description: 'Накопите 1000 бонусов на счете', reward: 150 },
-        { emoji: '👑', title: 'VIP статус', description: 'Достигните уровня "Золото"', reward: 500 },
         { emoji: '📊', title: 'Заполнить профиль', description: 'Заполните всю информацию о себе', reward: 30 },
         { emoji: '🔔', title: 'Включить уведомления', description: 'Включите push-уведомления', reward: 20 },
-        { emoji: '🎬', title: 'Посмотреть видео', description: 'Просмотрите обучающее видео', reward: 15 }
+        { emoji: '🎬', title: 'Посмотреть видео', description: 'Просмотрите обучающее видео', reward: 15 },
+        { emoji: '🎲', title: 'Бросить кости', description: 'Сыграйте в игру с костями', reward: 20 },
+        { emoji: '🎫', title: 'Скретч-карта', description: 'Сотрите скретч-карту и получите бонус', reward: 25 }
     ];
 }
 function getPresetPromotions() {
@@ -375,12 +480,12 @@ async function addPresetDataForCompany(companyId) {
         }
         console.log(`✅ Добавлено ${presetPromotions.length} акций`);
         
-        // Добавляем 20 предустановленных заданий
+        // Добавляем 20 предустановленных заданий (неактивные по умолчанию, без срока действия)
         const presetQuests = getPresetQuests();
         for (const quest of presetQuests) {
             await query(`
                 INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
-                VALUES ($1, $2, $3, $4, $5, true, 30, NOW(), NOW())
+                VALUES ($1, $2, $3, $4, $5, false, NULL, NOW(), NOW())
             `, [companyId, quest.emoji, quest.title, quest.description, quest.reward]);
         }
         console.log(`✅ Добавлено ${presetQuests.length} заданий`);
@@ -501,6 +606,18 @@ async function addMissingColumns() {
             console.log('📝 Добавляем колонку expires_days в таблицу quests...');
             await query(`ALTER TABLE quests ADD COLUMN expires_days INTEGER DEFAULT 30`);
             console.log('✅ Колонка expires_days добавлена');
+        }
+        
+        const checkEndDate = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'quests' AND column_name = 'end_date'
+        `);
+        
+        if (checkEndDate.rows.length === 0) {
+            console.log('📝 Добавляем колонку end_date в таблицу quests...');
+            await query(`ALTER TABLE quests ADD COLUMN end_date TIMESTAMP`);
+            console.log('✅ Колонка end_date добавлена');
         }
         
         const checkEmoji = await query(`
@@ -984,6 +1101,87 @@ async function addGameSettingsColumns() {
         console.error('❌ Ошибка добавления колонок game_settings:', error);
     }
 }
+// Добавьте эту функцию в database-pg.js после других функций
+
+// Получение истории покупок пользователя
+async function getUserPurchaseHistory(userId, limit = 50) {
+    const result = await query(
+        `SELECT id, amount, bonus_earned, bonus_spent, description, store_id, cashier_id, created_at 
+         FROM transactions 
+         WHERE user_id = $1 
+         ORDER BY created_at DESC 
+         LIMIT $2`,
+        [userId, limit]
+    );
+    return result.rows;
+}
+
+// Добавление покупки в историю (уже есть в updateUserBalance, но добавим отдельный метод для POS)
+async function addPurchaseTransaction(userId, companyId, amount, bonusEarned, storeId, cashierId) {
+    const result = await query(
+        `INSERT INTO transactions (user_id, company_id, amount, bonus_earned, description, store_id, cashier_id, source, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pos', NOW()) 
+         RETURNING *`,
+        [userId, companyId, amount, bonusEarned, `Покупка на ${amount}₽`, storeId || 'unknown', cashierId || 'cashier_001']
+    );
+    return result.rows[0];
+}
+// Обновление баланса с записью транзакции
+async function updateBalanceWithTransaction(userId, companyId, change, type, description, metadata = {}) {
+    const user = await getUserById(userId);
+    if (!user) throw new Error('Пользователь не найден');
+    
+    const newBalance = type === 'earn' ? user.bonus_balance + change : user.bonus_balance - change;
+    if (newBalance < 0) throw new Error('Недостаточно бонусов');
+    
+    // Обновляем баланс
+    await query('UPDATE users SET bonus_balance = $1 WHERE id = $2', [newBalance, userId]);
+    
+    if (type === 'earn') {
+        await query('UPDATE users SET total_earned = total_earned + $1 WHERE id = $2', [change, userId]);
+        await query('UPDATE user_progress SET total_earned = total_earned + $1 WHERE user_id = $2', [change, userId]);
+        
+        // Добавляем транзакцию начисления
+        await query(
+            `INSERT INTO transactions (user_id, company_id, amount, bonus_earned, description, source, created_at, metadata) 
+             VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
+            [userId, companyId, metadata.amount || 0, change, description, metadata.source || 'app', JSON.stringify(metadata)]
+        );
+    } else if (type === 'spend') {
+        await query('UPDATE users SET total_spent = total_spent + $1 WHERE id = $2', [change, userId]);
+        
+        // Добавляем транзакцию списания
+        await query(
+            `INSERT INTO transactions (user_id, company_id, bonus_spent, description, source, created_at, metadata) 
+             VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+            [userId, companyId, change, description, metadata.source || 'app', JSON.stringify(metadata)]
+        );
+    }
+    
+    return newBalance;
+}
+// Добавление транзакции списания
+async function addSpendTransaction(userId, companyId, bonusSpent, description, storeId, cashierId) {
+    const result = await query(
+        `INSERT INTO transactions (user_id, company_id, bonus_spent, description, store_id, cashier_id, source, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, 'pos', NOW()) 
+         RETURNING *`,
+        [userId, companyId, bonusSpent, description || `Списание ${bonusSpent} бонусов`, storeId || 'unknown', cashierId || 'cashier_001']
+    );
+    return result.rows[0];
+}
+// Получение всех транзакций пользователя с деталями
+async function getUserTransactions(userId, companyId, limit = 100) {
+    const result = await query(
+        `SELECT id, amount, bonus_earned, bonus_spent, description, store_id, cashier_id, source, created_at 
+         FROM transactions 
+         WHERE user_id = $1 AND company_id = $2 
+         ORDER BY created_at DESC 
+         LIMIT $3`,
+        [userId, companyId, limit]
+    );
+    return result.rows;
+}
 
 module.exports = {
     pool,
@@ -1021,5 +1219,12 @@ module.exports = {
 	getGameSettings,
 	saveGameSettings,
 	addGameSettingsTable,
-    addGameSettingsColumns
+    addGameSettingsColumns,
+	getUserPurchaseHistory,
+	addPurchaseTransaction,
+	getUserTransactions,
+	updateBalanceWithTransaction,
+	addSpendTransaction,
+	getDailyBonusSettings,
+	updateDailyBonusSettings
 };

@@ -2389,18 +2389,22 @@ body.crm-open .auth-buttons {
 .multipliers-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 10px;
+    margin-top: 10px;
+    margin-bottom: 15px;
 }
 
 .multiplier-tag {
-    background: #e9ecef;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 13px;
-    display: flex;
+    background: linear-gradient(135deg, #2a2f3f, #1a1f2e);
+    padding: 8px 15px;
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #ffd966;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
+    border: 1px solid rgba(255, 217, 102, 0.3);
 }
 
 .multiplier-tag button {
@@ -2414,15 +2418,24 @@ body.crm-open .auth-buttons {
     cursor: pointer;
 }
 
+.multiplier-tag span {
+    font-size: 16px;
+}
 .btn-add-multiplier {
-    background: #28a745;
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
     color: white;
     border: none;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
+    padding: 10px 20px;
+    border-radius: 30px;
     cursor: pointer;
-    margin-top: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    margin-top: 5px;
+    transition: all 0.2s;
+}
+.btn-add-multiplier:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
 }
 
 .combinations-list {

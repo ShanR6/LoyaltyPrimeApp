@@ -30,7 +30,10 @@ const {
     getCompanyTiers,      
     updateCompanyTiers,
     getPresetQuests,
-	getGameSettings 
+	getGameSettings,
+    saveGameSettings,
+	getDailyBonusSettings,
+	updateDailyBonusSettings
 } = require('./database-pg');
 
 const app = express();
@@ -195,10 +198,15 @@ app.get('/api/quests/:companyId', async (req, res) => {
         // Проверяем истекшие задания
         const now = new Date();
         const updatedQuests = quests.map(quest => {
-            const createdAt = new Date(quest.created_at);
-            const expiresDays = quest.expires_days || 30;
-            const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
-            const isExpired = expiresAt < now;
+            // Проверяем по end_date (если установлена)
+            const endDate = quest.end_date ? new Date(quest.end_date) : null;
+            const isExpired = endDate ? endDate < now : false;
+            
+            // Если задание истекло, автоматически делаем его неактивным
+            if (isExpired && quest.active) {
+                quest.active = false;
+            }
+            
             return {
                 ...quest,
                 isExpired,
@@ -229,9 +237,45 @@ app.post('/api/quests', async (req, res) => {
 
 app.put('/api/quests/:id', async (req, res) => {
     try {
-        const { emoji, title, description, reward, active, expiresDays } = req.body;
-        const quest = await updateQuest(req.params.id, { emoji, title, description, reward, active, expiresDays });
-        res.json({ success: true, quest });
+        // Разрешаем обновлять только reward, active и expires_days
+        const { reward, active, expiresDays, endDate } = req.body;
+        
+        const updates = [];
+        const values = [];
+        let paramIndex = 1;
+        
+        if (reward !== undefined) {
+            updates.push(`reward = $${paramIndex++}`);
+            values.push(reward);
+        }
+        if (active !== undefined) {
+            updates.push(`active = $${paramIndex++}`);
+            values.push(active);
+        }
+        if (expiresDays !== undefined) {
+            updates.push(`expires_days = $${paramIndex++}`);
+            values.push(expiresDays || null);
+        }
+        if (endDate !== undefined) {
+            updates.push(`end_date = $${paramIndex++}`);
+            values.push(endDate || null);
+        }
+        
+        if (updates.length === 0) {
+            return res.status(400).json({ success: false, message: 'Нет данных для обновления' });
+        }
+        
+        updates.push(`updated_at = NOW()`);
+        values.push(req.params.id);
+        
+        const queryText = `UPDATE quests SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+        const result = await query(queryText, values);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Задание не найдено' });
+        }
+        
+        res.json({ success: true, quest: result.rows[0] });
     } catch (error) {
         console.error('Ошибка обновления задания:', error);
         res.status(500).json({ error: error.message });
@@ -240,8 +284,8 @@ app.put('/api/quests/:id', async (req, res) => {
 
 app.delete('/api/quests/:id', async (req, res) => {
     try {
-        await deleteQuest(req.params.id);
-        res.json({ success: true });
+        // Запрещаем удаление заданий
+        res.status(403).json({ success: false, message: 'Удаление заданий запрещено. Задания являются предустановленными.' });
     } catch (error) {
         console.error('Ошибка удаления задания:', error);
         res.status(500).json({ error: error.message });
@@ -403,8 +447,15 @@ function getNextTier(tiers, balance) {
 app.post('/api/users/dailyBonus/check', async (req, res) => {
     try {
         const { userId, companyId } = req.body;
+        
+        // Проверяем настройки ежедневного бонуса
+        const settings = await getDailyBonusSettings(companyId);
+        if (!settings.enabled) {
+            return res.json({ claimed: true, disabled: true });
+        }
+        
         const claimed = await checkDailyBonusClaimed(userId, companyId);
-        res.json({ claimed });
+        res.json({ claimed, settings });
     } catch (error) {
         console.error('Ошибка проверки бонуса:', error);
         res.json({ claimed: false });
@@ -419,6 +470,38 @@ app.post('/api/users/dailyBonus/claim', async (req, res) => {
     } catch (error) {
         console.error('Ошибка начисления бонуса:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ API ДЛЯ НАСТРОЕК ЕЖЕДНЕВНОГО БОНУСА ============
+
+app.get('/api/companies/:companyId/dailyBonusSettings', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const settings = await getDailyBonusSettings(companyId);
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Ошибка получения настроек ежедневного бонуса:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.put('/api/companies/:companyId/dailyBonusSettings', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const { enabled, baseAmount, streakBonus } = req.body;
+        
+        const settings = {
+            enabled: enabled !== undefined ? enabled : true,
+            baseAmount: baseAmount || 10,
+            streakBonus: streakBonus || 5
+        };
+        
+        await updateDailyBonusSettings(companyId, settings);
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Ошибка обновления настроек ежедневного бонуса:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -909,6 +992,209 @@ app.get('/api/games/:companyId/all', async (req, res) => {
     } catch (error) {
         console.error('Ошибка получения всех настроек игр:', error);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+/// Добавьте эти эндпоинты в server.js
+
+// ============ API ДЛЯ ИСТОРИИ ПОКУПОК ============
+
+// Получение истории транзакций пользователя
+app.get('/api/users/:userId/transactions/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        const limit = parseInt(req.query.limit) || 100;
+        
+        const transactions = await getUserTransactions(userId, companyId, limit);
+        
+        // Форматируем транзакции для отображения
+        const formattedTransactions = transactions.map(t => ({
+            id: t.id,
+            type: t.bonus_earned > 0 ? 'earn' : (t.bonus_spent > 0 ? 'spend' : 'other'),
+            amount: t.amount || 0,
+            bonusChange: t.bonus_earned > 0 ? t.bonus_earned : (t.bonus_spent > 0 ? -t.bonus_spent : 0),
+            description: t.description,
+            storeId: t.store_id,
+            cashierId: t.cashier_id,
+            source: t.source,
+            createdAt: t.created_at,
+            metadata: t.metadata
+        }));
+        
+        res.json({ 
+            success: true, 
+            transactions: formattedTransactions,
+            count: formattedTransactions.length
+        });
+    } catch (error) {
+        console.error('Ошибка получения истории:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение баланса пользователя по QR-данным (для POS)
+app.post('/api/pos/get-user-balance', async (req, res) => {
+    try {
+        const { qrData } = req.body;
+        
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        if (!userData.vkId || !userData.companyId) {
+            return res.status(400).json({ success: false, message: 'Неверные данные QR-кода' });
+        }
+        
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        const tier = await getUserTier(user.bonus_balance, userData.companyId);
+        
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                vkId: user.vk_id,
+                name: user.name,
+                balance: user.bonus_balance,
+                totalEarned: user.total_earned,
+                totalSpent: user.total_spent
+            },
+            tier: tier.name,
+            multiplier: tier.multiplier
+        });
+        
+    } catch (error) {
+        console.error('Ошибка получения баланса:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Начисление бонусов за покупку с записью в историю
+app.post('/api/pos/apply-bonus-v2', async (req, res) => {
+    try {
+        const { qrData, amount, storeId, cashierId } = req.body;
+        
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ success: false, message: 'Введите сумму заказа' });
+        }
+        
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        const tier = await getUserTier(user.bonus_balance, userData.companyId);
+        const bonusRate = (tier.multiplier || 1) * 10;
+        const bonusEarned = Math.floor(amount / 1000) * bonusRate;
+        
+        if (bonusEarned === 0 && amount >= 1000) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Сумма ${amount}₽ слишком мала. Минимальная сумма для начисления бонусов: 1000₽`
+            });
+        }
+        
+        // Обновляем баланс с записью транзакции
+        const newBalance = await updateBalanceWithTransaction(
+            user.id, 
+            user.company_id, 
+            bonusEarned, 
+            'earn', 
+            `Покупка на ${amount}₽ в ${storeId || 'кассе'}`,
+            { amount, storeId, cashierId, source: 'pos', bonusRate, multiplier: tier.multiplier }
+        );
+        
+        res.json({
+            success: true,
+            message: `✅ Начислено ${bonusEarned} бонусов!`,
+            newBalance: newBalance,
+            bonusEarned: bonusEarned,
+            amount: amount,
+            transaction: {
+                type: 'earn',
+                amount: amount,
+                bonusChange: bonusEarned,
+                description: `Покупка на ${amount}₽`,
+                createdAt: new Date().toISOString()
+            }
+        });
+        
+    } catch (error) {
+        console.error('Ошибка apply-bonus-v2:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Списание бонусов с записью в историю
+app.post('/api/pos/spend-bonus-v2', async (req, res) => {
+    try {
+        const { qrData, bonusToSpend, storeId, cashierId } = req.body;
+        
+        if (!bonusToSpend || bonusToSpend <= 0) {
+            return res.status(400).json({ success: false, message: 'Введите сумму списания' });
+        }
+        
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        if (user.bonus_balance < bonusToSpend) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `❌ Недостаточно бонусов. Доступно: ${user.bonus_balance}`
+            });
+        }
+        
+        const newBalance = await updateBalanceWithTransaction(
+            user.id,
+            user.company_id,
+            bonusToSpend,
+            'spend',
+            `Списание ${bonusToSpend} бонусов в ${storeId || 'кассе'}`,
+            { bonusToSpend, storeId, cashierId, source: 'pos' }
+        );
+        
+        res.json({
+            success: true,
+            message: `✅ Списано ${bonusToSpend} бонусов!`,
+            newBalance: newBalance,
+            spent: bonusToSpend,
+            transaction: {
+                type: 'spend',
+                bonusChange: -bonusToSpend,
+                description: `Списание ${bonusToSpend} бонусов`,
+                createdAt: new Date().toISOString()
+            }
+        });
+        
+    } catch (error) {
+        console.error('Ошибка spend-bonus-v2:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 

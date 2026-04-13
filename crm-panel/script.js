@@ -49,6 +49,35 @@ function closeModal(type) {
             const previewDiv = document.getElementById('promoDescriptionPreview');
             if (previewDiv) previewDiv.innerHTML = '';
         }
+        
+        if (type === 'quest') {
+            // Сбрасываем поля задания
+            const titleInput = document.getElementById('questTitle');
+            const descInput = document.getElementById('questDesc');
+            const rewardInput = document.getElementById('questReward');
+            const activeCheckbox = document.getElementById('questActive');
+            const endDateInput = document.getElementById('questEndDate');
+            const modalTitle = document.getElementById('questModalTitle');
+            
+            if (titleInput) {
+                titleInput.disabled = false;
+                titleInput.style.background = '';
+                titleInput.style.cursor = '';
+                titleInput.value = '';
+            }
+            if (descInput) {
+                descInput.disabled = false;
+                descInput.style.background = '';
+                descInput.style.cursor = '';
+                descInput.value = '';
+            }
+            if (rewardInput) rewardInput.value = 10;
+            if (activeCheckbox) activeCheckbox.checked = true;
+            if (endDateInput) endDateInput.value = '';
+            if (modalTitle) modalTitle.textContent = 'Добавить задание';
+            
+            currentEditingQuestId = null;
+        }
     }
 }
 
@@ -234,13 +263,12 @@ function escapeHtml(text) {
 // ========== МОДУЛЬ 1: АНАЛИТИКА ==========
 function loadAnalytics() {
     const stats = {
-        revenue: 1250000, activeUsers: 1234, newUsers: 89, vipCount: 156,
+        revenue: 1250000, activeUsers: 1234, newUsers: 89,
         segments: [
             { name: 'Новые', count: 234, percent: 18, color: '#3498db' },
             { name: 'Активные', count: 567, percent: 44, color: '#2ecc71' },
             { name: 'Постоянные', count: 345, percent: 27, color: '#f39c12' },
-            { name: 'Спящие', count: 456, percent: 35, color: '#e74c3c' },
-            { name: 'VIP', count: 89, percent: 7, color: '#9b59b6' }
+            { name: 'Спящие', count: 456, percent: 35, color: '#e74c3c' }
         ],
         dailyActivity: [45, 52, 48, 61, 55, 67, 72, 68, 75, 82, 78, 85, 91, 88],
         topProducts: [
@@ -257,7 +285,6 @@ function loadAnalytics() {
             <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-info"><div class="stat-value">${stats.revenue.toLocaleString()} ₽</div><div class="stat-label">Выручка за месяц</div><div class="stat-trend up">↑ +12%</div></div></div>
             <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><div class="stat-value">${stats.activeUsers}</div><div class="stat-label">Активных пользователей</div><div class="stat-trend up">↑ +8%</div></div></div>
             <div class="stat-card"><div class="stat-icon">🆕</div><div class="stat-info"><div class="stat-value">${stats.newUsers}</div><div class="stat-label">Новых за месяц</div><div class="stat-trend up">↑ +23%</div></div></div>
-            <div class="stat-card"><div class="stat-icon">💎</div><div class="stat-info"><div class="stat-value">${stats.vipCount}</div><div class="stat-label">VIP-клиентов</div><div class="stat-trend up">↑ +5%</div></div></div>
         `;
     }
     
@@ -456,6 +483,111 @@ function showSaveIndicator() {
 
 function loadLoyaltySettings() {
     loadTiersSettings();
+    loadDailyBonusSettings();
+}
+
+// ========== НАСТРОЙКИ ЕЖЕДНЕВНОГО БОНУСА ==========
+let dailyBonusConfig = {
+    enabled: true,
+    baseAmount: 10,
+    streakBonus: 5
+};
+
+async function loadDailyBonusSettings() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/dailyBonusSettings`);
+        const data = await response.json();
+        
+        if (data.success && data.settings) {
+            dailyBonusConfig = data.settings;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки настроек ежедневного бонуса:', error);
+    }
+    
+    renderDailyBonusSettings();
+}
+
+function renderDailyBonusSettings() {
+    const enabledCheckbox = document.getElementById('dailyBonusEnabled');
+    const baseAmountInput = document.getElementById('dailyBonusBaseAmount');
+    const streakBonusInput = document.getElementById('dailyBonusStreakBonus');
+    const statusSpan = document.getElementById('dailyBonusStatus');
+    const previewBase = document.getElementById('previewBaseAmount');
+    const previewStreak = document.getElementById('previewStreakBonus');
+    
+    if (enabledCheckbox) {
+        enabledCheckbox.checked = dailyBonusConfig.enabled;
+    }
+    
+    if (baseAmountInput) {
+        baseAmountInput.value = dailyBonusConfig.baseAmount || 10;
+    }
+    
+    if (streakBonusInput) {
+        streakBonusInput.value = dailyBonusConfig.streakBonus || 5;
+    }
+    
+    if (statusSpan) {
+        statusSpan.textContent = dailyBonusConfig.enabled ? '✅ Включен' : '❌ Отключен';
+        statusSpan.style.color = dailyBonusConfig.enabled ? '#2ecc71' : '#e74c3c';
+    }
+    
+    if (previewBase) {
+        previewBase.textContent = dailyBonusConfig.baseAmount || 10;
+    }
+    
+    if (previewStreak) {
+        previewStreak.textContent = dailyBonusConfig.streakBonus || 5;
+    }
+}
+
+async function updateDailyBonusSetting(field, value) {
+    if (!currentBusiness) return;
+    
+    dailyBonusConfig[field] = value;
+    
+    // Обновляем статус
+    const statusSpan = document.getElementById('dailyBonusStatus');
+    if (statusSpan && field === 'enabled') {
+        statusSpan.textContent = value ? '✅ Включен' : '❌ Отключен';
+        statusSpan.style.color = value ? '#2ecc71' : '#e74c3c';
+    }
+    
+    // Обновляем предпросмотр
+    if (field === 'baseAmount') {
+        const previewBase = document.getElementById('previewBaseAmount');
+        if (previewBase) previewBase.textContent = value;
+    }
+    if (field === 'streakBonus') {
+        const previewStreak = document.getElementById('previewStreakBonus');
+        if (previewStreak) previewStreak.textContent = value;
+    }
+    
+    // Сохраняем с задержкой
+    if (window.dailyBonusSaveTimeout) clearTimeout(window.dailyBonusSaveTimeout);
+    window.dailyBonusSaveTimeout = setTimeout(() => saveDailyBonusSettings(), 500);
+}
+
+async function saveDailyBonusSettings() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/dailyBonusSettings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dailyBonusConfig)
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showSaveIndicator();
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения настроек ежедневного бонуса:', error);
+    }
 }
 
 function saveLoyaltySettings() {
@@ -1066,32 +1198,33 @@ function renderQuestsManagerList() {
     const container = document.getElementById('questsManagerList');
     if (!container) return;
     if (!questsManager || questsManager.length === 0) {
-        container.innerHTML = '<div class="empty-state">Нет заданий. Добавьте первое!</div>';
+        container.innerHTML = '<div class="empty-state">Нет заданий. Задания создаются автоматически при регистрации компании.</div>';
         return;
     }
     
     container.innerHTML = questsManager.map(quest => {
-        const createdAt = new Date(quest.created_at);
-        const expiresDays = quest.expires_days || 30;
-        const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
-        const isExpired = expiresAt < new Date();
+        const endDate = quest.end_date ? new Date(quest.end_date) : null;
+        const isExpired = endDate ? endDate < new Date() : false;
         const status = isExpired ? 'expired' : (quest.active ? 'active' : 'inactive');
         const statusText = isExpired ? 'Окончено' : (quest.active ? 'Активно' : 'Отключено');
         
         return `
-            <div class="quest-manager-item">
-                <div class="quest-header">
-                    <div class="quest-emoji">${quest.emoji || '✅'}</div>
-                    <div class="quest-title">${escapeHtml(quest.title)}</div>
-                    <div class="quest-reward">+${quest.reward} бонусов</div>
-                    <div class="quest-status ${status}">${statusText}</div>
-                    <button class="btn-remove" onclick="deleteQuest(${quest.id})">🗑️</button>
-                    <button class="btn-edit" onclick="editQuest(${quest.id})">✏️</button>
+            <div class="promotion-item">
+                <div class="promotion-header">
+                    <div class="promotion-emojis">${quest.emoji || '✅'}</div>
+                    <div class="promotion-name">${escapeHtml(quest.title)}</div>
+                    <div class="promotion-reward" style="background:#ffd966; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700;">+${quest.reward} бонусов</div>
+                    <div class="promotion-status ${status}">${statusText}</div>
+                    <button class="btn-edit" onclick="editQuest(${quest.id})" style="background:#17a2b8; color:white; border:none; padding:6px 12px; border-radius:8px; cursor:pointer;">✏️</button>
                 </div>
-                <div class="quest-desc">${escapeHtml(quest.description || '')}</div>
-                <div class="quest-expires">⏱️ Срок действия: ${expiresDays} дней (до ${expiresAt.toLocaleDateString()})</div>
-                <div class="quest-actions">
-                    <label>Активно: <input type="checkbox" ${quest.active && !isExpired ? 'checked' : ''} ${isExpired ? 'disabled' : ''} onchange="toggleQuest(${quest.id}, this.checked)"></label>
+                <div class="promotion-desc" style="font-size:13px; color:#555; margin:8px 0 4px 60px;">${escapeHtml(quest.description || '')}</div>
+                <div class="promotion-dates" style="font-size:11px; color:#999; margin-left:60px;">
+                    ${endDate ? `📅 Действует до: ${endDate.toLocaleDateString('ru-RU')}` : '⏱️ Срок не установлен'}
+                    ${isExpired ? '<span style="color:#e74c3c; margin-left:8px;">⏰ Задание завершено</span>' : ''}
+                    ${status === 'active' ? '<span style="color:#2ecc71; margin-left:8px;">✅ Активно сейчас</span>' : ''}
+                </div>
+                <div class="promotion-actions" style="margin-left:60px; margin-top:8px;">
+                    <label style="font-size:13px;">Активно: <input type="checkbox" ${quest.active && !isExpired ? 'checked' : ''} ${isExpired ? 'disabled' : ''} onchange="toggleQuest(${quest.id}, this.checked)"></label>
                 </div>
             </div>
         `;
@@ -1099,16 +1232,7 @@ function renderQuestsManagerList() {
 }
 
 function showAddQuestModal() {
-    openModal('quest');
-    document.getElementById('questTitle').value = '';
-    document.getElementById('questDesc').value = '';
-    document.getElementById('questReward').value = 10;
-    document.getElementById('questActive').checked = true;
-    document.getElementById('questEmoji').value = '✅';
-    document.getElementById('questExpiresDays').value = 30;
-    document.getElementById('questPresetSelect').value = '';
-    document.getElementById('questModalTitle').textContent = 'Добавить задание';
-    currentEditingQuestId = null;
+    alert('❌ Добавление новых заданий отключено.\nЗадания создаются автоматически при регистрации компании.\nВы можете только редактировать существующие задания через кнопку ✏️');
 }
 
 async function editQuest(questId) {
@@ -1116,27 +1240,60 @@ async function editQuest(questId) {
     if (!quest) return;
     
     currentEditingQuestId = questId;
-    document.getElementById('questTitle').value = quest.title;
-    document.getElementById('questDesc').value = quest.description || '';
-    document.getElementById('questReward').value = quest.reward;
-    document.getElementById('questActive').checked = quest.active;
-    document.getElementById('questEmoji').value = quest.emoji || '✅';
-    document.getElementById('questExpiresDays').value = quest.expires_days || 30;
+    
+    // Заполняем поля названия и описания (только для чтения)
+    const titleInput = document.getElementById('questTitle');
+    const descInput = document.getElementById('questDesc');
+    
+    if (titleInput) {
+        titleInput.value = quest.title;
+        titleInput.disabled = true;
+        titleInput.style.background = '#f0f0f0';
+        titleInput.style.cursor = 'not-allowed';
+    }
+    
+    if (descInput) {
+        descInput.value = quest.description || '';
+        descInput.disabled = true;
+        descInput.style.background = '#f0f0f0';
+        descInput.style.cursor = 'not-allowed';
+    }
+    
+    // Разрешаем редактировать только награду и срок
+    const rewardInput = document.getElementById('questReward');
+    if (rewardInput) {
+        rewardInput.value = quest.reward;
+    }
+    
+    const activeCheckbox = document.getElementById('questActive');
+    if (activeCheckbox) {
+        activeCheckbox.checked = quest.active;
+    }
+    
+    // Устанавливаем дату окончания если есть
+    const endDateInput = document.getElementById('questEndDate');
+    if (endDateInput) {
+        if (quest.end_date) {
+            const endDate = new Date(quest.end_date);
+            endDateInput.value = endDate.toISOString().slice(0, 16);
+        } else {
+            endDateInput.value = '';
+        }
+    }
+    
     document.getElementById('questModalTitle').textContent = 'Редактировать задание';
     openModal('quest');
 }
 
 async function saveQuest() {
-    const emoji = document.getElementById('questEmoji').value;
-    const title = document.getElementById('questTitle').value.trim();
-    const description = document.getElementById('questDesc').value.trim();
     const reward = parseInt(document.getElementById('questReward').value) || 10;
     const active = document.getElementById('questActive').checked;
-    const expiresDays = parseInt(document.getElementById('questExpiresDays').value) || 30;
+    const endDate = document.getElementById('questEndDate').value;
     const errorElement = document.getElementById('questError');
     
-    if (!title) {
-        errorElement.textContent = 'Введите название задания';
+    // Валидация награды
+    if (reward <= 0) {
+        errorElement.textContent = '❌ Укажите количество бонусов (больше 0)';
         errorElement.style.display = 'block';
         setTimeout(() => errorElement.style.display = 'none', 3000);
         return;
@@ -1148,27 +1305,18 @@ async function saveQuest() {
     saveBtn.disabled = true;
     
     try {
-        let response;
-        if (currentEditingQuestId) {
-            response = await fetch(`${API_URL}/api/quests/${currentEditingQuestId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ emoji, title, description, reward, active, expiresDays })
-            });
-        } else {
-            response = await fetch(`${API_URL}/api/quests`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ companyId: currentBusiness.id, emoji, title, description, reward, active, expiresDays })
-            });
-        }
+        const response = await fetch(`${API_URL}/api/quests/${currentEditingQuestId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reward, active, endDate })
+        });
         
         const data = await response.json();
         
         if (response.ok && data.success) {
             await loadPromotionsAndQuestsFromDB();
             closeModal('quest');
-            alert(currentEditingQuestId ? '✅ Задание обновлено!' : '✅ Задание сохранено!');
+            alert('✅ Задание обновлено!');
         } else {
             errorElement.textContent = data.message || 'Ошибка сохранения';
             errorElement.style.display = 'block';
@@ -1185,18 +1333,6 @@ async function saveQuest() {
     }
 }
 
-async function deleteQuest(id) {
-    if (confirm('Удалить задание?')) {
-        try {
-            await fetch(`${API_URL}/api/quests/${id}`, { method: 'DELETE' });
-            await loadPromotionsAndQuestsFromDB();
-            alert('✅ Задание удалено!');
-        } catch (error) {
-            alert('❌ Ошибка удаления');
-        }
-    }
-}
-
 async function toggleQuest(id, isActive) {
     const quest = questsManager.find(q => q.id === id);
     if (quest) {
@@ -1205,7 +1341,7 @@ async function toggleQuest(id, isActive) {
             await fetch(`${API_URL}/api/quests/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(quest)
+                body: JSON.stringify({ active: isActive })
             });
         } catch (error) {}
         renderQuestsManagerList();
@@ -1421,11 +1557,17 @@ function renderWheelSettings() {
                     <input type="number" id="wheelMaxSpins" value="${wheelSettings.maxSpinsPerDay}" min="1" max="100" onchange="updateWheelMaxSpins(this.value)">
                 </div>
                 <div class="wheel-setting-group">
-                    <label>🎁 Бесплатное вращение в день</label>
-                    <div class="toggle-switch" style="margin-top: 8px;">
-                        <input type="checkbox" id="wheelFreeSpin" ${wheelSettings.freeSpinDaily ? 'checked' : ''} onchange="updateWheelFreeSpin(this.checked)">
-                        <span>${wheelSettings.freeSpinDaily ? 'Да' : 'Нет'}</span>
-                    </div>
+                    <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+                        <span>🎁 Бесплатное вращение в день</span>
+                        <input type="checkbox" 
+                               id="wheelFreeSpin" 
+                               ${wheelSettings.freeSpinDaily ? 'checked' : ''} 
+                               onchange="updateWheelFreeSpin(this.checked)"
+                               style="width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: #ff4d4d;">
+                        <span id="wheelFreeSpinStatus" style="font-size: 12px; color: ${wheelSettings.freeSpinDaily ? '#2ecc71' : '#888'}">
+                            ${wheelSettings.freeSpinDaily ? '✅ Включена' : '⭕ Отключена'}
+                        </span>
+                    </label>
                 </div>
             </div>
             
@@ -1580,6 +1722,14 @@ function updateWheelMaxSpins(value) {
 
 function updateWheelFreeSpin(checked) {
     wheelSettings.freeSpinDaily = checked;
+    
+    // Обновляем текст статуса
+    const statusSpan = document.getElementById('wheelFreeSpinStatus');
+    if (statusSpan) {
+        statusSpan.textContent = checked ? '✅ Включена' : '⭕ Отключена';
+        statusSpan.style.color = checked ? '#2ecc71' : '#888';
+    }
+    
     saveWheelSettingsDebounced();
 }
 
@@ -1705,11 +1855,17 @@ function renderScratchSettings() {
                     <input type="number" id="scratchHintCost" value="${scratchSettings.hintCost}" min="0" max="100" onchange="updateScratchHintCost(this.value)">
                 </div>
                 <div class="scratch-setting-group">
-                    <label>🎁 Бесплатная подсказка в день</label>
-                    <div class="toggle-switch" style="margin-top: 8px;">
-                        <input type="checkbox" id="scratchFreeHint" ${scratchSettings.freeHintDaily ? 'checked' : ''} onchange="updateScratchFreeHint(this.checked)">
-                        <span>${scratchSettings.freeHintDaily ? 'Да' : 'Нет'}</span>
-                    </div>
+                    <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+                        <span>🎁 Бесплатная подсказка в день</span>
+                        <input type="checkbox" 
+                               id="scratchFreeHint" 
+                               ${scratchSettings.freeHintDaily ? 'checked' : ''} 
+                               onchange="updateScratchFreeHint(this.checked)"
+                               style="width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: #ff4d4d;">
+                        <span id="scratchFreeHintStatus" style="font-size: 12px; color: ${scratchSettings.freeHintDaily ? '#2ecc71' : '#888'}">
+                            ${scratchSettings.freeHintDaily ? '✅ Включена' : '⭕ Отключена'}
+                        </span>
+                    </label>
                 </div>
             </div>
             
@@ -1854,6 +2010,14 @@ function updateScratchHintCost(value) {
 
 function updateScratchFreeHint(checked) {
     scratchSettings.freeHintDaily = checked;
+    
+    // Обновляем текст статуса
+    const statusSpan = document.getElementById('scratchFreeHintStatus');
+    if (statusSpan) {
+        statusSpan.textContent = checked ? '✅ Включена' : '⭕ Отключена';
+        statusSpan.style.color = checked ? '#2ecc71' : '#888';
+    }
+    
     saveScratchSettingsDebounced();
 }
 
@@ -2014,23 +2178,158 @@ function renderMultipliersList() {
     const container = document.getElementById('multipliersList');
     if (!container) return;
     
+    if (diceSettings.betMultipliers.length === 0) {
+        container.innerHTML = '<div style="color: #888; padding: 10px;">Нет множителей</div>';
+        return;
+    }
+    
     container.innerHTML = diceSettings.betMultipliers.map((mult, idx) => `
         <div class="multiplier-tag">
-            x${mult}
-            <button onclick="removeMultiplier(${idx})">×</button>
+            <span style="font-weight: bold;">x${mult}</span>
+            <button onclick="removeMultiplier(${idx})" 
+                    style="
+                        background: #dc3545; 
+                        color: white; 
+                        border: none; 
+                        border-radius: 50%; 
+                        width: 22px; 
+                        height: 22px; 
+                        font-size: 14px; 
+                        cursor: pointer;
+                        margin-left: 8px;
+                    ">×</button>
         </div>
     `).join('');
 }
 
+// Замените существующую функцию addMultiplier на эту:
+
 function addMultiplier() {
-    const newMult = (diceSettings.betMultipliers[diceSettings.betMultipliers.length - 1] || 1) + 1;
-    if (newMult <= 20) {
+    // Создаём модальное окно для ввода множителя
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    `;
+    
+    modal.innerHTML = `
+        <div style="
+            background: #1e2538;
+            border-radius: 24px;
+            padding: 24px;
+            width: 300px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        ">
+            <h3 style="color: white; margin-bottom: 20px;">➕ Добавить множитель</h3>
+            <input type="number" 
+                   id="newMultiplierInput" 
+                   placeholder="Например: 1.5, 2, 3.7..."
+                   step="0.1"
+                   min="0.5"
+                   max="50"
+                   style="
+                       width: 100%;
+                       padding: 12px;
+                       border-radius: 12px;
+                       border: 1px solid #ff4d4d;
+                       background: #2a2f3f;
+                       color: white;
+                       font-size: 16px;
+                       text-align: center;
+                       margin-bottom: 20px;
+                   "
+                   autofocus>
+            <div style="display: flex; gap: 12px;">
+                <button id="confirmMultiplier" style="
+                    flex: 1;
+                    padding: 12px;
+                    background: linear-gradient(135deg, #2ecc71, #27ae60);
+                    border: none;
+                    border-radius: 12px;
+                    color: white;
+                    font-weight: 600;
+                    cursor: pointer;
+                ">✅ Добавить</button>
+                <button id="cancelMultiplier" style="
+                    flex: 1;
+                    padding: 12px;
+                    background: rgba(255,255,255,0.1);
+                    border: 1px solid rgba(255,255,255,0.2);
+                    border-radius: 12px;
+                    color: white;
+                    font-weight: 600;
+                    cursor: pointer;
+                ">❌ Отмена</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const input = document.getElementById('newMultiplierInput');
+    const confirmBtn = document.getElementById('confirmMultiplier');
+    const cancelBtn = document.getElementById('cancelMultiplier');
+    
+    const addMultiplierValue = () => {
+        let newMult = parseFloat(input.value);
+        
+        // Валидация
+        if (isNaN(newMult)) {
+            alert('❌ Пожалуйста, введите число');
+            return;
+        }
+        
+        if (newMult < 0.5) {
+            alert('❌ Множитель не может быть меньше 0.5');
+            return;
+        }
+        
+        if (newMult > 50) {
+            alert('❌ Множитель не может быть больше 50');
+            return;
+        }
+        
+        // Проверка на дубликат
+        if (diceSettings.betMultipliers.includes(newMult)) {
+            alert(`❌ Множитель x${newMult} уже существует`);
+            return;
+        }
+        
+        // Добавляем множитель и сортируем
         diceSettings.betMultipliers.push(newMult);
+        diceSettings.betMultipliers.sort((a, b) => a - b);
+        
         renderMultipliersList();
         saveDiceSettingsDebounced();
-    } else {
-        alert('Максимальный множитель - 20');
-    }
+        
+        modal.remove();
+        alert(`✅ Множитель x${newMult} добавлен!`);
+    };
+    
+    confirmBtn.onclick = addMultiplierValue;
+    cancelBtn.onclick = () => modal.remove();
+    
+    // Закрытие по Escape
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') modal.remove();
+        if (e.key === 'Enter') addMultiplierValue();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    
+    // Убираем обработчик при закрытии
+    const removeHandler = () => {
+        document.removeEventListener('keydown', onKeyDown);
+    };
+    modal.addEventListener('remove', removeHandler);
 }
 
 function removeMultiplier(index) {
@@ -2038,9 +2337,16 @@ function removeMultiplier(index) {
         alert('❌ Нельзя удалить последний множитель');
         return;
     }
-    diceSettings.betMultipliers.splice(index, 1);
-    renderMultipliersList();
-    saveDiceSettingsDebounced();
+    
+    const multiplier = diceSettings.betMultipliers[index];
+    
+    // Подтверждение удаления с указанием значения
+    if (confirm(`Удалить множитель x${multiplier}?`)) {
+        diceSettings.betMultipliers.splice(index, 1);
+        renderMultipliersList();
+        saveDiceSettingsDebounced();
+        alert(`✅ Множитель x${multiplier} удалён`);
+    }
 }
 
 function renderDiceCombinationsList() {

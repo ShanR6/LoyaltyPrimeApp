@@ -429,4 +429,24 @@
         font-size: 10px;
         padding: 2px 6px;
     }
+}/* Добавьте в конец ScratchCard.css */
+
+/* Анимация для баннера бесплатной подсказки */
+.free-hint-banner {
+    animation: pulse-purple 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-purple {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(155, 89, 182, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(155, 89, 182, 0);
+    }
+}
+
+/* Стиль для информационного результата */
+.game-result.info {
+    background: linear-gradient(135deg, #9b59b6, #8e44ad);
+    color: white;
 }

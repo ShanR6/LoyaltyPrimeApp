@@ -161,23 +161,21 @@
             <span class="modal-close" onclick="closeModal('quest')">&times;</span>
             <div class="modal-title" id="questModalTitle">Добавить задание</div>
             <div class="form-group">
-                <label>Выберите задание из списка</label>
-                <select id="questPresetSelect" class="form-input">
-                    <option value="">-- Выберите готовое задание --</option>
-                </select>
+                <label>Название задания</label>
+                <input type="text" id="questTitle" class="form-input" readonly style="background:#f0f0f0; cursor:not-allowed;">
             </div>
             <div class="form-group">
                 <label>Описание</label>
-                <textarea id="questDesc" class="form-input" rows="2" placeholder="Описание задания"></textarea>
+                <textarea id="questDesc" class="form-input" rows="2" readonly style="background:#f0f0f0; cursor:not-allowed;"></textarea>
             </div>
             <div class="form-group">
                 <label>Награда (бонусов)</label>
-                <input type="number" id="questReward" class="form-input" value="10">
+                <input type="number" id="questReward" class="form-input" value="10" min="1">
             </div>
             <div class="form-group">
-                <label>Срок действия (дней)</label>
-                <input type="number" id="questExpiresDays" class="form-input" value="30" min="1" max="365">
-                <small>Сколько дней задание будет активно с момента создания</small>
+                <label>Дата окончания (необязательно)</label>
+                <input type="datetime-local" id="questEndDate" class="form-input">
+                <small>Оставьте пустым, чтобы задание действовало бессрочно. После указанной даты задание станет неактивным.</small>
             </div>
             <div class="form-group">
                 <label>Активно</label>
@@ -263,6 +261,27 @@
                     </div>
                     <div class="loyalty-settings">
                         <div class="settings-card">
+                            <h3>🎁 Ежедневный бонус за вход</h3>
+                            <div class="daily-bonus-settings">
+                                <div class="setting-row">
+                                    <label>Включить ежедневный бонус:</label>
+                                    <input type="checkbox" id="dailyBonusEnabled" checked onchange="updateDailyBonusSetting('enabled', this.checked)">
+                                    <span id="dailyBonusStatus">✅ Включен</span>
+                                </div>
+                                <div class="setting-row">
+                                    <label>Базовый бонус (бонусов):</label>
+                                    <input type="number" id="dailyBonusBaseAmount" value="10" min="1" max="1000" onchange="updateDailyBonusSetting('baseAmount', parseInt(this.value))">
+                                </div>
+                                <div class="setting-row">
+                                    <label>Бонус за серию дней (каждые 7 дней):</label>
+                                    <input type="number" id="dailyBonusStreakBonus" value="5" min="0" max="500" onchange="updateDailyBonusSetting('streakBonus', parseInt(this.value))">
+                                </div>
+                                <div class="daily-bonus-preview">
+                                    <p>💡 <strong>Пример:</strong> Пользователь получает <span id="previewBaseAmount">10</span> бонусов каждый день. За серию из 7 дней дополнительно +<span id="previewStreakBonus">5</span> бонусов.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-card">
                             <h3>🏆 Уровни программы лояльности</h3>
                             <div class="tiers-info">
                                 <p class="info-text">⚡ Настройте пороги, множители бонусов и кешбэк для каждого уровня. 
@@ -309,8 +328,8 @@
     </div>
     <div class="settings-card">
         <h3>📋 Задания</h3>
+        <p class="info-text" style="margin-bottom:16px;">⚡ Задания создаются автоматически. Вы можете активировать их, настроить награду и указать срок действия.</p>
         <div id="questsManagerList"></div>
-        <button class="btn-add" onclick="showAddQuestModal()">+ Добавить задание</button>
     </div>
 </div>
 

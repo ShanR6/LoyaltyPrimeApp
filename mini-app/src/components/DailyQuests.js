@@ -130,8 +130,17 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
       if (response.ok) {
         const data = await response.json();
         
+        // Если ежедневный бонус отключен в CRM
+        if (data.disabled) {
+          setDailyBonusClaimed(true);
+          return;
+        }
+        
         if (!data.claimed) {
-          const bonusAmount = 10 + Math.floor(streak / 7) * 5;
+          // Используем настройки из CRM
+          const settings = data.settings || { baseAmount: 10, streakBonus: 5 };
+          const bonusAmount = (settings.baseAmount || 10) + Math.floor(streak / 7) * (settings.streakBonus || 5);
+          
           const claimResponse = await fetch(`${API_URL}/api/users/dailyBonus/claim`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -748,9 +748,23 @@ const loadUserData = async (companyId, vkUserId, userName) => {
 
 {activeTab === 'games' && (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <GameWheel onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
-        <DiceRoll onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
-        <ScratchCard onBalanceUpdate={updateBalanceAndStats} userBalance={currentBalance} />
+        <GameWheel 
+            onBalanceUpdate={updateBalanceAndStats} 
+            userBalance={currentBalance}
+            companyId={selectedGroup?.id}
+            userId={userId}
+        />
+        <DiceRoll 
+            onBalanceUpdate={updateBalanceAndStats} 
+            userBalance={currentBalance}
+            companyId={selectedGroup?.id}
+        />
+        <ScratchCard 
+            onBalanceUpdate={updateBalanceAndStats} 
+            userBalance={currentBalance}
+            companyId={selectedGroup?.id}
+            userId={userId}
+        />
     </div>
 )}
       
@@ -766,20 +780,118 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       
       {activeTab === 'referral' && selectedGroup && <ReferralSystem onBalanceUpdate={updateBalanceAndStats} userId={userInfo?.id} selectedGroupId={selectedGroup?.id} />}
       
-      {activeTab === 'history' && (
-        <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
-          <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📋 История операций</h3>
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            {currentGroupData?.history?.length > 0 ? currentGroupData.history.map(item => (
-              <div key={item.id} style={{ background:'rgba(0,0,0,0.3)', borderRadius:20, padding:'14px 16px' }}>
-                <div style={{ fontWeight:500, color:'white' }}>{item.desc}</div>
-                <div style={{ fontSize:11, opacity:0.5, marginTop:4, color:'white' }}>{item.date}</div>
-                <div style={{ fontSize:14, fontWeight:700, marginTop:6, color:item.type==='earn'?'#b5e4a0':'#ff9f8f' }}>{item.points} баллов</div>
+
+{activeTab === 'history' && (
+  <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
+    <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📋 История операций</h3>
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      {currentGroupData?.history?.length > 0 ? (
+        <>
+          {/* Показываем покупки из транзакций, если они есть */}
+          {currentGroupData.history.map(item => {
+            // Определяем тип операции для отображения иконки
+            let icon = '';
+            let itemColor = '';
+            
+            if (item.type === 'earn') {
+              if (item.desc.includes('покупк') || item.desc.includes('Покупка')) {
+                icon = '🛒';
+                itemColor = '#2ecc71';
+              } else if (item.desc.includes('задани') || item.desc.includes('Задани')) {
+                icon = '✅';
+                itemColor = '#3498db';
+              } else if (item.desc.includes('бонус') && item.desc.includes('Ежедневный')) {
+                icon = '📅';
+                itemColor = '#f39c12';
+              } else {
+                icon = '➕';
+                itemColor = '#b5e4a0';
+              }
+            } else {
+              if (item.desc.includes('обмен')) {
+                icon = '🎁';
+                itemColor = '#e74c3c';
+              } else {
+                icon = '➖';
+                itemColor = '#ff9f8f';
+              }
+            }
+            
+            return (
+              <div key={item.id} style={{ background:'rgba(0,0,0,0.3)', borderRadius:20, padding:'14px 16px', borderLeft: `4px solid ${itemColor}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <span style={{ fontSize:24 }}>{icon}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:500, color:'white' }}>{item.desc}</div>
+                    <div style={{ fontSize:11, opacity:0.5, marginTop:4, color:'white' }}>{item.date}</div>
+                  </div>
+                  <div style={{ fontSize:16, fontWeight:700, color:item.type==='earn' ? '#b5e4a0' : '#ff9f8f' }}>{item.points} баллов</div>
+                </div>
               </div>
-            )) : <div style={{ textAlign:'center', padding:24, opacity:0.6, color:'white' }}>Нет операций</div>}
-          </div>
+            );
+          })}
+          
+          {/* Если нужно подгрузить историю с сервера */}
+          <button 
+            onClick={async () => {
+              if (userId && selectedGroup?.id) {
+                try {
+                  const response = await fetch(`${API_URL}/api/users/${userId}/history/${selectedGroup.id}?limit=50`);
+                  const data = await response.json();
+                  if (data.success && data.transactions.length > 0) {
+                    // Добавляем транзакции с сервера в локальную историю
+                    const serverHistory = data.transactions.map(t => ({
+                      id: t.id,
+                      desc: t.description || (t.bonus_earned > 0 ? `Покупка на ${t.amount}₽` : `Списание ${t.bonus_spent} бонусов`),
+                      points: t.bonus_earned > 0 ? `+${t.bonus_earned}` : `-${t.bonus_spent}`,
+                      date: new Date(t.created_at).toLocaleString(),
+                      type: t.bonus_earned > 0 ? 'earn' : 'spend'
+                    }));
+                    
+                    // Объединяем с существующей историей и показываем
+                    const allHistory = [...serverHistory, ...(currentGroupData?.history || [])];
+                    const uniqueHistory = allHistory.filter((item, index, self) => 
+                      index === self.findIndex(i => i.id === item.id)
+                    );
+                    uniqueHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    
+                    // Обновляем отображение
+                    const historyContainer = document.getElementById('history-container');
+                    if (historyContainer) {
+                      historyContainer.innerHTML = uniqueHistory.slice(0, 50).map(item => `
+                        <div style="background:rgba(0,0,0,0.3); border-radius:20; padding:14px 16px; margin-bottom:12px;">
+                          <div style="display:flex; align-items:center; gap:10;">
+                            <span style="font-size:24">${item.type === 'earn' ? '🛒' : '💸'}</span>
+                            <div style="flex:1">
+                              <div style="font-weight:500; color:white;">${item.desc}</div>
+                              <div style="font-size:11; opacity:0.5; color:white;">${item.date}</div>
+                            </div>
+                            <div style="font-size:16; font-weight:700; color:${item.type === 'earn' ? '#b5e4a0' : '#ff9f8f'}">${item.points} баллов</div>
+                          </div>
+                        </div>
+                      `).join('');
+                    }
+                  }
+                } catch (error) {
+                  console.error('Ошибка загрузки истории с сервера:', error);
+                }
+              }
+            }}
+            style={{ background:'rgba(255,255,255,0.1)', border:'none', padding:'10px 16px', borderRadius:20, color:'white', cursor:'pointer', marginTop:8 }}
+          >
+            🔄 Загрузить историю с сервера
+          </button>
+        </>
+      ) : (
+        <div style={{ textAlign:'center', padding:24, opacity:0.6, color:'white' }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>📭</div>
+          <div>Нет операций</div>
+          <div style={{ fontSize:12, marginTop:8, opacity:0.5 }}>Совершите покупку в заведении, чтобы появилась история</div>
         </div>
       )}
+    </div>
+  </div>
+)}
 
       {showTiersModal && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => setShowTiersModal(false)}>

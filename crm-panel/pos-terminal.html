@@ -3,59 +3,207 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POS Терминал - Тест кассы</title>
+    <title>POS Терминал - Касса лояльности</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
-            background: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
+        
         .card {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
+            background: rgba(255,255,255,0.95);
+            border-radius: 24px;
+            padding: 24px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
+        }
+        
         .scanner-area {
+            background: linear-gradient(135deg, #f5f5f5, #e8e8e8);
             border: 2px dashed #ccc;
-            padding: 30px;
+            padding: 25px;
             text-align: center;
-            border-radius: 12px;
+            border-radius: 20px;
             margin-bottom: 20px;
         }
-        input, button {
-            padding: 10px 15px;
+        
+        input, button, textarea {
+            padding: 12px 16px;
             margin: 5px;
-            border-radius: 8px;
+            border-radius: 12px;
             border: 1px solid #ddd;
+            font-size: 14px;
+            transition: all 0.2s;
         }
+        
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+        
         button {
-            background: #4caf50;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
             cursor: pointer;
+            font-weight: 600;
         }
-        button:hover { opacity: 0.9; }
-        .error { color: red; }
-        .success { color: green; }
-        .user-info { background: #e8f5e9; padding: 15px; border-radius: 12px; margin-top: 15px; }
-        .balance { font-size: 24px; font-weight: bold; color: #2c3e50; }
-        pre { background: #f0f0f0; padding: 10px; border-radius: 8px; overflow-x: auto; }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .error { 
+            color: #e74c3c; 
+            background: #fdf0ed;
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 12px;
+        }
+        
+        .success { 
+            color: #27ae60; 
+            background: #e8f5e9;
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 12px;
+        }
+        
+        .info {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 12px;
+            color: #1976d2;
+        }
+        
+        .user-info { 
+            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+            padding: 16px;
+            border-radius: 16px;
+            margin-top: 15px;
+        }
+        
+        .balance { 
+            font-size: 28px; 
+            font-weight: bold; 
+            color: #2c3e50;
+        }
+        
+        .test-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .test-btn {
+            background: #3498db;
+            flex: 1;
+            font-size: 12px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .badge-earn { background: #27ae60; color: white; }
+        .badge-spend { background: #e74c3c; color: white; }
+        
+        .transaction-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        
+        .transaction-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .amount-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            margin: 10px 0;
+        }
+        
+        .qr-preview {
+            background: #f0f0f0;
+            padding: 8px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            word-break: break-all;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-    <h1>🏪 POS Терминал (Тест кассы)</h1>
+    <h1 style="color: white; text-align: center; margin-bottom: 20px;">🏪 POS Терминал</h1>
     
     <div class="card">
         <h3>📷 Шаг 1: Сканирование QR-кода</h3>
         <div class="scanner-area">
-            <p>Вставьте данные из QR-кода (скопируйте из консоли браузера)</p>
-            <textarea id="qrData" rows="3" cols="50" placeholder='{"vkId":"123456","userName":"Тест","companyId":1,"timestamp":...}'></textarea>
+            <p style="color: #666;">Вставьте данные из QR-кода (скопируйте из приложения)</p>
+            <textarea id="qrData" rows="3" cols="50" placeholder='{"vkId":"123456","userName":"Тест","companyId":1,"timestamp":...}' style="width: 100%;"></textarea>
             <br>
             <button onclick="verifyQR()">🔍 Проверить QR-код</button>
+            <div class="test-buttons">
+                <button onclick="loadTestQR(1)" class="test-btn">🍕 Пиццерия</button>
+                <button onclick="loadTestQR(2)" class="test-btn">☕ Кофейня</button>
+            </div>
         </div>
         <div id="verifyResult"></div>
     </div>
@@ -63,32 +211,58 @@
     <div class="card" id="orderSection" style="display:none;">
         <h3>🛒 Шаг 2: Оформление заказа</h3>
         <div>
-            <label>Сумма заказа (₽):</label>
-            <input type="number" id="orderAmount" placeholder="1000">
-            <button onclick="calculateBonus()">💰 Рассчитать бонусы</button>
+            <label>💰 Сумма заказа (₽):</label>
+            <input type="number" id="orderAmount" placeholder="1000" style="width: calc(100% - 120px);">
+            <button onclick="calculateBonus()">Рассчитать</button>
+        </div>
+        <div class="test-buttons">
+            <button onclick="setTestAmount(500)" class="test-btn">500₽</button>
+            <button onclick="setTestAmount(1000)" class="test-btn">1000₽</button>
+            <button onclick="setTestAmount(2500)" class="test-btn">2500₽</button>
+            <button onclick="setTestAmount(5000)" class="test-btn">5000₽</button>
+            <button onclick="setTestAmount(10000)" class="test-btn">10000₽</button>
         </div>
         <div id="bonusResult"></div>
     </div>
 
     <div class="card" id="bonusSection" style="display:none;">
-        <h3>🎁 Шаг 3: Начисление бонусов</h3>
-        <button onclick="applyBonus()">✅ Начислить бонусы за заказ</button>
+        <h3>🎁 Шаг 3: Подтверждение покупки</h3>
+        <div id="purchaseSummary" style="margin-bottom: 15px;"></div>
+        <button onclick="applyBonus()" style="width: 100%; padding: 15px;" id="applyBtn">✅ Подтвердить покупку и начислить бонусы</button>
         <div id="applyResult"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="spendSection">
         <h3>💸 Списание бонусов</h3>
         <div>
             <label>Списать бонусов:</label>
-            <input type="number" id="spendAmount" placeholder="50">
-            <button onclick="spendBonus()">💸 Списать бонусы</button>
+            <input type="number" id="spendAmount" placeholder="50" style="width: calc(100% - 120px);">
+            <button onclick="spendBonus()">Списать</button>
+        </div>
+        <div class="test-buttons">
+            <button onclick="setTestSpend(50)" class="test-btn">50</button>
+            <button onclick="setTestSpend(100)" class="test-btn">100</button>
+            <button onclick="setTestSpend(200)" class="test-btn">200</button>
+            <button onclick="setTestSpend(500)" class="test-btn">500</button>
         </div>
         <div id="spendResult"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="userInfoCard" style="display:none;">
         <h3>📊 Информация о пользователе</h3>
-        <div id="userInfo">Пока нет данных</div>
+        <div id="userInfo"></div>
+    </div>
+    
+    <div class="card" id="historySection" style="display:none;">
+        <h3>📜 История операций пользователя</h3>
+        <div id="historyStats" style="background: #f8f9fa; padding: 10px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-around;">
+            <div><strong>Всего заработано:</strong> <span id="totalEarned">0</span></div>
+            <div><strong>Всего потрачено:</strong> <span id="totalSpent">0</span></div>
+        </div>
+        <div id="historyList" style="max-height: 400px; overflow-y: auto;">
+            <div class="loading">Нет операций</div>
+        </div>
+        <button onclick="refreshHistory()" style="margin-top: 15px; width: 100%;">🔄 Обновить историю</button>
     </div>
 
     <script>
@@ -96,6 +270,8 @@
         let currentUser = null;
         let currentQrData = null;
         let currentBonusEarned = 0;
+        let currentCompanyId = null;
+        let currentMultiplier = 1;
 
         async function verifyQR() {
             const qrData = document.getElementById('qrData').value;
@@ -104,20 +280,24 @@
                 return;
             }
             
+            const verifyBtn = event ? event.target : document.querySelector('button');
+            const originalText = verifyBtn.innerText;
+            verifyBtn.innerText = '⏳ Проверка...';
+            verifyBtn.disabled = true;
+            
             try {
-                // Пробуем распарсить, если это JSON
                 try {
                     currentQrData = JSON.parse(qrData);
+                    currentCompanyId = currentQrData.companyId;
                 } catch(e) {
                     currentQrData = qrData;
                 }
                 
-                const response = await fetch(`${API_URL}/api/pos/verify-qr`, {
+                const response = await fetch(`${API_URL}/api/pos/get-user-balance`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                        amount: 0
+                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData)
                     })
                 });
                 
@@ -125,140 +305,341 @@
                 
                 if (result.success) {
                     currentUser = result.user;
+                    currentMultiplier = result.multiplier;
+                    
                     document.getElementById('verifyResult').innerHTML = `
                         <div class="success">
                             ✅ QR-код действителен!<br>
                             👤 Пользователь: ${result.user.name}<br>
-                            💰 Баланс: ${result.user.balance} бонусов
+                            💰 Баланс: ${result.user.balance} бонусов<br>
+                            🏆 Уровень: ${result.tier} (x${result.multiplier})
                         </div>
                     `;
+                    
                     document.getElementById('userInfo').innerHTML = `
                         <div class="user-info">
                             <strong>👤 ${result.user.name}</strong><br>
                             🆔 VK ID: ${result.user.vkId}<br>
                             💰 Баланс: <span class="balance">${result.user.balance}</span> бонусов<br>
-                            📈 Ставка: ${result.bonusRate} бонусов за 1000₽
+                            📈 Всего заработано: ${result.user.totalEarned || 0} бонусов<br>
+                            💸 Всего потрачено: ${result.user.totalSpent || 0} бонусов<br>
+                            🏆 Уровень: ${result.tier} (x${result.multiplier})
                         </div>
                     `;
+                    
+                    document.getElementById('userInfoCard').style.display = 'block';
                     document.getElementById('orderSection').style.display = 'block';
+                    
+                    // Загружаем историю
+                    await loadUserHistory();
                 } else {
                     document.getElementById('verifyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
                 }
             } catch (error) {
                 document.getElementById('verifyResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+            } finally {
+                verifyBtn.innerText = originalText;
+                verifyBtn.disabled = false;
             }
+        }
+
+        async function loadUserHistory() {
+            if (!currentUser || !currentCompanyId) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/users/${currentUser.id}/transactions/${currentCompanyId}?limit=50`);
+                const result = await response.json();
+                
+                if (result.success && result.transactions.length > 0) {
+                    let totalEarned = 0;
+                    let totalSpent = 0;
+                    
+                    const historyHtml = result.transactions.map(t => {
+                        if (t.bonusChange > 0) totalEarned += t.bonusChange;
+                        if (t.bonusChange < 0) totalSpent += Math.abs(t.bonusChange);
+                        
+                        const date = new Date(t.createdAt);
+                        const formattedDate = date.toLocaleString('ru-RU');
+                        const isEarn = t.type === 'earn';
+                        const bonusText = isEarn ? `+${t.bonusChange}` : `${t.bonusChange}`;
+                        const bonusClass = isEarn ? 'badge-earn' : 'badge-spend';
+                        const icon = isEarn ? '🛒' : '💸';
+                        
+                        let amountText = '';
+                        if (t.amount > 0) {
+                            amountText = `<div style="font-size: 12px; color: #666; margin-top: 5px;">💰 Сумма покупки: ${t.amount}₽</div>`;
+                        }
+                        
+                        return `
+                            <div class="transaction-item">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 20px;">${icon}</span>
+                                            <strong>${t.description || (isEarn ? 'Начисление бонусов' : 'Списание бонусов')}</strong>
+                                        </div>
+                                        <div style="font-size: 11px; color: #888; margin-top: 4px;">${formattedDate}</div>
+                                        ${amountText}
+                                        ${t.storeId ? `<div style="font-size: 11px; color: #888; margin-top: 3px;">🏪 Касса: ${t.storeId}</div>` : ''}
+                                    </div>
+                                    <span class="badge ${bonusClass}" style="font-size: 14px; padding: 6px 12px;">${bonusText} бонусов</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    document.getElementById('historyList').innerHTML = historyHtml;
+                    document.getElementById('totalEarned').innerText = totalEarned;
+                    document.getElementById('totalSpent').innerText = totalSpent;
+                    document.getElementById('historySection').style.display = 'block';
+                } else {
+                    document.getElementById('historyList').innerHTML = '<div class="loading">📭 История операций пуста</div>';
+                    document.getElementById('historySection').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки истории:', error);
+                document.getElementById('historyList').innerHTML = '<div class="error">❌ Ошибка загрузки истории</div>';
+            }
+        }
+        
+        async function refreshHistory() {
+            document.getElementById('historyList').innerHTML = '<div class="loading"><div class="spinner"></div> Загрузка...</div>';
+            await loadUserHistory();
         }
 
         async function calculateBonus() {
             const amount = document.getElementById('orderAmount').value;
-            if (!amount) {
-                alert('Введите сумму заказа');
+            if (!amount || amount <= 0) {
+                alert('Введите сумму заказа больше 0');
                 return;
             }
             
-            const response = await fetch(`${API_URL}/api/pos/verify-qr`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                    amount: parseInt(amount)
-                })
-            });
+            const amountNum = parseInt(amount);
+            const bonusRate = currentMultiplier * 10;
+            const bonusEarned = Math.floor(amountNum / 1000) * bonusRate;
+            currentBonusEarned = bonusEarned;
             
-            const result = await response.json();
+            document.getElementById('bonusResult').innerHTML = `
+                <div class="success">
+                    🎉 За заказ на сумму ${amountNum}₽ клиент получит ${bonusEarned} бонусов!<br>
+                    📈 Множитель: x${currentMultiplier} (${bonusRate} бонусов за 1000₽)
+                </div>
+            `;
             
-            if (result.success) {
-                currentBonusEarned = result.bonusEarned;
-                document.getElementById('bonusResult').innerHTML = `
-                    <div class="success">
-                        🎉 За заказ на сумму ${amount}₽ клиент получит ${result.bonusEarned} бонусов!
-                    </div>
-                `;
-                document.getElementById('bonusSection').style.display = 'block';
-            }
+            document.getElementById('purchaseSummary').innerHTML = `
+                <div class="info">
+                    <strong>Сводка заказа:</strong><br>
+                    💰 Сумма: ${amountNum}₽<br>
+                    ⭐ Бонусов к начислению: ${bonusEarned}<br>
+                    👤 Пользователь: ${currentUser?.name}
+                </div>
+            `;
+            
+            document.getElementById('bonusSection').style.display = 'block';
         }
 
         async function applyBonus() {
             const amount = document.getElementById('orderAmount').value;
             
-            const response = await fetch(`${API_URL}/api/pos/apply-bonus`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                    amount: parseInt(amount),
-                    storeId: 'test_store_001',
-                    cashierId: 'cashier_001'
-                })
-            });
+            if (!amount || amount <= 0) {
+                alert('Введите сумму заказа');
+                return;
+            }
             
-            const result = await response.json();
+            const applyBtn = document.getElementById('applyBtn');
+            const originalText = applyBtn.innerText;
+            applyBtn.innerText = '⏳ Обработка...';
+            applyBtn.disabled = true;
             
-            if (result.success) {
-                document.getElementById('applyResult').innerHTML = `
-                    <div class="success">
-                        ✅ ${result.message}<br>
-                        💰 Новый баланс: ${result.newBalance} бонусов
-                    </div>
-                `;
-                // Обновляем баланс в интерфейсе
-                if (currentUser) {
-                    currentUser.balance = result.newBalance;
-                    document.getElementById('userInfo').innerHTML = `
-                        <div class="user-info">
-                            <strong>👤 ${currentUser.name}</strong><br>
-                            🆔 VK ID: ${currentUser.vkId}<br>
-                            💰 Баланс: <span class="balance">${result.newBalance}</span> бонусов
+            try {
+                const response = await fetch(`${API_URL}/api/pos/apply-bonus-v2`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                        amount: parseInt(amount),
+                        storeId: 'POS_Terminal_001',
+                        cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('applyResult').innerHTML = `
+                        <div class="success">
+                            ✅ ${result.message}<br>
+                            💰 Новый баланс: ${result.newBalance} бонусов<br>
+                            📝 Покупка на сумму ${amount}₽ добавлена в историю
                         </div>
                     `;
+                    
+                    // Обновляем информацию о пользователе
+                    if (currentUser) {
+                        currentUser.balance = result.newBalance;
+                        const balanceSpan = document.querySelector('#userInfo .balance');
+                        if (balanceSpan) balanceSpan.innerText = result.newBalance;
+                    }
+                    
+                    // Обновляем историю
+                    await loadUserHistory();
+                    
+                    // Очищаем форму
+                    document.getElementById('orderAmount').value = '';
+                    document.getElementById('bonusResult').innerHTML = '';
+                    document.getElementById('purchaseSummary').innerHTML = '';
+                    document.getElementById('bonusSection').style.display = 'none';
+                    
+                    // Показываем уведомление
+                    showNotification('Покупка оформлена!', 'success');
+                } else {
+                    document.getElementById('applyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+                    showNotification(result.message, 'error');
                 }
-                document.getElementById('bonusSection').style.display = 'none';
-            } else {
-                document.getElementById('applyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+            } catch (error) {
+                document.getElementById('applyResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+                showNotification('Ошибка при оформлении покупки', 'error');
+            } finally {
+                applyBtn.innerText = originalText;
+                applyBtn.disabled = false;
             }
         }
 
         async function spendBonus() {
             const spendAmount = document.getElementById('spendAmount').value;
-            if (!spendAmount || !currentQrData) {
-                alert('Введите сумму списания и отсканируйте QR-код');
+            if (!spendAmount || spendAmount <= 0) {
+                alert('Введите сумму списания больше 0');
                 return;
             }
             
-            const response = await fetch(`${API_URL}/api/pos/spend-bonus`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                    bonusToSpend: parseInt(spendAmount),
-                    storeId: 'test_store_001',
-                    cashierId: 'cashier_001'
-                })
-            });
+            if (!currentQrData) {
+                alert('Сначала отсканируйте QR-код');
+                return;
+            }
             
-            const result = await response.json();
+            const spendBtn = event.target;
+            const originalText = spendBtn.innerText;
+            spendBtn.innerText = '⏳ Обработка...';
+            spendBtn.disabled = true;
             
-            if (result.success) {
-                document.getElementById('spendResult').innerHTML = `
-                    <div class="success">
-                        ✅ Списано ${result.spent} бонусов!<br>
-                        💰 Новый баланс: ${result.newBalance} бонусов
-                    </div>
-                `;
-                if (currentUser) {
-                    currentUser.balance = result.newBalance;
-                    document.getElementById('userInfo').innerHTML = `
-                        <div class="user-info">
-                            <strong>👤 ${currentUser.name}</strong><br>
-                            🆔 VK ID: ${currentUser.vkId}<br>
-                            💰 Баланс: <span class="balance">${result.newBalance}</span> бонусов
+            try {
+                const response = await fetch(`${API_URL}/api/pos/spend-bonus-v2`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                        bonusToSpend: parseInt(spendAmount),
+                        storeId: 'POS_Terminal_001',
+                        cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('spendResult').innerHTML = `
+                        <div class="success">
+                            ✅ ${result.message}<br>
+                            💰 Новый баланс: ${result.newBalance} бонусов
                         </div>
                     `;
+                    
+                    if (currentUser) {
+                        currentUser.balance = result.newBalance;
+                        const balanceSpan = document.querySelector('#userInfo .balance');
+                        if (balanceSpan) balanceSpan.innerText = result.newBalance;
+                    }
+                    
+                    await loadUserHistory();
+                    document.getElementById('spendAmount').value = '';
+                    showNotification(`Списано ${spendAmount} бонусов`, 'success');
+                } else {
+                    document.getElementById('spendResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+                    showNotification(result.message, 'error');
                 }
-            } else {
-                document.getElementById('spendResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+            } catch (error) {
+                document.getElementById('spendResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+                showNotification('Ошибка при списании бонусов', 'error');
+            } finally {
+                spendBtn.innerText = originalText;
+                spendBtn.disabled = false;
             }
         }
+        
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: ${type === 'success' ? '#27ae60' : (type === 'error' ? '#e74c3c' : '#3498db')};
+                color: white;
+                padding: 12px 24px;
+                border-radius: 40px;
+                font-size: 14px;
+                font-weight: 600;
+                z-index: 1000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                animation: slideUp 0.3s ease;
+            `;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideDown 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+        
+        function setTestAmount(amount) {
+            document.getElementById('orderAmount').value = amount;
+            calculateBonus();
+        }
+        
+        function setTestSpend(amount) {
+            document.getElementById('spendAmount').value = amount;
+        }
+        
+        function loadTestQR(companyId) {
+            const testQR = {
+                vkId: "1",
+                userName: "Тестовый Пользователь",
+                companyId: companyId,
+                companyName: companyId === 1 ? "Пиццерия \"Маргарита\"" : "Кофейня \"Кофеин\"",
+                timestamp: Date.now(),
+                expiresIn: 300000,
+                version: "1.0"
+            };
+            document.getElementById('qrData').value = JSON.stringify(testQR, null, 2);
+            verifyQR();
+        }
+        
+        // Добавляем стили для анимаций
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideUp {
+                from {
+                    transform: translateX(-50%) translateY(100px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(-50%) translateY(0);
+                    opacity: 1;
+                }
+            }
+            @keyframes slideDown {
+                from {
+                    transform: translateX(-50%) translateY(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(-50%) translateY(100px);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
