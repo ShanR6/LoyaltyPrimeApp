@@ -33,7 +33,9 @@ const {
 	getGameSettings,
     saveGameSettings,
 	getDailyBonusSettings,
-	updateDailyBonusSettings
+	updateDailyBonusSettings,
+    getUserTransactions,
+    updateBalanceWithTransaction
 } = require('./database-pg');
 
 const app = express();
@@ -443,6 +445,38 @@ function getNextTier(tiers, balance) {
     }
     return null;
 }
+
+// Получение истории транзакций пользователя для VK Mini App
+app.get('/api/users/:userId/transactions/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        const limit = parseInt(req.query.limit) || 100;
+        
+        const transactions = await getUserTransactions(userId, companyId, limit);
+        
+        // Форматируем транзакции для mini-app
+        const formattedTransactions = transactions.map(t => ({
+            id: t.id,
+            type: t.bonus_earned > 0 ? 'earn' : 'spend',
+            amount: t.amount || 0,
+            bonusChange: t.bonus_earned > 0 ? t.bonus_earned : -t.bonus_spent,
+            description: t.description || (t.bonus_earned > 0 ? 'Начисление бонусов' : 'Списание бонусов'),
+            source: t.source || 'app',
+            storeId: t.store_id,
+            cashierId: t.cashier_id,
+            createdAt: t.created_at
+        }));
+        
+        res.json({
+            success: true,
+            transactions: formattedTransactions,
+            count: formattedTransactions.length
+        });
+    } catch (error) {
+        console.error('Ошибка получения транзакций:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 app.post('/api/users/dailyBonus/check', async (req, res) => {
     try {

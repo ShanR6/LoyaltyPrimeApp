@@ -93,6 +93,9 @@ async function initDatabase() {
                 description TEXT,
                 items JSONB DEFAULT '[]',
                 source VARCHAR(50) DEFAULT 'pos',
+                store_id VARCHAR(100),
+                cashier_id VARCHAR(100),
+                metadata JSONB DEFAULT '{}',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
@@ -141,6 +144,7 @@ async function initDatabase() {
         await addGameSettingsTable();  
         await addGameSettingsColumns();
         await addDailyBonusSettings(); 
+        await addTransactionColumns();
         await ensureAllQuestsExist();
         await insertTestData();
 
@@ -163,6 +167,54 @@ async function addDailyBonusSettings() {
         }
     } catch (error) {
         console.error('❌ Ошибка добавления daily_bonus_settings:', error);
+    }
+}
+
+// Добавляем недостающие колонки в таблицу transactions
+async function addTransactionColumns() {
+    try {
+        // Проверяем и добавляем колонку store_id
+        const checkStoreId = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'transactions' AND column_name = 'store_id'
+        `);
+        
+        if (checkStoreId.rows.length === 0) {
+            console.log('📝 Добавляем колонку store_id в таблицу transactions...');
+            await query(`ALTER TABLE transactions ADD COLUMN store_id VARCHAR(100)`);
+            console.log('✅ Колонка store_id добавлена');
+        }
+        
+        // Проверяем и добавляем колонку cashier_id
+        const checkCashierId = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'transactions' AND column_name = 'cashier_id'
+        `);
+        
+        if (checkCashierId.rows.length === 0) {
+            console.log('📝 Добавляем колонку cashier_id в таблицу transactions...');
+            await query(`ALTER TABLE transactions ADD COLUMN cashier_id VARCHAR(100)`);
+            console.log('✅ Колонка cashier_id добавлена');
+        }
+        
+        // Проверяем и добавляем колонку metadata
+        const checkMetadata = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'transactions' AND column_name = 'metadata'
+        `);
+        
+        if (checkMetadata.rows.length === 0) {
+            console.log('📝 Добавляем колонку metadata в таблицу transactions...');
+            await query(`ALTER TABLE transactions ADD COLUMN metadata JSONB DEFAULT '{}'`);
+            console.log('✅ Колонка metadata добавлена');
+        }
+        
+        console.log('✅ Все колонки transactions проверены');
+    } catch (error) {
+        console.error('❌ Ошибка добавления колонок transactions:', error);
     }
 }
 

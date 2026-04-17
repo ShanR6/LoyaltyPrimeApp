@@ -217,6 +217,28 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       const data = await response.json();
       if (data.success) {
         setUserId(data.user.id);
+        
+        // Синхронизируем баланс из базы данных
+        const groupData = userGroupsData[companyId] || { 
+          bonusBalance: 0, 
+          totalEarned: 0, 
+          totalSpent: 0, 
+          regDate: new Date().toLocaleDateString('ru-RU'), 
+          lastDaily: null, 
+          participatedRaffles: {}, 
+          history: [] 
+        };
+        
+        // Обновляем баланс из БД
+        groupData.bonusBalance = data.user.bonus_balance || 0;
+        groupData.totalEarned = data.user.total_earned || 0;
+        groupData.totalSpent = data.user.total_spent || 0;
+        
+        // Сохраняем обновленные данные
+        const updated = { ...userGroupsData, [companyId]: groupData };
+        setUserGroupsData(updated);
+        saveAllGroupsData(userInfo.id, updated);
+        
         const promosResponse = await fetch(`${API_URL}/api/promotions/${companyId}`);
         if (promosResponse.ok) {
           const allPromos = await promosResponse.json();
@@ -781,10 +803,10 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       {activeTab === 'referral' && selectedGroup && <ReferralSystem onBalanceUpdate={updateBalanceAndStats} userId={userInfo?.id} selectedGroupId={selectedGroup?.id} />}
       
 
-{activeTab === 'history' && (
+      {activeTab === 'history' && (
   <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
     <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📋 История операций</h3>
-    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }} id="history-container">
       {currentGroupData?.history?.length > 0 ? (
         <>
           {/* Показываем покупки из транзакций, если они есть */}
@@ -830,57 +852,6 @@ const loadUserData = async (companyId, vkUserId, userName) => {
               </div>
             );
           })}
-          
-          {/* Если нужно подгрузить историю с сервера */}
-          <button 
-            onClick={async () => {
-              if (userId && selectedGroup?.id) {
-                try {
-                  const response = await fetch(`${API_URL}/api/users/${userId}/history/${selectedGroup.id}?limit=50`);
-                  const data = await response.json();
-                  if (data.success && data.transactions.length > 0) {
-                    // Добавляем транзакции с сервера в локальную историю
-                    const serverHistory = data.transactions.map(t => ({
-                      id: t.id,
-                      desc: t.description || (t.bonus_earned > 0 ? `Покупка на ${t.amount}₽` : `Списание ${t.bonus_spent} бонусов`),
-                      points: t.bonus_earned > 0 ? `+${t.bonus_earned}` : `-${t.bonus_spent}`,
-                      date: new Date(t.created_at).toLocaleString(),
-                      type: t.bonus_earned > 0 ? 'earn' : 'spend'
-                    }));
-                    
-                    // Объединяем с существующей историей и показываем
-                    const allHistory = [...serverHistory, ...(currentGroupData?.history || [])];
-                    const uniqueHistory = allHistory.filter((item, index, self) => 
-                      index === self.findIndex(i => i.id === item.id)
-                    );
-                    uniqueHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    
-                    // Обновляем отображение
-                    const historyContainer = document.getElementById('history-container');
-                    if (historyContainer) {
-                      historyContainer.innerHTML = uniqueHistory.slice(0, 50).map(item => `
-                        <div style="background:rgba(0,0,0,0.3); border-radius:20; padding:14px 16px; margin-bottom:12px;">
-                          <div style="display:flex; align-items:center; gap:10;">
-                            <span style="font-size:24">${item.type === 'earn' ? '🛒' : '💸'}</span>
-                            <div style="flex:1">
-                              <div style="font-weight:500; color:white;">${item.desc}</div>
-                              <div style="font-size:11; opacity:0.5; color:white;">${item.date}</div>
-                            </div>
-                            <div style="font-size:16; font-weight:700; color:${item.type === 'earn' ? '#b5e4a0' : '#ff9f8f'}">${item.points} баллов</div>
-                          </div>
-                        </div>
-                      `).join('');
-                    }
-                  }
-                } catch (error) {
-                  console.error('Ошибка загрузки истории с сервера:', error);
-                }
-              }
-            }}
-            style={{ background:'rgba(255,255,255,0.1)', border:'none', padding:'10px 16px', borderRadius:20, color:'white', cursor:'pointer', marginTop:8 }}
-          >
-            🔄 Загрузить историю с сервера
-          </button>
         </>
       ) : (
         <div style={{ textAlign:'center', padding:24, opacity:0.6, color:'white' }}>
@@ -889,6 +860,104 @@ const loadUserData = async (companyId, vkUserId, userName) => {
           <div style={{ fontSize:12, marginTop:8, opacity:0.5 }}>Совершите покупку в заведении, чтобы появилась история</div>
         </div>
       )}
+      
+      {/* Кнопка загрузки истории с сервера */}
+      <button 
+        onClick={async () => {
+          if (userId && selectedGroup?.id) {
+            try {
+              const response = await fetch(`${API_URL}/api/users/${userId}/transactions/${selectedGroup.id}?limit=100`);
+              const data = await response.json();
+              if (data.success && data.transactions.length > 0) {
+                // Преобразуем транзакции с сервера в формат истории
+                const serverHistory = data.transactions.map(t => {
+                  const date = new Date(t.createdAt);
+                  const formattedDate = date.toLocaleString('ru-RU');
+                  
+                  let icon = '';
+                  let itemColor = '';
+                  
+                  if (t.type === 'earn') {
+                    if (t.description.includes('Покупка') || t.source === 'pos') {
+                      icon = '🛒';
+                      itemColor = '#2ecc71';
+                    } else if (t.description.includes('Задание')) {
+                      icon = '✅';
+                      itemColor = '#3498db';
+                    } else if (t.description.includes('Ежедневный')) {
+                      icon = '📅';
+                      itemColor = '#f39c12';
+                    } else {
+                      icon = '➕';
+                      itemColor = '#b5e4a0';
+                    }
+                  } else {
+                    if (t.description.includes('Списание')) {
+                      icon = '💸';
+                      itemColor = '#e74c3c';
+                    } else {
+                      icon = '➖';
+                      itemColor = '#ff9f8f';
+                    }
+                  }
+                  
+                  return {
+                    id: t.id,
+                    desc: t.description || (t.type === 'earn' ? 'Начисление бонусов' : 'Списание бонусов'),
+                    points: t.bonusChange > 0 ? `+${t.bonusChange}` : `${t.bonusChange}`,
+                    date: formattedDate,
+                    type: t.type,
+                    icon: icon,
+                    color: itemColor,
+                    amount: t.amount,
+                    source: t.source
+                  };
+                });
+                
+                // Показываем транзакции из базы данных
+                const historyContainer = document.getElementById('history-container');
+                if (historyContainer) {
+                  // Удаляем старые записи (кроме кнопки)
+                  const existingItems = historyContainer.querySelectorAll('div[style*="background:rgba(0,0,0,0.3)"]');
+                  existingItems.forEach(item => item.remove());
+                  
+                  // Добавляем новые транзакции
+                  const transactionsHtml = serverHistory.slice(0, 50).map(item => `
+                    <div style="background:rgba(0,0,0,0.3); border-radius:20px; padding:14px 16px; margin-bottom:12px; border-left: 4px solid ${item.color};">
+                      <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:24px">${item.icon}</span>
+                        <div style="flex:1">
+                          <div style="font-weight:500; color:white;">${item.desc}</div>
+                          <div style="font-size:11px; opacity:0.5; color:white; margin-top:4px;">${item.date}</div>
+                          ${item.amount > 0 ? `<div style="font-size:11px; opacity:0.7; color:#ffd966; margin-top:2px;">💰 Сумма: ${item.amount}₽</div>` : ''}
+                          ${item.source === 'pos' ? '<div style="font-size:10px; opacity:0.5; color:#aaa; margin-top:2px;">🏪 POS Терминал</div>' : ''}
+                        </div>
+                        <div style="font-size:16px; font-weight:700; color:${item.type === 'earn' ? '#b5e4a0' : '#ff9f8f'}">${item.points} баллов</div>
+                      </div>
+                    </div>
+                  `).join('');
+                  
+                  // Вставляем перед кнопкой
+                  const button = historyContainer.querySelector('button');
+                  if (button) {
+                    button.insertAdjacentHTML('beforebegin', transactionsHtml);
+                  } else {
+                    historyContainer.insertAdjacentHTML('beforeend', transactionsHtml);
+                  }
+                }
+              } else {
+                alert('Нет транзакций для отображения');
+              }
+            } catch (error) {
+              console.error('Ошибка загрузки истории с сервера:', error);
+              alert('Ошибка загрузки истории');
+            }
+          }
+        }}
+        style={{ background:'rgba(255,255,255,0.1)', border:'none', padding:'10px 16px', borderRadius:20, color:'white', cursor:'pointer', marginTop:8 }}
+      >
+        🔄 Загрузить историю из базы данных
+      </button>
     </div>
   </div>
 )}
