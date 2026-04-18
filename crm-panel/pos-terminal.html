@@ -253,6 +253,23 @@
         <div id="userInfo"></div>
     </div>
     
+    <div class="card" id="purchasedPromosCard" style="display:none;">
+        <h3>🎁 Купленные акции</h3>
+        <div id="purchasedPromosInfo" style="margin-bottom: 15px;"></div>
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+            <label style="font-weight: 600; display: block; margin-bottom: 8px;">Проверить использование акции:</label>
+            <select id="promotionSelect" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px;">
+                <option value="">-- Выберите акцию --</option>
+            </select>
+            <div id="promotionProducts" style="background: #fff; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: none;">
+                <strong style="font-size: 12px; color: #666;">📦 Продукты со скидкой:</strong>
+                <div id="productsList" style="margin-top: 5px; font-size: 13px;"></div>
+            </div>
+            <button onclick="checkPurchasedPromotion()" style="width: 100%; padding: 12px;">🔍 Проверить скидку</button>
+        </div>
+        <div id="purchasedPromosResult"></div>
+    </div>
+    
     <div class="card" id="historySection" style="display:none;">
         <h3>📜 История операций пользователя</h3>
         <div id="historyStats" style="background: #f8f9fa; padding: 10px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-around;">
@@ -272,6 +289,7 @@
         let currentBonusEarned = 0;
         let currentCompanyId = null;
         let currentMultiplier = 1;
+        let purchasedPromotions = [];
 
         async function verifyQR() {
             const qrData = document.getElementById('qrData').value;
@@ -332,6 +350,9 @@
                     
                     // Загружаем историю
                     await loadUserHistory();
+                    
+                    // Загружаем купленные акции
+                    await loadPurchasedPromotions();
                 } else {
                     document.getElementById('verifyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
                 }
@@ -405,6 +426,183 @@
         async function refreshHistory() {
             document.getElementById('historyList').innerHTML = '<div class="loading"><div class="spinner"></div> Загрузка...</div>';
             await loadUserHistory();
+        }
+
+        async function loadPurchasedPromotions() {
+            if (!currentUser || !currentCompanyId) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/users/${currentUser.id}/promotions/purchased/${currentCompanyId}`);
+                const result = await response.json();
+                
+                if (result.success && result.purchased && result.purchased.length > 0) {
+                    purchasedPromotions = result.purchased;
+                    
+                    // Фильтруем только неиспользованные акции
+                    const unusedPromos = purchasedPromotions.filter(p => !p.used);
+                    
+                    document.getElementById('purchasedPromosInfo').innerHTML = `
+                        <div class="info">
+                            <strong>📊 Всего куплено акций:</strong> ${purchasedPromotions.length}<br>
+                            <strong>✅ Доступно к использованию:</strong> ${unusedPromos.length}
+                        </div>
+                    `;
+                    
+                    // Заполняем выпадающий список
+                    const select = document.getElementById('promotionSelect');
+                    select.innerHTML = '<option value="">-- Выберите акцию --</option>';
+                    
+                    unusedPromos.forEach(promo => {
+                        const option = document.createElement('option');
+                        option.value = promo.promotion_id;
+                        option.dataset.products = promo.products || '';
+                        option.dataset.name = promo.name;
+                        option.textContent = `${promo.name} - ${promo.reward_value}% скидка`;
+                        select.appendChild(option);
+                    });
+                    
+                    // Показываем продукты при выборе акции
+                    select.addEventListener('change', function() {
+                        const selectedOption = this.options[this.selectedIndex];
+                        const products = selectedOption.dataset.products;
+                        const productsDiv = document.getElementById('promotionProducts');
+                        const productsList = document.getElementById('productsList');
+                        
+                        if (products) {
+                            productsDiv.style.display = 'block';
+                            productsList.innerHTML = products.split(',').map(p => 
+                                `<div style="padding: 4px 0; border-bottom: 1px solid #eee;">✓ ${p.trim()}</div>`
+                            ).join('');
+                        } else {
+                            productsDiv.style.display = 'none';
+                        }
+                    });
+                    
+                    document.getElementById('purchasedPromosCard').style.display = 'block';
+                } else {
+                    purchasedPromotions = [];
+                    document.getElementById('purchasedPromosInfo').innerHTML = `
+                        <div style="text-align: center; padding: 20px; color: #666;">
+                            <div style="font-size: 48px; margin-bottom: 12px;">📭</div>
+                            <div>У пользователя нет купленных акций</div>
+                        </div>
+                    `;
+                    document.getElementById('promotionSelect').innerHTML = '<option value="">-- Нет доступных акций --</option>';
+                    document.getElementById('purchasedPromosCard').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки купленных акций:', error);
+                document.getElementById('purchasedPromosInfo').innerHTML = '<div class="error">❌ Ошибка загрузки</div>';
+            }
+        }
+
+        async function checkPurchasedPromotion() {
+            const promotionId = document.getElementById('promotionSelect').value;
+            
+            if (!promotionId) {
+                alert('Выберите акцию из списка');
+                return;
+            }
+            
+            if (!currentQrData) {
+                alert('Сначала отсканируйте QR-код');
+                return;
+            }
+            
+            const checkBtn = event.target;
+            const originalText = checkBtn.innerText;
+            checkBtn.innerText = '⏳ Проверка...';
+            checkBtn.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/pos/check-purchased-promotion`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                        promotionId: parseInt(promotionId)
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    if (result.hasPromotion) {
+                        const productsText = result.products ? 
+                            `<div style="margin-top: 8px; font-size: 12px; color: #666;">📦 Продукты: ${result.products}</div>` : '';
+                        
+                        document.getElementById('purchasedPromosResult').innerHTML = `
+                            <div class="success">
+                                ✅ Акция найдена!<br>
+                                🎁 Скидка: <strong style="font-size: 24px;">${result.discount}%</strong>
+                                ${productsText}
+                                <div style="margin-top: 12px;">
+                                    <button onclick="usePurchasedPromotion(${promotionId}, ${result.discount})" style="width: 100%; padding: 12px; background: #27ae60;">
+                                        💰 Применить скидку к заказу
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        document.getElementById('purchasedPromosResult').innerHTML = `
+                            <div class="error">
+                                ❌ Акция не найдена или уже использована
+                            </div>
+                        `;
+                    }
+                } else {
+                    document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+            } finally {
+                checkBtn.innerText = originalText;
+                checkBtn.disabled = false;
+            }
+        }
+
+        async function usePurchasedPromotion(promotionId, discount) {
+            if (!currentQrData) {
+                alert('Сначала отсканируйте QR-код');
+                return;
+            }
+            
+            if (!confirm(`Применить скидку ${discount}% к текущему заказу?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/pos/use-purchased-promotion`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
+                        promotionId: parseInt(promotionId)
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('purchasedPromosResult').innerHTML = `
+                        <div class="success">
+                            ✅ ${result.message}<br>
+                            🎁 Скидка ${discount}% успешно применена!
+                        </div>
+                    `;
+                    
+                    // Обновляем список купленных акций
+                    await loadPurchasedPromotions();
+                    
+                    showNotification(`Скидка ${discount}% применена`, 'success');
+                } else {
+                    document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
+                    showNotification(result.message, 'error');
+                }
+            } catch (error) {
+                document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+                showNotification('Ошибка при применении скидки', 'error');
+            }
         }
 
         async function calculateBonus() {

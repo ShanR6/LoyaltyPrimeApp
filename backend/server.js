@@ -35,7 +35,14 @@ const {
 	getDailyBonusSettings,
 	updateDailyBonusSettings,
     getUserTransactions,
-    updateBalanceWithTransaction
+    updateBalanceWithTransaction,
+    updateUserBirthday,
+    getUserBirthday,
+    purchasePromotion,
+    getUserPurchasedPromotions,
+    hasUserPurchasedPromotion,
+    usePurchasedPromotion,
+    checkPromotionCycle
 } = require('./database-pg');
 
 const app = express();
@@ -114,22 +121,47 @@ app.get('/api/promotions/:companyId', async (req, res) => {
 
 app.post('/api/promotions', async (req, res) => {
     try {
-        const { companyId, name, emoji, description, startDate, endDate, active } = req.body;
-        const promotion = await addPromotion(companyId, { name, emoji, description, startDate, endDate, active });
+        const { companyId, name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = req.body;
+        
+        if (!companyId || !name) {
+            return res.status(400).json({ success: false, message: 'companyId и name обязательны' });
+        }
+        
+        const promotion = await addPromotion(companyId, { 
+            name, 
+            emoji, 
+            description, 
+            startDate, 
+            endDate, 
+            active, 
+            reward_type,
+            reward_value,
+            products,
+            requires_purchase
+        });
         res.json({ success: true, promotion });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('Ошибка создания акции:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
 app.put('/api/promotions/:id', async (req, res) => {
     try {
-        const { startDate, endDate, active, reward_type, reward_value, description } = req.body;
+        const { name, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = req.body;
         
         const updates = [];
         const values = [];
         let paramIndex = 1;
         
+        if (name !== undefined) {
+            updates.push(`name = $${paramIndex++}`);
+            values.push(name);
+        }
+        if (description !== undefined) {
+            updates.push(`description = $${paramIndex++}`);
+            values.push(description);
+        }
         if (startDate !== undefined) {
             updates.push(`start_date = $${paramIndex++}`);
             values.push(startDate || null);
@@ -150,9 +182,17 @@ app.put('/api/promotions/:id', async (req, res) => {
             updates.push(`reward_value = $${paramIndex++}`);
             values.push(reward_value);
         }
-        if (description !== undefined) {
-            updates.push(`description = $${paramIndex++}`);
-            values.push(description);
+        if (products !== undefined) {
+            updates.push(`products = $${paramIndex++}`);
+            values.push(products);
+        }
+        if (requires_purchase !== undefined) {
+            updates.push(`requires_purchase = $${paramIndex++}`);
+            values.push(requires_purchase);
+        }
+        
+        if (updates.length === 0) {
+            return res.status(400).json({ success: false, message: 'Нет данных для обновления' });
         }
         
         updates.push(`updated_at = NOW()`);
@@ -168,7 +208,7 @@ app.put('/api/promotions/:id', async (req, res) => {
         res.json({ success: true, promotion: result.rows[0] });
     } catch (error) {
         console.error('Ошибка обновления акции:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -535,6 +575,201 @@ app.put('/api/companies/:companyId/dailyBonusSettings', async (req, res) => {
         res.json({ success: true, settings });
     } catch (error) {
         console.error('Ошибка обновления настроек ежедневного бонуса:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============ API ДЛЯ ДНЯ РОЖДЕНИЯ ============
+
+app.get('/api/users/:userId/birthday', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const birthdayDate = await getUserBirthday(userId);
+        res.json({ success: true, birthday_date: birthdayDate });
+    } catch (error) {
+        console.error('Ошибка получения дня рождения:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.put('/api/users/:userId/birthday', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { birthday_date } = req.body;
+        
+        if (!birthday_date) {
+            return res.status(400).json({ success: false, message: 'Дата дня рождения обязательна' });
+        }
+        
+        // Проверяем, установлена ли уже дата
+        const existingBirthday = await getUserBirthday(userId);
+        if (existingBirthday) {
+            return res.status(400).json({ success: false, message: 'Дата дня рождения уже установлена и не может быть изменена' });
+        }
+        
+        const result = await updateUserBirthday(userId, birthday_date);
+        res.json({ success: true, birthday_date: result.birthday_date });
+    } catch (error) {
+        console.error('Ошибка обновления дня рождения:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============ API ДЛЯ ПОКУПКИ АКЦИЙ ============
+
+app.post('/api/users/:userId/promotions/:promotionId/purchase', async (req, res) => {
+    try {
+        const { userId, promotionId } = req.params;
+        const { companyId } = req.body;
+        
+        if (!companyId) {
+            return res.status(400).json({ success: false, message: 'companyId обязателен' });
+        }
+        
+        // Получаем информацию об акции
+        const promoResult = await query('SELECT * FROM promotions WHERE id = $1 AND company_id = $2', [promotionId, companyId]);
+        if (promoResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Акция не найдена' });
+        }
+        
+        const promotion = promoResult.rows[0];
+        
+        // Проверяем цикл акции (дата начала + active статус)
+        const cycleStart = promotion.start_date;
+        if (!cycleStart) {
+            return res.status(400).json({ success: false, message: 'У акции не указана дата начала' });
+        }
+        
+        // Проверяем, покупал ли пользователь уже эту акцию в текущем цикле
+        const alreadyPurchased = await hasUserPurchasedPromotion(userId, promotionId, cycleStart);
+        if (alreadyPurchased) {
+            return res.status(400).json({ success: false, message: 'Вы уже купили эту акцию. Повторная покупка возможна только после перезапуска акции.' });
+        }
+        
+        // Цена покупки = reward_value * 10 (например, скидка 20% = 200 баллов)
+        const bonusCost = promotion.reward_value * 10;
+        
+        // Покупаем акцию
+        const purchase = await purchasePromotion(userId, promotionId, companyId, cycleStart, bonusCost);
+        
+        res.json({ 
+            success: true, 
+            purchase,
+            message: `Акция "${promotion.name}" успешно куплена за ${bonusCost} баллов` 
+        });
+    } catch (error) {
+        console.error('Ошибка покупки акции:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/users/:userId/promotions/purchased/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        const purchased = await getUserPurchasedPromotions(userId, companyId);
+        res.json({ success: true, purchased });
+    } catch (error) {
+        console.error('Ошибка получения купленных акций:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============ API ДЛЯ POS ТЕРМИНАЛА - ПРОВЕРКА КУПЛЕННЫХ АКЦИЙ ============
+
+app.post('/api/pos/check-purchased-promotion', async (req, res) => {
+    try {
+        const { qrData, promotionId } = req.body;
+        
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        // Получаем информацию о цикле акции
+        const promoInfo = await checkPromotionCycle(promotionId);
+        if (!promoInfo) {
+            return res.status(404).json({ success: false, message: 'Акция не найдена' });
+        }
+        
+        const cycleStart = promoInfo.start_date;
+        
+        // Проверяем, куплена ли акция
+        const purchased = await getUserPurchasedPromotions(user.id, userData.companyId);
+        const matchingPromo = purchased.find(p => 
+            p.promotion_id === parseInt(promotionId) && 
+            p.promotion_cycle_start.getTime() === new Date(cycleStart).getTime() &&
+            !p.used
+        );
+        
+        if (!matchingPromo) {
+            return res.json({ 
+                success: true, 
+                hasPromotion: false,
+                message: 'Акция не куплена или уже использована' 
+            });
+        }
+        
+        // Получаем информацию о продуктах из акции
+        const promoDetails = await query('SELECT products FROM promotions WHERE id = $1', [promotionId]);
+        const products = promoDetails.rows.length > 0 ? promoDetails.rows[0].products : '';
+        
+        res.json({ 
+            success: true, 
+            hasPromotion: true,
+            promotion: matchingPromo,
+            discount: matchingPromo.reward_value,
+            products: products,
+            message: `Акция "${matchingPromo.name}" активна. Скидка: ${matchingPromo.reward_value}%`
+        });
+    } catch (error) {
+        console.error('Ошибка проверки купленной акции:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/pos/use-purchased-promotion', async (req, res) => {
+    try {
+        const { qrData, promotionId } = req.body;
+        
+        let userData;
+        try {
+            userData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Неверный формат QR-кода' });
+        }
+        
+        const user = await getUserByVkId(userData.vkId, userData.companyId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        // Получаем информацию о цикле акции
+        const promoInfo = await checkPromotionCycle(promotionId);
+        if (!promoInfo) {
+            return res.status(404).json({ success: false, message: 'Акция не найдена' });
+        }
+        
+        const cycleStart = promoInfo.start_date;
+        
+        // Используем акцию
+        const used = await usePurchasedPromotion(user.id, promotionId, cycleStart);
+        if (!used) {
+            return res.status(400).json({ success: false, message: 'Не удалось использовать акцию' });
+        }
+        
+        res.json({ 
+            success: true, 
+            message: `Акция успешно использована. Скидка применена.`
+        });
+    } catch (error) {
+        console.error('Ошибка использования акции:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

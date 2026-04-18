@@ -854,11 +854,27 @@ async function loadPresetPromotions() {
 }
 
 function showAddPromotionModal() {
-    alert('❌ Добавление новых акций отключено.\nВы можете только редактировать существующие акции через кнопку ✏️');
+    currentEditingPromotionId = null;
+    
+    // Очищаем поля
+    document.getElementById('promoName').value = '';
+    document.getElementById('promoName').disabled = false;
+    document.getElementById('promoName').style.background = 'white';
+    document.getElementById('promoName').style.cursor = 'text';
+    document.getElementById('promoDescription').value = '';
+    document.getElementById('promoProducts').value = '';
+    document.getElementById('promoDiscountValue').value = 10;
+    document.getElementById('promoRequiresPurchase').checked = false;
+    document.getElementById('promoStartDate').value = '';
+    document.getElementById('promoEndDate').value = '';
+    document.getElementById('promoActive').checked = true;
+    
+    document.getElementById('promotionModalTitle').textContent = '➕ Создать новую акцию';
+    document.getElementById('savePromotionBtn').textContent = '💾 Создать акцию';
+    document.getElementById('deletePromotionBtn').style.display = 'none';
+    
+    openModal('promotion');
 }
-
-// Глобальная переменная для хранения чистого описания (без любых упоминаний скидок/бонусов)
-let cleanPromoDescription = '';
 
 async function editPromotion(promotionId) {
     const promo = promotions.find(p => p.id === promotionId);
@@ -866,187 +882,72 @@ async function editPromotion(promotionId) {
     
     currentEditingPromotionId = promotionId;
     
-    // Заполняем поля (делаем их только для чтения)
+    // Заполняем поля - название теперь редактируемое
     const nameInput = document.getElementById('promoName');
-    const emojiSelect = document.getElementById('promoEmoji');
     
     nameInput.value = promo.name;
-    nameInput.disabled = true;
-    nameInput.style.background = '#f0f0f0';
-    nameInput.style.cursor = 'not-allowed';
+    nameInput.disabled = false;
+    nameInput.style.background = 'white';
+    nameInput.style.cursor = 'text';
     
-    emojiSelect.value = promo.emoji || '🎯';
-    emojiSelect.disabled = true;
-    emojiSelect.style.background = '#f0f0f0';
-    emojiSelect.style.cursor = 'not-allowed';
+    // Описание
+    document.getElementById('promoDescription').value = promo.description || '';
     
-    // Полное описание
-    let fullDescription = promo.description || '';
+    // Продукты
+    document.getElementById('promoProducts').value = promo.products || '';
     
-    // Получаем текущую награду из БД
-    const currentRewardType = promo.reward_type || 'bonus';
-    const currentRewardValue = promo.reward_value || 0;
-    let currentRewardText = '';
-    if (currentRewardType === 'bonus') {
-        currentRewardText = `+${currentRewardValue} бонусов`;
-    } else {
-        currentRewardText = `${currentRewardValue}% скидка`;
-    }
+    // Загружаем значение скидки
+    document.getElementById('promoDiscountValue').value = promo.reward_value || 0;
     
-    // 1. Удаляем награду из НАЧАЛА строки
-    let cleanDescription = fullDescription;
-    cleanDescription = cleanDescription.replace(new RegExp(`^${escapeRegex(currentRewardText)}\\s*[•|,-]?\\s*`, 'i'), '');
-    cleanDescription = cleanDescription.replace(/^[-+]\d+\s*%\s*скидка\s*[•|,-]?\s*/i, '');
-    cleanDescription = cleanDescription.replace(/^[-+]\d+\s*бонусов?\s*[•|,-]?\s*/i, '');
-    
-    // 2. Удаляем ВСЕ упоминания скидок и бонусов из ОСТАВШЕГОСЯ текста
-    // Удаляем "скидка X%" и "X% скидка"
-    cleanDescription = cleanDescription.replace(/\d+\s*%\s*скидк[аи]/gi, '');
-    cleanDescription = cleanDescription.replace(/скидк[аи]\s*\d+\s*%/gi, '');
-    cleanDescription = cleanDescription.replace(/-\d+%\s*скидка/gi, '');
-    cleanDescription = cleanDescription.replace(/\+\d+\s*бонусов?/gi, '');
-    cleanDescription = cleanDescription.replace(/\d+\s*бонусов?/gi, '');
-    
-    // 3. Удаляем одиночные проценты и числа с процентами
-    cleanDescription = cleanDescription.replace(/\d+\s*%/g, '');
-    cleanDescription = cleanDescription.replace(/-\d+/g, '');
-    cleanDescription = cleanDescription.replace(/\+\d+/g, '');
-    
-    // 4. Удаляем лишние слова-маркеры
-    cleanDescription = cleanDescription.replace(/скидк[аи]/gi, '');
-    cleanDescription = cleanDescription.replace(/бонусов?/gi, '');
-    
-    // 5. Очищаем от лишних символов и пробелов
-    cleanDescription = cleanDescription.replace(/[•|,\s-]+/g, ' ');
-    cleanDescription = cleanDescription.replace(/\s{2,}/g, ' ');
-    cleanDescription = cleanDescription.trim();
-    
-    // 6. Удаляем предлоги в начале если остались
-    cleanDescription = cleanDescription.replace(/^(на|при|за|с|со|в|во|для)\s+/i, '');
-    cleanDescription = cleanDescription.trim();
-    
-    // Сохраняем чистое описание
-    cleanPromoDescription = cleanDescription;
-    
-    console.log('Оригинальное описание:', fullDescription);
-    console.log('Текущая награда:', currentRewardText);
-    console.log('Чистое описание:', cleanPromoDescription);
-    
-    // Загружаем тип и значение вознаграждения
-    const rewardTypeSelect = document.getElementById('promoRewardType');
-    rewardTypeSelect.value = currentRewardType;
-    rewardTypeSelect.disabled = false;
-    toggleRewardFields(currentRewardType);
-    
-    if (currentRewardType === 'bonus') {
-        document.getElementById('promoBonusValue').value = currentRewardValue;
-        document.getElementById('promoBonusValue').disabled = false;
-    } else {
-        document.getElementById('promoDiscountValue').value = currentRewardValue;
-        document.getElementById('promoDiscountValue').disabled = false;
-    }
-    
-    // Добавляем обработчики
-    const bonusInput = document.getElementById('promoBonusValue');
-    const discountInput = document.getElementById('promoDiscountValue');
-    if (bonusInput) bonusInput.oninput = () => updatePreview();
-    if (discountInput) discountInput.oninput = () => updatePreview();
-    rewardTypeSelect.onchange = () => {
-        toggleRewardFields(rewardTypeSelect.value);
-        updatePreview();
-    };
+    // Требуется покупка
+    document.getElementById('promoRequiresPurchase').checked = promo.requires_purchase || false;
     
     // Даты
     if (promo.start_date) {
-        const startDate = new Date(promo.start_date);
-        document.getElementById('promoStartDate').value = startDate.toISOString().slice(0, 16);
+        const start = new Date(promo.start_date);
+        const offset = start.getTimezoneOffset();
+        const localDate = new Date(start.getTime() - (offset * 60 * 1000));
+        document.getElementById('promoStartDate').value = localDate.toISOString().slice(0, 16);
     } else {
         document.getElementById('promoStartDate').value = '';
     }
-    document.getElementById('promoStartDate').disabled = false;
     
     if (promo.end_date) {
-        const endDate = new Date(promo.end_date);
-        document.getElementById('promoEndDate').value = endDate.toISOString().slice(0, 16);
+        const end = new Date(promo.end_date);
+        const offset = end.getTimezoneOffset();
+        const localDate = new Date(end.getTime() - (offset * 60 * 1000));
+        document.getElementById('promoEndDate').value = localDate.toISOString().slice(0, 16);
     } else {
         document.getElementById('promoEndDate').value = '';
     }
-    document.getElementById('promoEndDate').disabled = false;
     
-    document.getElementById('promoActive').disabled = false;
     document.getElementById('promoActive').checked = promo.active;
     
-    // Обновляем предпросмотр
-    updatePreview();
-    
+    // Обновляем заголовок и кнопку
     document.getElementById('promotionModalTitle').textContent = '✏️ Редактировать акцию';
+    document.getElementById('savePromotionBtn').textContent = '💾 Сохранить изменения';
+    document.getElementById('deletePromotionBtn').style.display = 'block';
+    
     openModal('promotion');
-}
-// Функция для экранирования спецсимволов в регулярном выражении
-function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-// Функция обновления предпросмотра
-function updatePreview() {
-    const rewardType = document.getElementById('promoRewardType').value;
-    let rewardText = '';
-    let rewardValue = 0;
-    
-    if (rewardType === 'bonus') {
-        rewardValue = parseInt(document.getElementById('promoBonusValue').value) || 0;
-        rewardText = `+${rewardValue} бонусов`;
-    } else {
-        rewardValue = parseInt(document.getElementById('promoDiscountValue').value) || 0;
-        rewardText = `${rewardValue}% скидка`;  
-    }
-    
-    // Формируем новое описание
-    let newDescription = rewardText;
-    if (cleanPromoDescription && cleanPromoDescription.length > 0) {
-        newDescription += ' • ' + cleanPromoDescription;
-    }
-    
-    const previewDiv = document.getElementById('promoDescriptionPreview');
-    if (previewDiv) {
-        previewDiv.innerHTML = newDescription;
-    }
-}
-
-
-function toggleRewardFields(type) {
-    const bonusGroup = document.getElementById('promoBonusGroup');
-    const discountGroup = document.getElementById('promoDiscountGroup');
-    if (type === 'bonus') {
-        if (bonusGroup) bonusGroup.style.display = 'block';
-        if (discountGroup) discountGroup.style.display = 'none';
-    } else {
-        if (bonusGroup) bonusGroup.style.display = 'none';
-        if (discountGroup) discountGroup.style.display = 'block';
-    }
-    updatePreview();
 }
 
 async function savePromotion() {
-    const rewardType = document.getElementById('promoRewardType').value;
-    const rewardValue = rewardType === 'bonus' 
-        ? parseInt(document.getElementById('promoBonusValue').value) || 0
-        : parseInt(document.getElementById('promoDiscountValue').value) || 0;
+    const rewardValue = parseInt(document.getElementById('promoDiscountValue').value) || 0;
     const startDate = document.getElementById('promoStartDate').value;
     const endDate = document.getElementById('promoEndDate').value;
     const active = document.getElementById('promoActive').checked;
+    const name = document.getElementById('promoName').value.trim();
+    const description = document.getElementById('promoDescription').value.trim();
+    const products = document.getElementById('promoProducts').value.trim();
+    const requiresPurchase = document.getElementById('promoRequiresPurchase').checked;
     const errorElement = document.getElementById('promotionError');
     
-    // Формируем новое описание
-    let rewardText = '';
-    if (rewardType === 'bonus') {
-        rewardText = `+${rewardValue} бонусов`;
-    } else {
-        rewardText = `${rewardValue}% скидка`;
-    }
-    
-    let finalDescription = rewardText;
-    if (cleanPromoDescription && cleanPromoDescription.length > 0) {
-        finalDescription += ' • ' + cleanPromoDescription;
+    // Validate name
+    if (!name) {
+        errorElement.textContent = '❌ Укажите название акции';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
     }
     
     // ВАЛИДАЦИЯ ДАТ
@@ -1068,7 +969,6 @@ async function savePromotion() {
     const end = new Date(endDate);
     
     // Проверка: дата окончания должна быть ПОСЛЕ даты начала (с учетом времени)
-    // Дата начала может быть в прошлом, но окончание должно быть позже начала
     if (end <= start) {
         errorElement.textContent = '❌ Дата и время окончания должны быть ПОСЛЕ даты и времени начала.';
         errorElement.style.display = 'block';
@@ -1099,41 +999,61 @@ async function savePromotion() {
         return;
     }
     
-    // Валидация значения награды
+    // Валидация значения скидки
     if (rewardValue <= 0) {
-        errorElement.textContent = rewardType === 'bonus' ? '❌ Укажите количество бонусов (больше 0)' : '❌ Укажите размер скидки (больше 0)';
+        errorElement.textContent = '❌ Укажите размер скидки (больше 0)';
         errorElement.style.display = 'block';
         setTimeout(() => errorElement.style.display = 'none', 3000);
         return;
     }
     
-    if (rewardType === 'discount' && rewardValue > 100) {
+    if (rewardValue > 100) {
         errorElement.textContent = '❌ Скидка не может превышать 100%';
         errorElement.style.display = 'block';
         setTimeout(() => errorElement.style.display = 'none', 3000);
         return;
     }
     
+    // Проверка: выбрана ли компания
+    if (!currentBusiness || !currentBusiness.id) {
+        errorElement.textContent = '❌ Компания не выбрана. Перезагрузите страницу.';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
     try {
-        if (!currentEditingPromotionId) {
-            errorElement.textContent = 'Добавление новых акций отключено. Вы можете только редактировать существующие.';
-            errorElement.style.display = 'block';
-            setTimeout(() => errorElement.style.display = 'none', 3000);
-            return;
-        }
+        const promotionData = {
+            name,
+            description,
+            products,
+            startDate, 
+            endDate, 
+            active,
+            reward_type: 'discount',
+            reward_value: rewardValue,
+            requires_purchase: requiresPurchase
+        };
         
-        const response = await fetch(`${API_URL}/api/promotions/${currentEditingPromotionId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                startDate, 
-                endDate, 
-                active,
-                reward_type: rewardType,
-                reward_value: rewardValue,
-                description: finalDescription
-            })
-        });
+        let response;
+        if (currentEditingPromotionId) {
+            // Обновляем существующую акцию
+            response = await fetch(`${API_URL}/api/promotions/${currentEditingPromotionId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(promotionData)
+            });
+        } else {
+            // Создаем новую акцию
+            response = await fetch(`${API_URL}/api/promotions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyId: currentBusiness.id,
+                    ...promotionData
+                })
+            });
+        }
         
         const data = await response.json();
         
@@ -1144,7 +1064,7 @@ async function savePromotion() {
             const formattedStart = start.toLocaleString('ru-RU');
             const formattedEnd = end.toLocaleString('ru-RU');
             const durationHours = Math.round(diffHours * 10) / 10;
-            alert(`✅ Акция обновлена!\n📅 ${formattedStart} → ${formattedEnd}\n⏱️ Длительность: ${durationHours} часов\n${finalDescription}`);
+            alert(`✅ Акция ${currentEditingPromotionId ? 'обновлена' : 'создана'}!\n📅 ${formattedStart} → ${formattedEnd}\n⏱️ Длительность: ${durationHours} часов`);
         } else {
             errorElement.textContent = data.message || 'Ошибка сохранения';
             errorElement.style.display = 'block';
@@ -1152,9 +1072,9 @@ async function savePromotion() {
         }
     } catch (error) {
         console.error('Ошибка:', error);
-        errorElement.textContent = 'Ошибка подключения к серверу';
+        errorElement.textContent = 'Ошибка подключения к серверу: ' + error.message;
         errorElement.style.display = 'block';
-        setTimeout(() => errorElement.style.display = 'none', 3000);
+        setTimeout(() => errorElement.style.display = 'none', 5000);
     }
 }
 
@@ -1190,6 +1110,33 @@ async function togglePromotion(id, isActive) {
             });
         } catch (error) {}
         renderPromotionsList();
+    }
+}
+
+async function deleteCurrentPromotion() {
+    if (!currentEditingPromotionId) return;
+    
+    if (!confirm('Вы уверены, что хотите удалить эту акцию?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/api/promotions/${currentEditingPromotionId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            await loadPromotionsAndQuestsFromDB();
+            closeModal('promotion');
+            alert('✅ Акция успешно удалена');
+        } else {
+            alert('❌ Ошибка удаления акции');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('❌ Ошибка подключения к серверу');
     }
 }
 

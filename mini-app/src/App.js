@@ -36,6 +36,9 @@ export function App() {
   const [userId, setUserId] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [brandColor, setBrandColor] = useState('#ff4d4d');
+  const [birthdayDate, setBirthdayDate] = useState(null);
+  const [showBirthdayModal, setShowBirthdayModal] = useState(false);
+  const [purchasedPromotions, setPurchasedPromotions] = useState([]);
   
   const getCurrentTier = (balance) => {
     if (tiers && tiers.length > 0) {
@@ -265,6 +268,33 @@ const loadUserData = async (companyId, vkUserId, userName) => {
           setPromotions(activePromotions);
           console.log('Активные акции для VK Mini App:', activePromotions.length);
         }
+        
+        // Загружаем дату дня рождения
+        try {
+          const birthdayResponse = await fetch(`${API_URL}/api/users/${data.user.id}/birthday`);
+          if (birthdayResponse.ok) {
+            const birthdayData = await birthdayResponse.json();
+            if (birthdayData.success && birthdayData.birthday_date) {
+              setBirthdayDate(birthdayData.birthday_date);
+            }
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки дня рождения:', error);
+        }
+        
+        // Загружаем купленные акции
+        try {
+          const purchasedResponse = await fetch(`${API_URL}/api/users/${data.user.id}/promotions/purchased/${companyId}`);
+          if (purchasedResponse.ok) {
+            const purchasedData = await purchasedResponse.json();
+            if (purchasedData.success) {
+              setPurchasedPromotions(purchasedData.purchased || []);
+            }
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки купленных акций:', error);
+        }
+        
         return data;
       }
     } catch (error) {
@@ -356,6 +386,94 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       }
     } else {
       showModal('Недостаточно баллов', `Вам не хватает ${reward.cost - cur.bonusBalance} бонусов в "${selectedGroup.name}"`);
+    }
+  };
+
+  // Функция сохранения дня рождения
+  const saveBirthday = async (date) => {
+    if (!userId) {
+      showModal('Ошибка', 'Пользователь не найден');
+      return false;
+    }
+    
+    if (birthdayDate) {
+      showModal('Ошибка', 'Дата дня рождения уже установлена и не может быть изменена');
+      return false;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/users/${userId}/birthday`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ birthday_date: date })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setBirthdayDate(date);
+        setShowBirthdayModal(false);
+        showModal('✅ Успешно!', 'Дата дня рождения сохранена');
+        return true;
+      } else {
+        showModal('Ошибка', data.message || 'Не удалось сохранить дату');
+        return false;
+      }
+    } catch (error) {
+      console.error('Ошибка сохранения дня рождения:', error);
+      showModal('Ошибка', 'Ошибка подключения к серверу');
+      return false;
+    }
+  };
+
+  // Функция покупки акции
+  const purchasePromotion = async (promotion) => {
+    if (!userId || !selectedGroup) {
+      showModal('Ошибка', 'Выберите компанию');
+      return;
+    }
+    
+    const bonusCost = promotion.reward_value * 10;
+    const cur = getCurrentGroupData();
+    
+    if (cur.bonusBalance < bonusCost) {
+      showModal('Недостаточно бонусов', `Для покупки акции "${promotion.name}" нужно ${bonusCost} баллов. У вас: ${cur.bonusBalance} баллов`);
+      return;
+    }
+    
+    if (!confirm(`Купить акцию "${promotion.name}" за ${bonusCost} баллов?`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/users/${userId}/promotions/${promotion.id}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: selectedGroup.id })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        // Списываем бонусы
+        await updateBalanceAndStats(-bonusCost, 'spend');
+        
+        // Обновляем список купленных акций
+        const purchasedResponse = await fetch(`${API_URL}/api/users/${userId}/promotions/purchased/${selectedGroup.id}`);
+        if (purchasedResponse.ok) {
+          const purchasedData = await purchasedResponse.json();
+          if (purchasedData.success) {
+            setPurchasedPromotions(purchasedData.purchased || []);
+          }
+        }
+        
+        showModal('✅ Успешно!', data.message || `Акция "${promotion.name}" куплена`);
+      } else {
+        showModal('Ошибка', data.message || 'Не удалось купить акцию');
+      }
+    } catch (error) {
+      console.error('Ошибка покупки акции:', error);
+      showModal('Ошибка', 'Ошибка подключения к серверу');
     }
   };
 
@@ -534,6 +652,15 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
         <span>Потрачено бонусов:</span>
         <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalSpent || 0}</span>
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
+        <span>День рождения:</span>
+        <span 
+          style={{ fontWeight:700, color:'#ffd966', cursor:'pointer' }} 
+          onClick={() => setShowBirthdayModal(true)}
+        >
+          {birthdayDate ? new Date(birthdayDate).toLocaleDateString('ru-RU') : '📝 Установить'}
+        </span>
       </div>
       <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', color:'white' }}>
         <span>Дата регистрации:</span>
@@ -738,9 +865,58 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                       ❌ Акция завершена
                     </div>
                   )}
+                  
+                  {/* Кнопка покупки акции */}
+                  {isCurrentlyActive && (
+                    <div style={{ marginTop:12 }}>
+                      {(() => {
+                        const bonusCost = offer.reward_value * 10;
+                        const alreadyPurchased = purchasedPromotions.some(
+                          p => p.promotion_id === offer.id && 
+                               new Date(p.promotion_cycle_start).getTime() === new Date(offer.start_date).getTime()
+                        );
+                        
+                        if (alreadyPurchased) {
+                          return (
+                            <div style={{ 
+                              padding:'8px 16px', 
+                              background:'rgba(46,204,113,0.2)', 
+                              border:'1px solid #2ecc71',
+                              borderRadius:12, 
+                              fontSize:12, 
+                              color:'#2ecc71',
+                              fontWeight:600,
+                              textAlign:'center'
+                            }}>
+                              ✅ Куплена за {bonusCost} баллов
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <button 
+                            onClick={() => purchasePromotion(offer)}
+                            style={{ 
+                              padding:'8px 16px', 
+                              background: currentBalance >= bonusCost ? brandColor : '#666',
+                              border:'none',
+                              borderRadius:12, 
+                              fontSize:12, 
+                              color:'white',
+                              fontWeight:600,
+                              cursor: currentBalance >= bonusCost ? 'pointer' : 'not-allowed',
+                              width:'100%'
+                            }}
+                          >
+                            🛒 Купить за {bonusCost} баллов
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
                 <div style={{ 
-                  background: rewardType === 'bonus' ? '#2ecc71' : '#f39c12', 
+                  background: '#f39c12', 
                   padding:'6px 14px', 
                   borderRadius:20, 
                   fontSize:13, 
@@ -833,6 +1009,12 @@ const loadUserData = async (companyId, vkUserId, userName) => {
               if (item.desc.includes('обмен')) {
                 icon = '🎁';
                 itemColor = '#e74c3c';
+              } else if (item.desc.includes('акци') || item.desc.includes('promotion')) {
+                icon = '🎯';
+                itemColor = '#9b59b6';
+              } else if (item.desc.includes('скидк') || item.desc.includes('discount')) {
+                icon = '💰';
+                itemColor = '#27ae60';
               } else {
                 icon = '➖';
                 itemColor = '#ff9f8f';
@@ -895,6 +1077,9 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                     if (t.description.includes('Списание')) {
                       icon = '💸';
                       itemColor = '#e74c3c';
+                    } else if (t.description.includes('Покупка акции') || t.description.includes('promotion')) {
+                      icon = '🎯';
+                      itemColor = '#9b59b6';
                     } else {
                       icon = '➖';
                       itemColor = '#ff9f8f';
@@ -994,6 +1179,72 @@ const loadUserData = async (companyId, vkUserId, userName) => {
               <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
                 Закрыть
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showBirthdayModal && (
+        <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => !birthdayDate && setShowBirthdayModal(false)}>
+          <div style={{ background:'linear-gradient(135deg,#1e2538,#131825)', borderRadius:32, maxWidth:400, width:'100%', position:'relative' }} onClick={e=>e.stopPropagation()}>
+            <div style={{ padding:24 }}>
+              <h3 style={{ color:'white', marginBottom:12, fontSize:20 }}>🎂 День рождения</h3>
+              {birthdayDate ? (
+                <div>
+                  <p style={{ color:'#aaa', fontSize:14, marginBottom:16, textAlign:'center' }}>
+                    Ваш день рождения уже установлен:<br/>
+                    <strong style={{ color:'#ffd966', fontSize:18 }}>{new Date(birthdayDate).toLocaleDateString('ru-RU')}</strong>
+                  </p>
+                  <p style={{ color:'#ff6b6b', fontSize:12, textAlign:'center', marginBottom:20 }}>
+                    ⚠️ Дата дня рождения не может быть изменена
+                  </p>
+                  <button onClick={() => setShowBirthdayModal(false)} style={{ width:'100%', padding:12, background:'#ffd966', border:'none', borderRadius:12, color:'#1a1f2e', fontWeight:600, cursor:'pointer' }}>
+                    Закрыть
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ color:'#aaa', fontSize:13, marginBottom:16, textAlign:'center' }}>
+                    Укажите вашу дату дня рождения для получения специальных предложений и бонусов!
+                  </p>
+                  <p style={{ color:'#ff6b6b', fontSize:11, textAlign:'center', marginBottom:16 }}>
+                    ⚠️ Внимание: после сохранения дата не может быть изменена
+                  </p>
+                  <div style={{ marginBottom:20 }}>
+                    <label style={{ color:'white', fontSize:13, display:'block', marginBottom:8 }}>Выберите дату:</label>
+                    <input 
+                      type="date" 
+                      id="birthdayInput"
+                      style={{ 
+                        width:'100%', 
+                        padding:12, 
+                        borderRadius:12, 
+                        border:'1px solid rgba(255,255,255,0.2)', 
+                        background:'rgba(255,255,255,0.1)', 
+                        color:'white',
+                        fontSize:16
+                      }}
+                      max={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const dateInput = document.getElementById('birthdayInput');
+                      if (dateInput && dateInput.value) {
+                        saveBirthday(dateInput.value);
+                      } else {
+                        showModal('Ошибка', 'Пожалуйста, выберите дату');
+                      }
+                    }} 
+                    style={{ width:'100%', padding:12, background:'#ffd966', border:'none', borderRadius:12, color:'#1a1f2e', fontWeight:600, cursor:'pointer', marginBottom:8 }}
+                  >
+                    💾 Сохранить дату
+                  </button>
+                  <button onClick={() => setShowBirthdayModal(false)} style={{ width:'100%', padding:12, background:'rgba(255,255,255,0.1)', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer' }}>
+                    Отмена
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -95,41 +95,30 @@
         <div class="modal-title" id="promotionModalTitle">✏️ Редактировать акцию</div>
         
         <div class="form-group">
-            <label>Название акции (не редактируется)</label>
-            <input type="text" id="promoName" class="form-input" disabled style="background:#f0f0f0; cursor:not-allowed;">
-        </div>
-        <div class="form-group">
-            <label>Эмодзи (не редактируется)</label>
-            <select id="promoEmoji" class="form-input" disabled style="background:#f0f0f0; cursor:not-allowed;">
-                <option value="🎯">🎯</option>
-                <option value="🎉">🎉</option>
-                <option value="🎁">🎁</option>
-                <option value="🔥">🔥</option>
-                <option value="⭐">⭐</option>
-                <option value="💎">💎</option>
-                <option value="🍕">🍕</option>
-                <option value="☕">☕</option>
-            </select>
-        </div>
-        
-        <div style="border-top: 2px dashed #e9ecef; margin: 16px 0; padding-top: 8px;">
-            <p style="font-size: 12px; color: #2ecc71; margin-bottom: 12px;">✏️ Редактируемые поля:</p>
+            <label>Название акции</label>
+            <input type="text" id="promoName" class="form-input">
         </div>
         
         <div class="form-group">
-            <label>Тип вознаграждения</label>
-            <select id="promoRewardType" class="form-input">
-                <option value="bonus">🎁 Бонусы</option>
-                <option value="discount">💰 Скидка (%)</option>
-            </select>
+            <label>Описание акции</label>
+            <textarea id="promoDescription" class="form-input" rows="3" placeholder="Описание акции..."></textarea>
         </div>
-        <div class="form-group" id="promoBonusGroup">
-            <label>Количество бонусов</label>
-            <input type="number" id="promoBonusValue" class="form-input" value="50" min="0">
+        
+        <div class="form-group">
+            <label>Продукты (для POS-терминала)</label>
+            <textarea id="promoProducts" class="form-input" rows="2" placeholder="Латте, Капучино, Espresso (через запятую)"></textarea>
+            <small style="display: block; margin-top: 4px; color: #666;">Укажите конкретные продукты, на которые действует скидка</small>
         </div>
-        <div class="form-group" id="promoDiscountGroup" style="display: none;">
+        
+        <div class="form-group">
             <label>Скидка (%)</label>
             <input type="number" id="promoDiscountValue" class="form-input" value="10" min="0" max="100">
+        </div>
+        
+        <div class="form-group">
+            <label>Требуется покупка за баллы</label>
+            <input type="checkbox" id="promoRequiresPurchase">
+            <small style="display: block; margin-top: 4px;">Если отмечено, пользователи должны купить акцию за баллы в mini-app</small>
         </div>
         <div class="form-group">
             <label>Дата начала <span style="color: #ff4d4d;">*</span></label>
@@ -145,13 +134,9 @@
             <small style="display: block; margin-top: 4px;">Акция будет активна только между указанными датами</small>
         </div>
         
-        <div style="border-top: 2px dashed #e9ecef; margin: 16px 0; padding-top: 8px;">
-            <p style="font-size: 12px; color: #e74c3c; margin-bottom: 12px;">📝 Предпросмотр описания (формируется автоматически):</p>
-            <div id="promoDescriptionPreview" style="background:#f8f9fa; padding:12px; border-radius:12px; font-size:13px; color:#555; margin-bottom:12px;"></div>
-        </div>
-        
         <div class="error-message" id="promotionError"></div>
         <button class="modal-btn" id="savePromotionBtn" onclick="savePromotion()">💾 Сохранить изменения</button>
+        <button class="modal-btn" id="deletePromotionBtn" onclick="deleteCurrentPromotion()" style="background:#e74c3c; margin-top:10px;">🗑️ Удалить акцию</button>
     </div>
 </div>
 
@@ -323,8 +308,8 @@
     </div>
     <div class="settings-card">
         <h3>🎯 Акции</h3>
+        <button class="btn-save" onclick="showAddPromotionModal()" style="margin-bottom:16px;">➕ Создать новую акцию</button>
         <div id="promotionsList"></div>
-        <!-- Кнопка добавления акции удалена -->
     </div>
     <div class="settings-card">
         <h3>📋 Задания</h3>

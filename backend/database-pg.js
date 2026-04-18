@@ -41,6 +41,8 @@ async function initDatabase() {
                 name VARCHAR(255) NOT NULL,
                 emoji VARCHAR(10) DEFAULT '🎯',
                 description TEXT,
+                reward_type VARCHAR(20) DEFAULT 'discount',
+                reward_value INTEGER DEFAULT 0,
                 start_date TIMESTAMP,
                 end_date TIMESTAMP,
                 active BOOLEAN DEFAULT TRUE,
@@ -71,6 +73,7 @@ async function initDatabase() {
                 vk_id VARCHAR(100) NOT NULL,
                 company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 name VARCHAR(255),
+                birthday_date DATE,
                 bonus_balance INTEGER DEFAULT 0,
                 total_earned INTEGER DEFAULT 0,
                 total_spent INTEGER DEFAULT 0,
@@ -134,6 +137,20 @@ async function initDatabase() {
                 claimed BOOLEAN DEFAULT FALSE,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id, quest_id)
+            )
+        `);
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS user_purchased_promotions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                promotion_id INTEGER REFERENCES promotions(id) ON DELETE CASCADE,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                promotion_cycle_start TIMESTAMP NOT NULL,
+                used BOOLEAN DEFAULT FALSE,
+                used_at TIMESTAMP,
+                UNIQUE(user_id, promotion_id, promotion_cycle_start)
             )
         `);
 
@@ -494,26 +511,26 @@ function getPresetQuests() {
 }
 function getPresetPromotions() {
     return [
-        { name: 'Счастливые часы', emoji: '⏰', description: 'с 15:00 до 17:00 скидка 30% на всё меню' },
-        { name: 'День рождения', emoji: '🎂', description: '+200 бонусов имениннику в день рождения' },
-        { name: 'Семейный ужин', emoji: '👨‍👩‍👧', description: 'При заказе от 2000₽ - пицца в подарок' },
-        { name: 'Утренний кофе', emoji: '☕', description: 'С 8:00 до 11:00 второй кофе в подарок' },
-        { name: 'Пивная пятница', emoji: '🍺', description: 'Каждую пятницу скидка 20% на пиво' },
-        { name: 'Счастливый понедельник', emoji: '😊', description: 'Понедельник - двойные бонусы за покупки' },
-        { name: 'Happy Hour', emoji: '🎉', description: '17:00-19:00 коктейли по специальной цене' },
-        { name: 'Студенческая скидка', emoji: '🎓', description: 'Студентам скидка 15% по студенческому' },
-        { name: 'Клубная карта', emoji: '💳', description: 'Каждые 10 чеков - 11-й в подарок' },
-        { name: 'Новогодняя акция', emoji: '🎄', description: 'Новогоднее меню со скидкой 25%' },
-        { name: 'Летняя терраса', emoji: '☀️', description: 'Заказ на летней веранде + десерт в подарок' },
-        { name: 'Комбо-обед', emoji: '🍱', description: 'Комбо-обед со скидкой 20%' },
-        { name: 'Подарок за отзыв', emoji: '📝', description: 'Оставьте отзыв и получите 50 бонусов' },
-        { name: 'Приведи друга', emoji: '👥', description: 'Приведи друга и получи 100 бонусов' },
-        { name: 'Первый заказ', emoji: '🎁', description: 'Первый заказ - скидка 30%' },
-        { name: 'Happy Birthday Week', emoji: '🎈', description: 'Неделя скидок 15% для именинников' },
-        { name: 'Бизнес-ланч', emoji: '💼', description: 'Бизнес-ланч с 12:00 до 16:00 - скидка 10%' },
-        { name: 'Выходные с семьёй', emoji: '🏠', description: 'В выходные скидка 15% при заказе от 1500₽' },
-        { name: 'Сладкая пятница', emoji: '🍰', description: 'Десерты со скидкой 25% по пятницам' },
-        { name: 'Бонус за регистрацию', emoji: '📱', description: 'При регистрации в приложении +50 бонусов' }
+        { name: 'Латте со скидкой', emoji: '☕', description: 'Скидка на латте любого объема', reward_type: 'discount', reward_value: 15 },
+        { name: 'Капучино за баллы', emoji: '☕', description: 'Скидка на капучино в любое время', reward_type: 'discount', reward_value: 20 },
+        { name: 'Двойной эспрессо', emoji: '⚡', description: 'Скидка на двойной эспрессо', reward_type: 'discount', reward_value: 25 },
+        { name: 'Чизкейк дня', emoji: '🍰', description: 'Скидка на чизкейк', reward_type: 'discount', reward_value: 30 },
+        { name: 'Круассан + кофе', emoji: '🥐', description: 'Скидка на комбо круассан и кофе', reward_type: 'discount', reward_value: 20 },
+        { name: 'Завтрак в кофейне', emoji: '🍳', description: 'Скидка на завтрак до 12:00', reward_type: 'discount', reward_value: 15 },
+        { name: 'Обеденное меню', emoji: '🍱', description: 'Скидка на обеденное комбо', reward_type: 'discount', reward_value: 25 },
+        { name: 'Свежая выпечка', emoji: '🥖', description: 'Скидка на любую выпечку', reward_type: 'discount', reward_value: 20 },
+        { name: 'Холодные напитки', emoji: '🧊', description: 'Скидка на айс-кофе и лимонады', reward_type: 'discount', reward_value: 15 },
+        { name: 'Десерт к кофе', emoji: '🍮', description: 'Скидка на любой десерт', reward_type: 'discount', reward_value: 25 },
+        { name: 'Сезонный напиток', emoji: '🍂', description: 'Скидка на сезонные напитки', reward_type: 'discount', reward_value: 20 },
+        { name: 'Кофе с собой', emoji: '🥤', description: 'Скидка на кофе в стаканчике', reward_type: 'discount', reward_value: 10 },
+        { name: 'Вечернее удовольствие', emoji: '🌙', description: 'Скидка после 18:00 на всё меню', reward_type: 'discount', reward_value: 30 },
+        { name: 'Семейный набор', emoji: '👨‍👩‍👧‍👦', description: 'Скидка при заказе от 3 позиций', reward_type: 'discount', reward_value: 20 },
+        { name: 'Авторский чай', emoji: '🍵', description: 'Скидка на авторские чайные напитки', reward_type: 'discount', reward_value: 15 },
+        { name: 'Сэндвич + напиток', emoji: '🥪', description: 'Скидка на комбо сэндвич и напиток', reward_type: 'discount', reward_value: 25 },
+        { name: 'Утренний бонус', emoji: '🌅', description: 'Скидка с 8:00 до 10:00 на кофе', reward_type: 'discount', reward_value: 30 },
+        { name: 'Кофе для друзей', emoji: '👥', description: 'Скидка при покупке 2+ кофе', reward_type: 'discount', reward_value: 20 },
+        { name: 'Сладкий подарок', emoji: '🍪', description: 'Скидка на печенье и макаруны', reward_type: 'discount', reward_value: 15 },
+        { name: 'Кофейная дегустация', emoji: '✨', description: 'Скидка на дегустационный сет', reward_type: 'discount', reward_value: 25 }
     ];
 }
 // Добавьте эту функцию после getPresetPromotions():
@@ -526,9 +543,9 @@ async function addPresetDataForCompany(companyId) {
         const presetPromotions = getPresetPromotions();
         for (const promo of presetPromotions) {
             await query(`
-                INSERT INTO promotions (company_id, name, emoji, description, active, created_at, updated_at) 
-                VALUES ($1, $2, $3, $4, true, NOW(), NOW())
-            `, [companyId, promo.name, promo.emoji, promo.description]);
+                INSERT INTO promotions (company_id, name, emoji, description, reward_type, reward_value, active, created_at, updated_at) 
+                VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+            `, [companyId, promo.name, promo.emoji, promo.description, promo.reward_type, promo.reward_value]);
         }
         console.log(`✅ Добавлено ${presetPromotions.length} акций`);
         
@@ -684,6 +701,84 @@ async function addMissingColumns() {
             console.log('✅ Колонка emoji добавлена');
         }
         
+        // Добавляем колонки reward_type и reward_value
+        const checkRewardType = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'reward_type'
+        `);
+        
+        if (checkRewardType.rows.length === 0) {
+            console.log('📝 Добавляем колонки reward_type и reward_value в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN reward_type VARCHAR(20) DEFAULT 'discount'`);
+            await query(`ALTER TABLE promotions ADD COLUMN reward_value INTEGER DEFAULT 0`);
+            console.log('✅ Колонки reward_type и reward_value добавлены');
+        }
+        
+        // Добавляем колонку birthday_date
+        const checkBirthday = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'birthday_date'
+        `);
+        
+        if (checkBirthday.rows.length === 0) {
+            console.log('📝 Добавляем колонку birthday_date в таблицу users...');
+            await query(`ALTER TABLE users ADD COLUMN birthday_date DATE`);
+            console.log('✅ Колонка birthday_date добавлена');
+        }
+        
+        // Создаем таблицу user_purchased_promotions если не существует
+        const checkPurchasedTable = await query(`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_name = 'user_purchased_promotions'
+        `);
+        
+        if (checkPurchasedTable.rows.length === 0) {
+            console.log('📝 Создаем таблицу user_purchased_promotions...');
+            await query(`
+                CREATE TABLE user_purchased_promotions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    promotion_id INTEGER REFERENCES promotions(id) ON DELETE CASCADE,
+                    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    promotion_cycle_start TIMESTAMP NOT NULL,
+                    used BOOLEAN DEFAULT FALSE,
+                    used_at TIMESTAMP,
+                    UNIQUE(user_id, promotion_id, promotion_cycle_start)
+                )
+            `);
+            console.log('✅ Таблица user_purchased_promotions создана');
+        }
+        
+        // Добавляем колонку products
+        const checkProducts = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'products'
+        `);
+        
+        if (checkProducts.rows.length === 0) {
+            console.log('📝 Добавляем колонку products в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN products TEXT DEFAULT ''`);
+            console.log('✅ Колонка products добавлена');
+        }
+        
+        // Добавляем колонку requires_purchase
+        const checkRequiresPurchase = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'requires_purchase'
+        `);
+        
+        if (checkRequiresPurchase.rows.length === 0) {
+            console.log('📝 Добавляем колонку requires_purchase в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN requires_purchase BOOLEAN DEFAULT FALSE`);
+            console.log('✅ Колонка requires_purchase добавлена');
+        }
+        
         console.log('✅ Все недостающие колонки добавлены');
         
     } catch (error) {
@@ -765,24 +860,24 @@ async function getPromotions(companyId) {
 }
 
 async function addPromotion(companyId, promotionData) {
-    const { name, emoji, description, startDate, endDate, active } = promotionData;
+    const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = promotionData;
     const result = await query(
-        `INSERT INTO promotions (company_id, name, emoji, description, start_date, end_date, active, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
+        `INSERT INTO promotions (company_id, name, emoji, description, start_date, end_date, active, reward_type, reward_value, products, requires_purchase, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()) 
          RETURNING *`,
-        [companyId, name, emoji || '🎯', description || '', startDate || null, endDate || null, active !== undefined ? active : true]
+        [companyId, name, emoji || '🎯', description || '', startDate || null, endDate || null, active !== undefined ? active : true, reward_type || 'discount', reward_value || 0, products || '', requires_purchase || false]
     );
     return result.rows[0];
 }
 
 async function updatePromotion(promotionId, promotionData) {
-    const { name, emoji, description, startDate, endDate, active } = promotionData;
+    const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = promotionData;
     const result = await query(
         `UPDATE promotions 
-         SET name = $1, emoji = $2, description = $3, start_date = $4, end_date = $5, active = $6, updated_at = NOW()
-         WHERE id = $7
+         SET name = $1, emoji = $2, description = $3, start_date = $4, end_date = $5, active = $6, reward_type = $7, reward_value = $8, products = $9, requires_purchase = $10, updated_at = NOW()
+         WHERE id = $11
          RETURNING *`,
-        [name, emoji, description, startDate || null, endDate || null, active, promotionId]
+        [name, emoji, description, startDate || null, endDate || null, active, reward_type || 'discount', reward_value || 0, products || '', requires_purchase || false, promotionId]
     );
     return result.rows[0];
 }
@@ -1235,6 +1330,106 @@ async function getUserTransactions(userId, companyId, limit = 100) {
     return result.rows;
 }
 
+// ============ Функции для дня рождения ============
+async function updateUserBirthday(userId, birthdayDate) {
+    const result = await query(
+        'UPDATE users SET birthday_date = $1 WHERE id = $2 RETURNING birthday_date',
+        [birthdayDate, userId]
+    );
+    return result.rows[0];
+}
+
+async function getUserBirthday(userId) {
+    const result = await query(
+        'SELECT birthday_date FROM users WHERE id = $1',
+        [userId]
+    );
+    return result.rows[0]?.birthday_date;
+}
+
+// ============ Функции для купленных акций ============
+async function purchasePromotion(userId, promotionId, companyId, promotionCycleStart, bonusCost) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // Проверяем баланс
+        const user = await client.query('SELECT bonus_balance FROM users WHERE id = $1', [userId]);
+        if (user.rows[0].bonus_balance < bonusCost) {
+            throw new Error('Недостаточно бонусов');
+        }
+        
+        // Списываем бонусы
+        await client.query(
+            'UPDATE users SET bonus_balance = bonus_balance - $1, total_spent = total_spent + $1 WHERE id = $2',
+            [bonusCost, userId]
+        );
+        
+        // Записываем покупку
+        const result = await client.query(
+            `INSERT INTO user_purchased_promotions (user_id, promotion_id, company_id, promotion_cycle_start) 
+             VALUES ($1, $2, $3, $4) 
+             RETURNING *`,
+            [userId, promotionId, companyId, promotionCycleStart]
+        );
+        
+        // Добавляем транзакцию
+        await client.query(
+            `INSERT INTO transactions (user_id, company_id, bonus_spent, description, source, created_at, metadata) 
+             VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+            [userId, companyId, bonusCost, `Покупка акции #${promotionId}`, 'app', JSON.stringify({ promotion_id: promotionId })]
+        );
+        
+        await client.query('COMMIT');
+        return result.rows[0];
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+async function getUserPurchasedPromotions(userId, companyId) {
+    const result = await query(
+        `SELECT upp.*, p.name, p.reward_value, p.start_date, p.end_date, p.active
+         FROM user_purchased_promotions upp
+         JOIN promotions p ON upp.promotion_id = p.id
+         WHERE upp.user_id = $1 AND upp.company_id = $2
+         ORDER BY upp.purchased_at DESC`,
+        [userId, companyId]
+    );
+    return result.rows;
+}
+
+async function hasUserPurchasedPromotion(userId, promotionId, promotionCycleStart) {
+    const result = await query(
+        `SELECT id FROM user_purchased_promotions 
+         WHERE user_id = $1 AND promotion_id = $2 AND promotion_cycle_start = $3`,
+        [userId, promotionId, promotionCycleStart]
+    );
+    return result.rows.length > 0;
+}
+
+async function usePurchasedPromotion(userId, promotionId, promotionCycleStart) {
+    const result = await query(
+        `UPDATE user_purchased_promotions 
+         SET used = TRUE, used_at = NOW() 
+         WHERE user_id = $1 AND promotion_id = $2 AND promotion_cycle_start = $3 AND used = FALSE
+         RETURNING *`,
+        [userId, promotionId, promotionCycleStart]
+    );
+    return result.rows[0];
+}
+
+async function checkPromotionCycle(promotionId) {
+    const result = await query(
+        `SELECT start_date, active FROM promotions WHERE id = $1`,
+        [promotionId]
+    );
+    return result.rows[0];
+}
+
 module.exports = {
     pool,
     query,
@@ -1278,5 +1473,12 @@ module.exports = {
 	updateBalanceWithTransaction,
 	addSpendTransaction,
 	getDailyBonusSettings,
-	updateDailyBonusSettings
+	updateDailyBonusSettings,
+    updateUserBirthday,
+    getUserBirthday,
+    purchasePromotion,
+    getUserPurchasedPromotions,
+    hasUserPurchasedPromotion,
+    usePurchasedPromotion,
+    checkPromotionCycle
 };
