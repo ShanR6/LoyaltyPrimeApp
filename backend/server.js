@@ -42,7 +42,10 @@ const {
     getUserPurchasedPromotions,
     hasUserPurchasedPromotion,
     usePurchasedPromotion,
-    checkPromotionCycle
+    checkPromotionCycle,
+    trackPurchaseProgress,
+    trackPromotionUsage,
+    resetQuestProgress
 } = require('./database-pg');
 
 const app = express();
@@ -237,25 +240,7 @@ app.get('/api/preset-quests', async (req, res) => {
 app.get('/api/quests/:companyId', async (req, res) => {
     try {
         const quests = await getQuests(req.params.companyId);
-        // Проверяем истекшие задания
-        const now = new Date();
-        const updatedQuests = quests.map(quest => {
-            // Проверяем по end_date (если установлена)
-            const endDate = quest.end_date ? new Date(quest.end_date) : null;
-            const isExpired = endDate ? endDate < now : false;
-            
-            // Если задание истекло, автоматически делаем его неактивным
-            if (isExpired && quest.active) {
-                quest.active = false;
-            }
-            
-            return {
-                ...quest,
-                isExpired,
-                status: isExpired ? 'expired' : (quest.active ? 'active' : 'inactive')
-            };
-        });
-        res.json(updatedQuests);
+        res.json(quests);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -279,8 +264,28 @@ app.post('/api/quests', async (req, res) => {
 
 app.put('/api/quests/:id', async (req, res) => {
     try {
-        // Разрешаем обновлять только reward, active и expires_days
-        const { reward, active, expiresDays, endDate } = req.body;
+        const { reward, active, durationDays } = req.body;
+        
+        // Валидация durationDays (от 1 до 7)
+        if (durationDays !== undefined) {
+            if (durationDays < 1 || durationDays > 7) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Количество дней на выполнение должно быть от 1 до 7' 
+                });
+            }
+            if (!Number.isInteger(durationDays)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Количество дней должно быть целым числом' 
+                });
+            }
+        }
+        
+        // Если active меняется на false, сбрасываем прогресс
+        if (active === false) {
+            await resetQuestProgress(req.params.id);
+        }
         
         const updates = [];
         const values = [];
@@ -294,13 +299,9 @@ app.put('/api/quests/:id', async (req, res) => {
             updates.push(`active = $${paramIndex++}`);
             values.push(active);
         }
-        if (expiresDays !== undefined) {
-            updates.push(`expires_days = $${paramIndex++}`);
-            values.push(expiresDays || null);
-        }
-        if (endDate !== undefined) {
-            updates.push(`end_date = $${paramIndex++}`);
-            values.push(endDate || null);
+        if (durationDays !== undefined) {
+            updates.push(`duration_days = $${paramIndex++}`);
+            values.push(durationDays);
         }
         
         if (updates.length === 0) {
@@ -321,6 +322,29 @@ app.put('/api/quests/:id', async (req, res) => {
     } catch (error) {
         console.error('Ошибка обновления задания:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+// API для получения дат последнего выполнения заданий
+app.get('/api/users/:userId/quests/last-completed/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        
+        const result = await query(`
+            SELECT uqp.quest_id, uqp.updated_at as last_completed_at
+            FROM user_quest_progress uqp
+            JOIN quests q ON uqp.quest_id = q.id
+            WHERE uqp.user_id = $1 AND q.company_id = $2 AND uqp.claimed = true
+        `, [userId, companyId]);
+        
+        const dates = {};
+        result.rows.forEach(row => {
+            dates[row.quest_id] = row.last_completed_at;
+        });
+        
+        res.json({ success: true, dates });
+    } catch (error) {
+        console.error('Ошибка получения дат выполнения:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -374,26 +398,23 @@ app.post('/api/users/getOrCreate', async (req, res) => {
     }
 });
 
+// Получение прогресса пользователя по заданиям
 app.get('/api/users/:userId/quests/progress/all', async (req, res) => {
-    try {
-        const questProgress = await getAllUserQuestProgress(req.params.userId);
-        const user = await getUserById(req.params.userId);
-        let progress = null;
-        
-        if (user) {
-            progress = await getUserProgress(req.params.userId, user.company_id);
-        }
-        
-        res.json({
-            quests: questProgress,
-            totalEarned: progress?.total_earned || 0,
-            streak: progress?.streak || 0,
-            lastLoginDate: progress?.last_login_date || null
-        });
-    } catch (error) {
-        console.error('Ошибка получения прогресса:', error);
-        res.status(500).json({ error: error.message });
-    }
+  try {
+    const { userId } = req.params;
+    
+    const result = await query(
+      `SELECT quest_id as id, progress, completed, claimed 
+       FROM user_quest_progress 
+       WHERE user_id = $1`,
+      [userId]
+    );
+    
+    res.json({ success: true, quests: result.rows });
+  } catch (error) {
+    console.error('Ошибка получения прогресса:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 app.post('/api/users/:userId/quests/progress', async (req, res) => {
@@ -763,6 +784,9 @@ app.post('/api/pos/use-purchased-promotion', async (req, res) => {
         if (!used) {
             return res.status(400).json({ success: false, message: 'Не удалось использовать акцию' });
         }
+        
+        // Отмечаем выполнение задания "Воспользоваться акцией"
+        await trackPromotionUsage(user.id, user.company_id);
         
         res.json({ 
             success: true, 
@@ -1389,6 +1413,9 @@ app.post('/api/pos/apply-bonus-v2', async (req, res) => {
             { amount, storeId, cashierId, source: 'pos', bonusRate, multiplier: tier.multiplier }
         );
         
+        // Отслеживаем прогресс покупок для заданий
+        await trackPurchaseProgress(user.id, user.company_id, amount);
+        
         res.json({
             success: true,
             message: `✅ Начислено ${bonusEarned} бонусов!`,
@@ -1467,7 +1494,79 @@ app.post('/api/pos/spend-bonus-v2', async (req, res) => {
     }
 });
 
+app.post('/api/users/:userId/quests/check-reset', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { companyId } = req.body;
+        
+        const now = new Date();
+        
+        // Получаем выполненные задания пользователя
+        const userQuests = await query(`
+            SELECT uqp.*, q.duration_days, q.title
+            FROM user_quest_progress uqp
+            JOIN quests q ON uqp.quest_id = q.id
+            WHERE uqp.user_id = $1 AND q.company_id = $2 AND uqp.completed = true
+        `, [userId, companyId]);
+        
+        const resetQuests = [];
+        
+        for (const quest of userQuests.rows) {
+            if (quest.updated_at) {
+                const completedDate = new Date(quest.updated_at);
+                const daysSinceCompleted = Math.floor((now - completedDate) / (1000 * 60 * 60 * 24));
+                const durationDays = quest.duration_days || 1;
+                
+                if (daysSinceCompleted >= durationDays) {
+                    // Сбрасываем задание
+                    await query(`
+                        UPDATE user_quest_progress 
+                        SET progress = 0, 
+                            completed = FALSE, 
+                            claimed = FALSE,
+                            updated_at = NOW()
+                        WHERE user_id = $1 AND quest_id = $2
+                    `, [userId, quest.quest_id]);
+                    
+                    resetQuests.push({
+                        quest_id: quest.quest_id,
+                        title: quest.title
+                    });
+                }
+            }
+        }
+        
+        res.json({ success: true, resetQuests });
+    } catch (error) {
+        console.error('Ошибка проверки сброса заданий:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
+
+// Сохранение прогресса задания
+app.post('/api/users/:userId/quests/progress/update', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { companyId, questId, progress, completed } = req.body;
+    
+    await query(
+      `INSERT INTO user_quest_progress (user_id, quest_id, progress, completed, claimed, updated_at) 
+       VALUES ($1, $2, $3, $4, false, NOW())
+       ON CONFLICT (user_id, quest_id) 
+       DO UPDATE SET 
+         progress = EXCLUDED.progress,
+         completed = EXCLUDED.completed,
+         updated_at = NOW()`,
+      [userId, questId, progress, completed]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ошибка сохранения прогресса:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`✅ Backend running on http://localhost:${PORT}`);

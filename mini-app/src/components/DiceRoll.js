@@ -249,8 +249,9 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
                     setIsRolling(false);
                     
                     if (typeof window.updateQuestProgress === 'function') {
-                        window.updateQuestProgress('play_dice', 1);
-                    }
+    console.log('🎲 Вызов updateQuestProgress для play_dice');
+    window.updateQuestProgress('play_dice', 1);
+}
                 }, 200);
             }
         }, 80);

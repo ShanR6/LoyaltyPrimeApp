@@ -163,6 +163,8 @@ async function initDatabase() {
         await addDailyBonusSettings(); 
         await addTransactionColumns();
         await ensureAllQuestsExist();
+		await checkAndResetQuests();
+		await addQuestColumns();
         await insertTestData();
 
     } catch (error) {
@@ -481,32 +483,19 @@ async function saveGameSettings(companyId, gameType, settings, active) {
     }
 }
 
-// Добавьте вызов addGameSettingsTable() в initDatabase() после других CREATE TABLE
 
-// 20 предустановленных заданий
 function getPresetQuests() {
     return [
-        { emoji: '✅', title: 'Ежедневный вход', description: 'Заходите в приложение каждый день', reward: 10 },
-        { emoji: '🎡', title: 'Покрутить колесо фортуны', description: 'Сыграйте в Колесо фортуны и получите бонус', reward: 15 },
-        { emoji: '👥', title: 'Пригласить друга', description: 'Пригласите друга в программу лояльности', reward: 50 },
-        { emoji: '💰', title: 'Первая покупка', description: 'Совершите свою первую покупку', reward: 100 },
-        { emoji: '💎', title: 'Накопить 500 бонусов', description: 'Накопите 500 бонусов на счете', reward: 75 },
-        { emoji: '🛍️', title: 'Сделать 3 покупки', description: 'Совершите 3 покупки в нашем заведении', reward: 80 },
-        { emoji: '📸', title: 'Оставить отзыв', description: 'Напишите отзыв о нашем заведении', reward: 30 },
-        { emoji: '📍', title: 'Отметить посещение', description: 'Отметьтесь на карте при посещении', reward: 20 },
-        { emoji: '🎂', title: 'День рождения', description: 'Получите бонус в свой день рождения', reward: 200 },
-        { emoji: '📱', title: 'Подписаться на соцсети', description: 'Подпишитесь на наши социальные сети', reward: 25 },
-        { emoji: '⭐', title: 'Поставить оценку', description: 'Оцените наше приложение в магазине', reward: 15 },
-        { emoji: '🎁', title: 'Акционный код', description: 'Введите промокод из email-рассылки', reward: 40 },
-        { emoji: '🏆', title: 'Достижение "Новичок"', description: 'Завершите регистрацию в программе', reward: 50 },
-        { emoji: '🔥', title: 'Серия 7 дней', description: 'Заходите в приложение 7 дней подряд', reward: 100 },
-        { emoji: '⚡', title: 'Быстрая покупка', description: 'Совершите покупку за 5 минут после входа', reward: 25 },
-        { emoji: '🎯', title: 'Попадание в цель', description: 'Накопите 1000 бонусов на счете', reward: 150 },
-        { emoji: '📊', title: 'Заполнить профиль', description: 'Заполните всю информацию о себе', reward: 30 },
-        { emoji: '🔔', title: 'Включить уведомления', description: 'Включите push-уведомления', reward: 20 },
-        { emoji: '🎬', title: 'Посмотреть видео', description: 'Просмотрите обучающее видео', reward: 15 },
-        { emoji: '🎲', title: 'Бросить кости', description: 'Сыграйте в игру с костями', reward: 20 },
-        { emoji: '🎫', title: 'Скретч-карта', description: 'Сотрите скретч-карту и получите бонус', reward: 25 }
+        { emoji: '💰', title: 'Потратить 1000 рублей за 3 дня', description: 'Совершите покупки на общую сумму 1000₽ в течение 3 дней', reward: 50, durationDays: 3, targetType: 'spend_amount', targetValue: 1000 },
+        { emoji: '💰', title: 'Потратить 2000 рублей за 7 дней', description: 'Совершите покупки на общую сумму 2000₽ в течение 7 дней', reward: 100, durationDays: 7, targetType: 'spend_amount', targetValue: 2000 },
+        { emoji: '🛍️', title: '2 Покупки за 3 дня', description: 'Совершите 2 покупки в течение 3 дней', reward: 60, durationDays: 3, targetType: 'purchase_count', targetValue: 2 },
+        { emoji: '🛍️', title: '5 Покупок за 7 дней', description: 'Совершите 5 покупок в течение 7 дней', reward: 120, durationDays: 7, targetType: 'purchase_count', targetValue: 5 },
+        { emoji: '🎡', title: 'Сыграть в колесо удачи 3 раза', description: 'Покрутите колесо фортуны 3 раза', reward: 40, durationDays: 7, targetType: 'spin_wheel', targetValue: 3 },
+        { emoji: '🎫', title: 'Сыграть в скретч-карту 3 раза', description: 'Сыграйте в скретч-карту 3 раза', reward: 40, durationDays: 7, targetType: 'scratch_card', targetValue: 3 },
+        { emoji: '🎲', title: 'Сыграть в кости 3 раза', description: 'Сыграйте в игру в кости 3 раза', reward: 40, durationDays: 7, targetType: 'play_dice', targetValue: 3 },
+        { emoji: '🔥', title: 'Стрик из 7 дней', description: 'Выполняйте все ежедневные задания 7 дней подряд', reward: 150, durationDays: 7, targetType: 'daily_streak', targetValue: 7 },
+        { emoji: '✅', title: 'Ежедневный вход', description: 'Заходите в приложение каждый день', reward: 10, durationDays: 1, targetType: 'daily_login', targetValue: 1 },
+        { emoji: '🎁', title: 'Воспользоваться акцией', description: 'Купите и активируйте акцию за баллы у партнера', reward: 20, durationDays: 7, targetType: 'use_promotion', targetValue: 1 }
     ];
 }
 function getPresetPromotions() {
@@ -889,17 +878,28 @@ async function deletePromotion(promotionId) {
 
 // ============ CRUD операции для заданий ============
 async function getQuests(companyId) {
-    const result = await query('SELECT * FROM quests WHERE company_id = $1 ORDER BY created_at DESC', [companyId]);
+    const result = await query(`
+        SELECT id, emoji, title, description, reward, active, 
+               duration_days, created_at, updated_at, last_completed_at
+        FROM quests 
+        WHERE company_id = $1 
+        ORDER BY created_at DESC
+    `, [companyId]);
     return result.rows;
 }
 
 async function addQuest(companyId, questData) {
     const { emoji, title, description, reward, active, expiresDays } = questData;
+    // Ограничиваем durationDays от 1 до 7
+    let durationDays = expiresDays || 7;
+    if (durationDays < 1) durationDays = 1;
+    if (durationDays > 7) durationDays = 7;
+    
     const result = await query(
-        `INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
+        `INSERT INTO quests (company_id, emoji, title, description, reward, active, duration_days, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
          RETURNING *`,
-        [companyId, emoji || '✅', title, description || '', reward || 10, active !== undefined ? active : true, expiresDays || 30]
+        [companyId, emoji || '✅', title, description || '', reward || 10, active !== undefined ? active : true, durationDays]
     );
     return result.rows[0];
 }
@@ -988,6 +988,333 @@ async function createUser(vkId, companyId, name) {
     );
     
     return result.rows[0];
+}
+
+
+async function addQuestColumns() {
+    try {
+        // Проверяем и добавляем колонку duration_days (количество дней на выполнение)
+        const checkDuration = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'quests' AND column_name = 'duration_days'
+        `);
+        
+        if (checkDuration.rows.length === 0) {
+            console.log('📝 Добавляем колонку duration_days в таблицу quests...');
+            await query(`ALTER TABLE quests ADD COLUMN duration_days INTEGER DEFAULT 1`);
+            console.log('✅ Колонка duration_days добавлена');
+        }
+        
+        // Проверяем и добавляем колонку last_completed_at (когда задание было выполнено)
+        const checkLastCompleted = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'quests' AND column_name = 'last_completed_at'
+        `);
+        
+        if (checkLastCompleted.rows.length === 0) {
+            console.log('📝 Добавляем колонку last_completed_at в таблицу quests...');
+            await query(`ALTER TABLE quests ADD COLUMN last_completed_at TIMESTAMP`);
+            console.log('✅ Колонка last_completed_at добавлена');
+        }
+        
+        // Проверяем и добавляем колонку reset_at (когда задание сбросится)
+        const checkResetAt = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'quests' AND column_name = 'reset_at'
+        `);
+        
+        if (checkResetAt.rows.length === 0) {
+            console.log('📝 Добавляем колонку reset_at в таблицу quests...');
+            await query(`ALTER TABLE quests ADD COLUMN reset_at TIMESTAMP`);
+            console.log('✅ Колонка reset_at добавлена');
+        }
+        
+        // Проверяем и добавляем колонку target_type (тип цели задания)
+        const checkTargetType = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'quests' AND column_name = 'target_type'
+        `);
+        
+        if (checkTargetType.rows.length === 0) {
+            console.log('📝 Добавляем колонку target_type в таблицу quests...');
+            await query(`ALTER TABLE quests ADD COLUMN target_type VARCHAR(50) DEFAULT 'daily_login'`);
+            console.log('✅ Колонка target_type добавлена');
+        }
+        
+        // Проверяем и добавляем колонку target_value (значение цели задания)
+        const checkTargetValue = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'quests' AND column_name = 'target_value'
+        `);
+        
+        if (checkTargetValue.rows.length === 0) {
+            console.log('📝 Добавляем колонку target_value в таблицу quests...');
+            await query(`ALTER TABLE quests ADD COLUMN target_value INTEGER DEFAULT 1`);
+            console.log('✅ Колонка target_value добавлена');
+        }
+        
+        // Обновляем существующие задания - устанавливаем duration_days = 1 для daily_login
+        await query(`
+            UPDATE quests 
+            SET duration_days = 1 
+            WHERE title ILIKE '%вход%' AND duration_days IS NULL
+        `);
+        
+        // Для остальных заданий по умолчанию 7 дней
+        await query(`
+            UPDATE quests 
+            SET duration_days = 7 
+            WHERE duration_days IS NULL
+        `);
+        
+        // Обновляем target_type и target_value для существующих заданий
+        await updateQuestTargetTypes();
+        
+    } catch (error) {
+        console.error('❌ Ошибка добавления колонок заданий:', error);
+    }
+}
+
+// Функция для обновления target_type и target_value на основе названия задания
+async function updateQuestTargetTypes() {
+    try {
+        const quests = await query('SELECT id, title FROM quests');
+        
+        for (const quest of quests.rows) {
+            const title = quest.title.toLowerCase();
+            let targetType = 'daily_login';
+            let targetValue = 1;
+            
+            if (title.includes('потратить') && title.includes('рублей')) {
+                targetType = 'spend_amount';
+                // Извлекаем сумму из названия
+                const match = title.match(/(\d+)\s*рублей/);
+                if (match) targetValue = parseInt(match[1]);
+            } else if (title.includes('покуп')) {
+                targetType = 'purchase_count';
+                // Извлекаем количество покупок
+                const match = title.match(/(\d+)\s*покупок/);
+                if (match) targetValue = parseInt(match[1]);
+            } else if (title.includes('колесо')) {
+                targetType = 'spin_wheel';
+                const match = title.match(/(\d+)\s*раза/);
+                if (match) targetValue = parseInt(match[1]);
+            } else if (title.includes('скретч')) {
+                targetType = 'scratch_card';
+                const match = title.match(/(\d+)\s*раза/);
+                if (match) targetValue = parseInt(match[1]);
+            } else if (title.includes('кости')) {
+                targetType = 'play_dice';
+                const match = title.match(/(\d+)\s*раза/);
+                if (match) targetValue = parseInt(match[1]);
+            } else if (title.includes('стрик')) {
+                targetType = 'daily_streak';
+                const match = title.match(/(\d+)\s*дней/);
+                if (match) targetValue = parseInt(match[1]);
+            } else if (title.includes('вход')) {
+                targetType = 'daily_login';
+                targetValue = 1;
+            } else if (title.includes('акци')) {
+                targetType = 'use_promotion';
+                targetValue = 1;
+            }
+            
+            await query(
+                'UPDATE quests SET target_type = $1, target_value = $2 WHERE id = $3',
+                [targetType, targetValue, quest.id]
+            );
+        }
+    } catch (error) {
+        console.error('Ошибка обновления target_type:', error);
+    }
+}
+async function checkAndResetQuests(userId, companyId) {
+    const now = new Date();
+    
+    // Получаем все задания пользователя
+    const userQuests = await query(`
+        SELECT uqp.*, q.duration_days, q.title
+        FROM user_quest_progress uqp
+        JOIN quests q ON uqp.quest_id = q.id
+        WHERE uqp.user_id = $1 AND q.company_id = $2
+    `, [userId, companyId]);
+    
+    for (const quest of userQuests.rows) {
+        // Если задание выполнено и есть дата выполнения
+        if (quest.completed && quest.updated_at) {
+            const completedDate = new Date(quest.updated_at);
+            const daysSinceCompleted = Math.floor((now - completedDate) / (1000 * 60 * 60 * 24));
+            const durationDays = quest.duration_days || 1;
+            
+            // Если прошло больше дней чем duration_days - сбрасываем задание
+            if (daysSinceCompleted >= durationDays) {
+                await query(`
+                    UPDATE user_quest_progress 
+                    SET progress = 0, 
+                        completed = FALSE, 
+                        claimed = FALSE,
+                        updated_at = NOW()
+                    WHERE user_id = $1 AND quest_id = $2
+                `, [userId, quest.quest_id]);
+            }
+        }
+    }
+}
+
+// Функция для отслеживания прогресса покупок
+async function trackPurchaseProgress(userId, companyId, purchaseAmount) {
+    try {
+        // Получаем все активные задания типа purchase_count и spend_amount
+        const questsResult = await query(
+            `SELECT * FROM quests 
+             WHERE company_id = $1 
+             AND active = true 
+             AND (target_type = 'purchase_count' OR target_type = 'spend_amount')`,
+            [companyId]
+        );
+        
+        for (const quest of questsResult.rows) {
+            const durationDays = quest.duration_days || 7; // По умолчанию 7 дней
+            
+            // Получаем прогресс пользователя
+            const progressResult = await query(
+                'SELECT * FROM user_quest_progress WHERE user_id = $1 AND quest_id = $2',
+                [userId, quest.id]
+            );
+            
+            // Вычисляем дату начала временного окна
+            const windowStartDate = new Date();
+            windowStartDate.setDate(windowStartDate.getDate() - durationDays);
+            
+            // Получаем количество покупок в пределах временного окна из транзакций
+            const transactionsResult = await query(
+                `SELECT COUNT(*) as purchase_count, COALESCE(SUM(amount), 0) as total_amount
+                 FROM transactions 
+                 WHERE user_id = $1 
+                 AND company_id = $2
+                 AND source = 'pos'
+                 AND bonus_earned > 0
+                 AND created_at >= $3`,
+                [userId, companyId, windowStartDate]
+            );
+            
+            const actualProgress = quest.target_type === 'purchase_count' 
+                ? parseInt(transactionsResult.rows[0].purchase_count)
+                : parseInt(transactionsResult.rows[0].total_amount);
+            
+            // Проверяем выполнено ли задание
+            const completed = actualProgress >= quest.target_value;
+            
+            if (progressResult.rows.length === 0) {
+                // Инициализируем прогресс
+                await query(
+                    'INSERT INTO user_quest_progress (user_id, quest_id, progress, completed, claimed, updated_at) VALUES ($1, $2, $3, $4, false, NOW())',
+                    [userId, quest.id, actualProgress, completed]
+                );
+            } else {
+                const progress = progressResult.rows[0];
+                
+                // Пропускаем уже выполненные задания
+                if (progress.completed) continue;
+                
+                // Обновляем прогресс актуальными данными из временного окна
+                await query(
+                    'UPDATE user_quest_progress SET progress = $1, completed = $2, updated_at = NOW() WHERE user_id = $3 AND quest_id = $4',
+                    [actualProgress, completed, userId, quest.id]
+                );
+                
+                // Если задание выполнено, начисляем награду
+                if (completed && !progress.completed) {
+                    await updateUserBalance(userId, quest.reward, 'earn', `Задание выполнено: ${quest.title}`);
+                    await query(
+                        'INSERT INTO user_quests (user_id, quest_id, completed_at, reward_claimed) VALUES ($1, $2, NOW(), true)',
+                        [userId, quest.id]
+                    );
+                    console.log(`✅ Задание выполнено: ${quest.title}, пользователь ${userId}, награда: ${quest.reward}`);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка trackPurchaseProgress:', error);
+    }
+}
+
+// Функция для отметки выполнения задания "Воспользоваться акцией"
+async function trackPromotionUsage(userId, companyId) {
+    try {
+        // Ищем задание типа use_promotion
+        const questResult = await query(
+            `SELECT * FROM quests 
+             WHERE company_id = $1 
+             AND active = true 
+             AND target_type = 'use_promotion'`,
+            [companyId]
+        );
+        
+        if (questResult.rows.length === 0) return;
+        
+        const quest = questResult.rows[0];
+        
+        // Проверяем прогресс
+        const progressResult = await query(
+            'SELECT * FROM user_quest_progress WHERE user_id = $1 AND quest_id = $2',
+            [userId, quest.id]
+        );
+        
+        if (progressResult.rows.length === 0) {
+            // Инициализируем прогресс
+            await query(
+                'INSERT INTO user_quest_progress (user_id, quest_id, progress, completed, claimed) VALUES ($1, $2, 1, true, false)',
+                [userId, quest.id]
+            );
+        } else {
+            const progress = progressResult.rows[0];
+            
+            // Пропускаем уже выполненные задания
+            if (progress.completed) return;
+            
+            // Отмечаем как выполненное
+            await query(
+                'UPDATE user_quest_progress SET progress = 1, completed = true, updated_at = NOW() WHERE user_id = $1 AND quest_id = $2',
+                [userId, quest.id]
+            );
+            
+            // Начисляем награду
+            await updateUserBalance(userId, quest.reward, 'earn', `Задание выполнено: ${quest.title}`);
+            await query(
+                'INSERT INTO user_quests (user_id, quest_id, completed_at, reward_claimed) VALUES ($1, $2, NOW(), true)',
+                [userId, quest.id]
+            );
+        }
+    } catch (error) {
+        console.error('Ошибка trackPromotionUsage:', error);
+    }
+}
+
+// Функция для сброса прогресса задания при переключении active
+async function resetQuestProgress(questId) {
+    try {
+        // Сбрасываем прогресс для всех пользователей
+        await query(
+            'UPDATE user_quest_progress SET progress = 0, completed = false, claimed = false, updated_at = NOW() WHERE quest_id = $1',
+            [questId]
+        );
+        
+        // Удаляем записи о выполнении
+        await query(
+            'DELETE FROM user_quests WHERE quest_id = $1',
+            [questId]
+        );
+        
+        console.log(`Прогресс задания ${questId} сброшен для всех пользователей`);
+    } catch (error) {
+        console.error('Ошибка resetQuestProgress:', error);
+    }
 }
 
 async function updateUserBalance(userId, change, type, description) {
@@ -1480,5 +1807,10 @@ module.exports = {
     getUserPurchasedPromotions,
     hasUserPurchasedPromotion,
     usePurchasedPromotion,
-    checkPromotionCycle
+    checkPromotionCycle,
+	addQuestColumns,
+	checkAndResetQuests,
+    trackPurchaseProgress,
+    trackPromotionUsage,
+    resetQuestProgress
 };

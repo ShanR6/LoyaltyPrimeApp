@@ -248,9 +248,11 @@ export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId })
             
             setIsRevealing(false);
             
-            if (typeof window.updateQuestProgress === 'function') {
-                window.updateQuestProgress('scratch_card', 1);
-            }
+            // В функции revealCell, после открытия ячейки
+if (typeof window.updateQuestProgress === 'function') {
+    console.log('🎫 Вызов updateQuestProgress для scratch_card');
+    window.updateQuestProgress('scratch_card', 1);
+}
         }, 200);
     };
 

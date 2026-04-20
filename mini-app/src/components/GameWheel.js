@@ -172,94 +172,111 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
     };
 
     const spin = (useFreeSpin = false) => {
-        if (isSpinning) return;
-        if (!settings.active) {
-            alert('Игра временно недоступна');
-            return;
+    if (isSpinning) return;
+    if (!settings.active) {
+        alert('Игра временно недоступна');
+        return;
+    }
+    
+    let cost = settings.spinCost;
+    
+    // Если используем бесплатное вращение
+    if (useFreeSpin && freeSpinAvailable && !freeSpinUsed) {
+        cost = 0;
+        saveFreeSpinState(true);
+    }
+    
+    if (userBalance < cost && cost > 0) {
+        alert(`Недостаточно бонусов! Нужно ${cost} бонусов.`);
+        return;
+    }
+    
+    if (cost > 0) {
+        onBalanceUpdate(-cost, 'spend');
+    }
+    
+    setIsSpinning(true);
+    setResult(null);
+    setShowConfetti(false);
+    setShowGlow(true);
+    setTimeout(() => setShowGlow(false), 500);
+    playSound('spin');
+    
+    const weights = settings.sectors.map(s => s.weight || 10);
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let random = Math.random() * totalWeight;
+    let sectorIndex = 0;
+    let cumulative = 0;
+    
+    for (let i = 0; i < weights.length; i++) {
+        cumulative += weights[i];
+        if (random <= cumulative) {
+            sectorIndex = i;
+            break;
         }
+    }
+    
+    const sectorAngle = 360 / settings.sectors.length;
+    const spins = 8 + Math.floor(Math.random() * 5);
+    const targetRotation = rotation + 360 * spins + (360 - (sectorIndex * sectorAngle) - 15);
+    
+    setRotation(targetRotation);
+    
+    // Сохраняем значения для использования в setTimeout
+    const selectedSector = settings.sectors[sectorIndex];
+    const currentCost = cost;
+    
+    setTimeout(() => {
+        const sector = selectedSector;
+        let prize = null;
         
-        let cost = settings.spinCost;
-        
-        // Если используем бесплатное вращение
-        if (useFreeSpin && freeSpinAvailable && !freeSpinUsed) {
-            cost = 0;
-            saveFreeSpinState(true);
-        }
-        
-        if (userBalance < cost && cost > 0) {
-            alert(`Недостаточно бонусов! Нужно ${cost} бонусов.`);
-            return;
-        }
-        
-        if (cost > 0) {
-            onBalanceUpdate(-cost, 'spend');
-        }
-        
-        setIsSpinning(true);
-        setResult(null);
-        setShowConfetti(false);
-        setShowGlow(true);
-        setTimeout(() => setShowGlow(false), 500);
-        playSound('spin');
-        
-        const weights = settings.sectors.map(s => s.weight || 10);
-        const totalWeight = weights.reduce((a, b) => a + b, 0);
-        let random = Math.random() * totalWeight;
-        let sectorIndex = 0;
-        let cumulative = 0;
-        
-        for (let i = 0; i < weights.length; i++) {
-            cumulative += weights[i];
-            if (random <= cumulative) {
-                sectorIndex = i;
-                break;
-            }
-        }
-        
-        const sectorAngle = 360 / settings.sectors.length;
-        const spins = 8 + Math.floor(Math.random() * 5);
-        const targetRotation = rotation + 360 * spins + (360 - (sectorIndex * sectorAngle) - 15);
-        
-        setRotation(targetRotation);
-        
-        setTimeout(() => {
-            const sector = settings.sectors[sectorIndex];
-            let prize = null;
-            
-            if (sector.value === 0) {
-                prize = { type: 'lose', value: 0, message: 'Попробуйте ещё раз!', sector: sector };
-                setLastWin('0');
-                playSound('lose');
+        if (sector.value === 0) {
+            prize = { type: 'lose', value: 0, message: 'Попробуйте ещё раз!', sector: sector };
+            setLastWin('0');
+            playSound('lose');
+        } else {
+            const winAmount = sector.value;
+            if (currentCost === 0) {
+                // Бесплатное вращение - выигрыш без списания
+                onBalanceUpdate(winAmount, 'earn');
             } else {
-                const winAmount = sector.value;
-                if (cost === 0) {
-                    // Бесплатное вращение - выигрыш без списания
-                    onBalanceUpdate(winAmount, 'earn');
-                } else {
-                    onBalanceUpdate(winAmount, 'earn');
-                }
-                setLastWin(winAmount);
-                saveStats(winAmount);
-                setShowConfetti(true);
-                createParticles();
-                playSound('win');
-                
-                setTimeout(() => setShowConfetti(false), 2500);
-                prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
-                
-                if (typeof window.updateQuestProgress === 'function') {
-                    window.updateQuestProgress('spin_wheel', 1);
-                }
+                onBalanceUpdate(winAmount, 'earn');
             }
+            setLastWin(winAmount);
+            saveStats(winAmount);
+            setShowConfetti(true);
+            createParticles();
+            playSound('win');
             
-            setResult(prize);
-            setIsSpinning(false);
+            setTimeout(() => setShowConfetti(false), 2500);
+            prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
             
-            if (sector.value > 10) {
-                try { navigator.vibrate?.(200); } catch(e) {}
-            }
-        }, 3500);
-    };
+            // ====== ИСПРАВЛЕННЫЙ ВЫЗОВ ======
+            console.log('🎡 GameWheel: sector.value =', winAmount);
+            console.log('🎡 GameWheel: window.updateQuestProgress тип =', typeof window.updateQuestProgress);
+            
+            // В GameWheel.js, внутри setTimeout после начисления выигрыша
+if (typeof window.updateQuestProgress === 'function') {
+    console.log('🎡 Вызов updateQuestProgress для spin_wheel');
+    window.updateQuestProgress('spin_wheel', 1);
+} else {
+    console.error('❌ window.updateQuestProgress не функция!');
+    // Альтернативный способ через событие
+    window.dispatchEvent(new CustomEvent('questProgress', { 
+        detail: { type: 'spin_wheel', increment: 1 } 
+    }));
+}
+            // ===============================
+        }
+        
+        setResult(prize);
+        setIsSpinning(false);
+        
+        if (sector.value > 10) {
+            try { navigator.vibrate?.(200); } catch(e) {}
+        }
+    }, 3500);
+};
 
     const getSectorGradient = (color, isWinning) => {
         if (isWinning) return `radial-gradient(circle at 30% 30%, ${color}, ${color}cc)`;

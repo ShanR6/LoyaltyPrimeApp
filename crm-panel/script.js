@@ -483,111 +483,6 @@ function showSaveIndicator() {
 
 function loadLoyaltySettings() {
     loadTiersSettings();
-    loadDailyBonusSettings();
-}
-
-// ========== НАСТРОЙКИ ЕЖЕДНЕВНОГО БОНУСА ==========
-let dailyBonusConfig = {
-    enabled: true,
-    baseAmount: 10,
-    streakBonus: 5
-};
-
-async function loadDailyBonusSettings() {
-    if (!currentBusiness) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/dailyBonusSettings`);
-        const data = await response.json();
-        
-        if (data.success && data.settings) {
-            dailyBonusConfig = data.settings;
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки настроек ежедневного бонуса:', error);
-    }
-    
-    renderDailyBonusSettings();
-}
-
-function renderDailyBonusSettings() {
-    const enabledCheckbox = document.getElementById('dailyBonusEnabled');
-    const baseAmountInput = document.getElementById('dailyBonusBaseAmount');
-    const streakBonusInput = document.getElementById('dailyBonusStreakBonus');
-    const statusSpan = document.getElementById('dailyBonusStatus');
-    const previewBase = document.getElementById('previewBaseAmount');
-    const previewStreak = document.getElementById('previewStreakBonus');
-    
-    if (enabledCheckbox) {
-        enabledCheckbox.checked = dailyBonusConfig.enabled;
-    }
-    
-    if (baseAmountInput) {
-        baseAmountInput.value = dailyBonusConfig.baseAmount || 10;
-    }
-    
-    if (streakBonusInput) {
-        streakBonusInput.value = dailyBonusConfig.streakBonus || 5;
-    }
-    
-    if (statusSpan) {
-        statusSpan.textContent = dailyBonusConfig.enabled ? '✅ Включен' : '❌ Отключен';
-        statusSpan.style.color = dailyBonusConfig.enabled ? '#2ecc71' : '#e74c3c';
-    }
-    
-    if (previewBase) {
-        previewBase.textContent = dailyBonusConfig.baseAmount || 10;
-    }
-    
-    if (previewStreak) {
-        previewStreak.textContent = dailyBonusConfig.streakBonus || 5;
-    }
-}
-
-async function updateDailyBonusSetting(field, value) {
-    if (!currentBusiness) return;
-    
-    dailyBonusConfig[field] = value;
-    
-    // Обновляем статус
-    const statusSpan = document.getElementById('dailyBonusStatus');
-    if (statusSpan && field === 'enabled') {
-        statusSpan.textContent = value ? '✅ Включен' : '❌ Отключен';
-        statusSpan.style.color = value ? '#2ecc71' : '#e74c3c';
-    }
-    
-    // Обновляем предпросмотр
-    if (field === 'baseAmount') {
-        const previewBase = document.getElementById('previewBaseAmount');
-        if (previewBase) previewBase.textContent = value;
-    }
-    if (field === 'streakBonus') {
-        const previewStreak = document.getElementById('previewStreakBonus');
-        if (previewStreak) previewStreak.textContent = value;
-    }
-    
-    // Сохраняем с задержкой
-    if (window.dailyBonusSaveTimeout) clearTimeout(window.dailyBonusSaveTimeout);
-    window.dailyBonusSaveTimeout = setTimeout(() => saveDailyBonusSettings(), 500);
-}
-
-async function saveDailyBonusSettings() {
-    if (!currentBusiness) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/dailyBonusSettings`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dailyBonusConfig)
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            showSaveIndicator();
-        }
-    } catch (error) {
-        console.error('Ошибка сохранения настроек ежедневного бонуса:', error);
-    }
 }
 
 function saveLoyaltySettings() {
@@ -1144,16 +1039,29 @@ async function deleteCurrentPromotion() {
 function renderQuestsManagerList() {
     const container = document.getElementById('questsManagerList');
     if (!container) return;
+    
     if (!questsManager || questsManager.length === 0) {
         container.innerHTML = '<div class="empty-state">Нет заданий. Задания создаются автоматически при регистрации компании.</div>';
         return;
     }
     
     container.innerHTML = questsManager.map(quest => {
-        const endDate = quest.end_date ? new Date(quest.end_date) : null;
-        const isExpired = endDate ? endDate < new Date() : false;
-        const status = isExpired ? 'expired' : (quest.active ? 'active' : 'inactive');
-        const statusText = isExpired ? 'Окончено' : (quest.active ? 'Активно' : 'Отключено');
+        const status = quest.active ? 'active' : 'inactive';
+        const statusText = quest.active ? '✅ Активно' : '❌ Отключено';
+        const durationDays = quest.duration_days || 1;
+        
+        // Показываем предупреждение если дней больше 7
+        const daysWarning = durationDays > 7 ? '⚠️ Превышает лимит (макс. 7)' : '';
+        
+        // Показываем тип задания и цель
+        let questTypeInfo = '';
+        if (quest.target_type === 'purchase_count') {
+            questTypeInfo = `<span style="color:#3498db; margin-left:8px;">🛒 Цель: ${quest.target_value} покупок</span>`;
+        } else if (quest.target_type === 'spend_amount') {
+            questTypeInfo = `<span style="color:#3498db; margin-left:8px;">💰 Цель: ${quest.target_value}₽</span>`;
+        } else if (quest.target_type === 'use_promotion') {
+            questTypeInfo = `<span style="color:#3498db; margin-left:8px;">🎁 Цель: Использовать акцию</span>`;
+        }
         
         return `
             <div class="promotion-item">
@@ -1166,18 +1074,35 @@ function renderQuestsManagerList() {
                 </div>
                 <div class="promotion-desc" style="font-size:13px; color:#555; margin:8px 0 4px 60px;">${escapeHtml(quest.description || '')}</div>
                 <div class="promotion-dates" style="font-size:11px; color:#999; margin-left:60px;">
-                    ${endDate ? `📅 Действует до: ${endDate.toLocaleDateString('ru-RU')}` : '⏱️ Срок не установлен'}
-                    ${isExpired ? '<span style="color:#e74c3c; margin-left:8px;">⏰ Задание завершено</span>' : ''}
-                    ${status === 'active' ? '<span style="color:#2ecc71; margin-left:8px;">✅ Активно сейчас</span>' : ''}
+                    ⏱️ Дней на выполнение: ${durationDays} ${daysWarning ? `<span style="color:#e74c3c; margin-left:8px;">${daysWarning}</span>` : ''}
+                    ${questTypeInfo}
+                    ${!quest.active ? '<span style="color:#e74c3c; margin-left:8px;">🔒 Задание отключено</span>' : '<span style="color:#2ecc71; margin-left:8px;">🟢 Задание активно в приложении</span>'}
                 </div>
                 <div class="promotion-actions" style="margin-left:60px; margin-top:8px;">
-                    <label style="font-size:13px;">Активно: <input type="checkbox" ${quest.active && !isExpired ? 'checked' : ''} ${isExpired ? 'disabled' : ''} onchange="toggleQuest(${quest.id}, this.checked)"></label>
+                    <label style="font-size:13px; display: flex; align-items: center; gap: 12px;">
+                        <span>Активно в приложении:</span>
+                        <input type="checkbox" ${quest.active ? 'checked' : ''} onchange="toggleQuest(${quest.id}, this.checked)">
+                    </label>
                 </div>
             </div>
         `;
     }).join('');
 }
 
+
+async function loadQuestsManager() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/quests/${currentBusiness.id}`);
+        if (response.ok) {
+            questsManager = await response.json();
+            renderQuestsManagerList();
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки заданий:', error);
+    }
+}
 function showAddQuestModal() {
     alert('❌ Добавление новых заданий отключено.\nЗадания создаются автоматически при регистрации компании.\nВы можете только редактировать существующие задания через кнопку ✏️');
 }
@@ -1206,7 +1131,7 @@ async function editQuest(questId) {
         descInput.style.cursor = 'not-allowed';
     }
     
-    // Разрешаем редактировать только награду и срок
+    // Разрешаем редактировать награду, активность и количество дней
     const rewardInput = document.getElementById('questReward');
     if (rewardInput) {
         rewardInput.value = quest.reward;
@@ -1217,30 +1142,50 @@ async function editQuest(questId) {
         activeCheckbox.checked = quest.active;
     }
     
-    // Устанавливаем дату окончания если есть
-    const endDateInput = document.getElementById('questEndDate');
-    if (endDateInput) {
-        if (quest.end_date) {
-            const endDate = new Date(quest.end_date);
-            endDateInput.value = endDate.toISOString().slice(0, 16);
-        } else {
-            endDateInput.value = '';
-        }
+    // Количество дней на выполнение с ограничением от 1 до 7
+    const durationDaysInput = document.getElementById('questDurationDays');
+    if (durationDaysInput) {
+        durationDaysInput.value = quest.duration_days || 1;
+        durationDaysInput.min = 1;
+        durationDaysInput.max = 7;
+        durationDaysInput.step = 1;
     }
     
     document.getElementById('questModalTitle').textContent = 'Редактировать задание';
     openModal('quest');
 }
-
 async function saveQuest() {
     const reward = parseInt(document.getElementById('questReward').value) || 10;
     const active = document.getElementById('questActive').checked;
-    const endDate = document.getElementById('questEndDate').value;
+    const durationDays = parseInt(document.getElementById('questDurationDays').value) || 1;
     const errorElement = document.getElementById('questError');
     
-    // Валидация награды
+    // Валидация
     if (reward <= 0) {
         errorElement.textContent = '❌ Укажите количество бонусов (больше 0)';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    // НОВАЯ ВАЛИДАЦИЯ: от 1 до 7 дней
+    if (durationDays < 1) {
+        errorElement.textContent = '❌ Количество дней на выполнение должно быть не менее 1';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    if (durationDays > 7) {
+        errorElement.textContent = '❌ Количество дней на выполнение не может превышать 7';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    // Проверка на целое число
+    if (!Number.isInteger(durationDays)) {
+        errorElement.textContent = '❌ Количество дней должно быть целым числом';
         errorElement.style.display = 'block';
         setTimeout(() => errorElement.style.display = 'none', 3000);
         return;
@@ -1255,13 +1200,13 @@ async function saveQuest() {
         const response = await fetch(`${API_URL}/api/quests/${currentEditingQuestId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reward, active, endDate })
+            body: JSON.stringify({ reward, active, durationDays })
         });
         
         const data = await response.json();
         
         if (response.ok && data.success) {
-            await loadPromotionsAndQuestsFromDB();
+            await loadQuestsManager();
             closeModal('quest');
             alert('✅ Задание обновлено!');
         } else {

@@ -157,11 +157,11 @@
                 <label>Награда (бонусов)</label>
                 <input type="number" id="questReward" class="form-input" value="10" min="1">
             </div>
-            <div class="form-group">
-                <label>Дата окончания (необязательно)</label>
-                <input type="datetime-local" id="questEndDate" class="form-input">
-                <small>Оставьте пустым, чтобы задание действовало бессрочно. После указанной даты задание станет неактивным.</small>
-            </div>
+<div class="form-group">
+    <label>⏱️ Дней на выполнение (от 1 до 7):</label>
+    <input type="number" id="questDurationDays" class="form-input" value="7" min="1" max="7" step="1">
+    <small style="display: block; margin-top: 4px; color: #666;">Количество дней для выполнения задания (1-7 дней)</small>
+</div>
             <div class="form-group">
                 <label>Активно</label>
                 <input type="checkbox" id="questActive" checked>
@@ -245,27 +245,6 @@
                         <button class="btn-save" onclick="saveLoyaltySettings()">💾 Сохранить все</button>
                     </div>
                     <div class="loyalty-settings">
-                        <div class="settings-card">
-                            <h3>🎁 Ежедневный бонус за вход</h3>
-                            <div class="daily-bonus-settings">
-                                <div class="setting-row">
-                                    <label>Включить ежедневный бонус:</label>
-                                    <input type="checkbox" id="dailyBonusEnabled" checked onchange="updateDailyBonusSetting('enabled', this.checked)">
-                                    <span id="dailyBonusStatus">✅ Включен</span>
-                                </div>
-                                <div class="setting-row">
-                                    <label>Базовый бонус (бонусов):</label>
-                                    <input type="number" id="dailyBonusBaseAmount" value="10" min="1" max="1000" onchange="updateDailyBonusSetting('baseAmount', parseInt(this.value))">
-                                </div>
-                                <div class="setting-row">
-                                    <label>Бонус за серию дней (каждые 7 дней):</label>
-                                    <input type="number" id="dailyBonusStreakBonus" value="5" min="0" max="500" onchange="updateDailyBonusSetting('streakBonus', parseInt(this.value))">
-                                </div>
-                                <div class="daily-bonus-preview">
-                                    <p>💡 <strong>Пример:</strong> Пользователь получает <span id="previewBaseAmount">10</span> бонусов каждый день. За серию из 7 дней дополнительно +<span id="previewStreakBonus">5</span> бонусов.</p>
-                                </div>
-                            </div>
-                        </div>
                         <div class="settings-card">
                             <h3>🏆 Уровни программы лояльности</h3>
                             <div class="tiers-info">

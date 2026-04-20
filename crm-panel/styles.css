@@ -2437,6 +2437,26 @@ body.crm-open .auth-buttons {
     transform: scale(1.02);
     box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
 }
+/* Стили для поля ввода дней */
+#questDurationDays {
+    -moz-appearance: textfield;
+}
+
+#questDurationDays::-webkit-inner-spin-button,
+#questDurationDays::-webkit-outer-spin-button {
+    opacity: 1;
+    height: 24px;
+}
+
+/* Предупреждение о превышении лимита */
+.days-warning {
+    color: #e74c3c;
+    font-size: 11px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
 
 .combinations-list {
     margin-top: 16px;

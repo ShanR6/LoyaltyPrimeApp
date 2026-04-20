@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const API_URL = 'http://localhost:3001';
 
@@ -7,55 +7,298 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
   const [totalEarned, setTotalEarned] = useState(0);
   const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [completedQuestsIds, setCompletedQuestsIds] = useState({});
-  const [claimedQuestsIds, setClaimedQuestsIds] = useState({});
   const [lastLoginDate, setLastLoginDate] = useState(null);
-  const [dailyBonusClaimed, setDailyBonusClaimed] = useState(false);
+  const hasCheckedToday = useRef(false);
+  const hasAutoCompleted = useRef(false);
 
-  const loadQuestsFromDB = async () => {
-    if (!selectedGroupId) return [];
+  // Функция для получения ключа localStorage для задания
+  const getQuestStorageKey = (quest) => {
+    return `quest_claimed_${userId}_${selectedGroupId}_${quest.id}`;
+  };
+
+  // Функция для проверки, можно ли получить бонус за задание (с учетом durationDays)
+  const canClaimQuestBonus = (quest) => {
+    if (!userId || !selectedGroupId) return false;
     
-    try {
-      const response = await fetch(`${API_URL}/api/quests/${selectedGroupId}`);
-      if (response.ok) {
-        const questsData = await response.json();
-        const now = new Date();
-        const transformed = questsData
-          .filter(q => {
-            if (!q.active) return false;
-            const createdAt = new Date(q.created_at);
-            const expiresDays = q.expires_days || 30;
-            const expiresAt = new Date(createdAt.getTime() + expiresDays * 24 * 60 * 60 * 1000);
-            return expiresAt > now;
-          })
-          .map(q => ({
-            id: q.id,
-            title: q.title,
-            description: q.description || '',
-            reward: q.reward,
-            type: mapQuestType(q.title),
-            target: getTargetByType(q.title),
-            progress: 0,
-            completed: false,
-            claimed: false,
-            emoji: q.emoji || '✅'
-          }));
-        return transformed;
+    const key = getQuestStorageKey(quest);
+    const saved = localStorage.getItem(key);
+    
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        const lastClaimDate = new Date(data.date);
+        const today = new Date();
+        const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
+        
+        const durationDays = quest.durationDays || 1;
+        if (daysDiff < durationDays) {
+          return false;
+        }
+      } catch(e) {}
+    }
+    return true;
+  };
+
+  // Сохраняем факт получения бонуса за задание
+  const saveClaimedDate = (quest) => {
+    if (!userId || !selectedGroupId) return;
+    const today = new Date().toISOString();
+    const key = getQuestStorageKey(quest);
+    localStorage.setItem(key, JSON.stringify({ 
+      date: today, 
+      claimed: true,
+      questId: quest.id,
+      questTitle: quest.title
+    }));
+  };
+
+  const getLastClaimDate = (quest) => {
+    if (!userId || !selectedGroupId) return null;
+    const key = getQuestStorageKey(quest);
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        return new Date(data.date);
+      } catch(e) {}
+    }
+    return null;
+  };
+
+  const getTimeRemainingText = (quest) => {
+    if (!userId || !selectedGroupId) return null;
+    
+    const lastClaimDate = getLastClaimDate(quest);
+    if (!lastClaimDate) return null;
+    
+    const durationDays = quest.durationDays || 1;
+    const nextAvailableDate = new Date(lastClaimDate.getTime() + (durationDays * 24 * 60 * 60 * 1000));
+    const now = new Date();
+    
+    if (now >= nextAvailableDate) return null;
+    
+    const diffMs = nextAvailableDate - now;
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHours > 24) {
+      const days = Math.floor(diffHours / 24);
+      const hours = diffHours % 24;
+      return `Доступно через: ${days}д ${hours}ч`;
+    } else if (diffHours > 0) {
+      return `Доступно через: ${diffHours}ч ${diffMinutes}м`;
+    } else {
+      return `Доступно через: ${diffMinutes}м`;
+    }
+  };
+
+  // Функция для обновления прогресса задания
+// Функция для обновления прогресса задания
+const updateQuestProgress = (questType, increment = 1) => {
+  console.log(`📢 updateQuestProgress вызван: тип=${questType}, инкремент=${increment}`);
+  
+  setQuests(prev => {
+    const updated = prev.map(quest => {
+      // Проверяем соответствие типа задания
+      let matches = false;
+      const questTypeFromTitle = mapQuestType(quest.title);
+      
+      if (questType === questTypeFromTitle && !quest.completed && !quest.claimed) {
+        matches = true;
       }
-    } catch (error) {
-      console.error('Ошибка загрузки заданий из БД:', error);
+      
+      if (matches) {
+        const targetValue = quest.target;
+        const newProgress = Math.min(quest.progress + increment, targetValue);
+        const completed = newProgress >= targetValue;
+        
+        console.log(`    -> Новый прогресс: ${newProgress}/${targetValue}, completed=${completed}`);
+        
+        // НЕМЕДЛЕННО СОХРАНЯЕМ ПРОГРЕСС В БД
+        if (userId && selectedGroupId) {
+          saveQuestProgressToDB(quest.id, newProgress, completed);
+        }
+        
+        if (completed && !quest.completed) {
+          console.log(`    ✅ Задание "${quest.title}" выполнено!`);
+        }
+        
+        return { ...quest, progress: newProgress, completed };
+      }
+      return quest;
+    });
+    
+    return updated;
+  });
+};
+
+// НОВАЯ ФУНКЦИЯ: сохранение прогресса в БД
+const saveQuestProgressToDB = async (questId, progress, completed) => {
+  if (!userId || !selectedGroupId) return;
+  
+  try {
+    const response = await fetch(`${API_URL}/api/users/${userId}/quests/progress/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        companyId: selectedGroupId,
+        questId: questId,
+        progress: progress,
+        completed: completed
+      })
+    });
+    
+    if (response.ok) {
+      console.log(`💾 Прогресс задания ${questId} сохранен: ${progress}`);
+    }
+  } catch (error) {
+    console.error('Ошибка сохранения прогресса:', error);
+  }
+};
+
+  const updateQuestProgressRef = useRef(updateQuestProgress);
+
+  // Обновляем ref при изменении функции
+  useEffect(() => {
+    updateQuestProgressRef.current = updateQuestProgress;
+  }, [updateQuestProgress]);
+
+  // Регистрируем глобальную функцию и обработчик событий
+  useEffect(() => {
+    // Глобальная функция
+    const wrappedUpdateQuestProgress = (questType, increment = 1) => {
+      console.log(`🌐 Глобальный вызов: тип=${questType}`);
+      if (updateQuestProgressRef.current) {
+        updateQuestProgressRef.current(questType, increment);
+      } else {
+        console.error('❌ updateQuestProgressRef.current не определен');
+      }
+    };
+    
+    window.updateQuestProgress = wrappedUpdateQuestProgress;
+    
+    // Обработчик событий (запасной вариант)
+    const handleQuestProgress = (event) => {
+      console.log(`📡 Событие questProgress:`, event.detail);
+      if (event.detail && updateQuestProgressRef.current) {
+        updateQuestProgressRef.current(event.detail.type, event.detail.increment || 1);
+      }
+    };
+    
+    window.addEventListener('questProgress', handleQuestProgress);
+    
+    console.log('✅ DailyQuests: зарегистрированы глобальные функции для обновления прогресса');
+    
+    return () => {
+      delete window.updateQuestProgress;
+      window.removeEventListener('questProgress', handleQuestProgress);
+    };
+  }, []);
+
+  const markQuestAsCompleted = async (quest) => {
+    if (!userId || !selectedGroupId) return;
+    
+    if (!canClaimQuestBonus(quest)) {
+      setQuests(prev => prev.map(q => {
+        if (q.id === quest.id) {
+          return { ...q, completed: true, claimed: true };
+        }
+        return q;
+      }));
+      return;
     }
     
-    return [
-      { id: 1, title: 'Ежедневный вход', description: 'Заходите в приложение каждый день', reward: 10, type: 'daily_login', target: 1, progress: 0, completed: false, claimed: false, emoji: '✅' },
-      { id: 2, title: 'Покрутить колесо', description: 'Сыграйте в Колесо фортуны', reward: 15, type: 'spin_wheel', target: 1, progress: 0, completed: false, claimed: false, emoji: '🎡' },
-      { id: 3, title: 'Пригласить друга', description: 'Поделитесь приложением', reward: 50, type: 'invite_friend', target: 1, progress: 0, completed: false, claimed: false, emoji: '👥' }
-    ];
+    setQuests(prev => prev.map(q => {
+      if (q.id === quest.id) {
+        return { ...q, completed: true, claimed: false };
+      }
+      return q;
+    }));
+  };
+
+  const claimQuestBonus = async (quest) => {
+    if (!userId || !selectedGroupId) return;
+    
+    if (!canClaimQuestBonus(quest)) {
+      const timeRemaining = getTimeRemainingText(quest);
+      showNotification(`❌ Бонус пока недоступен. ${timeRemaining || 'Попробуйте позже'}`);
+      return;
+    }
+    
+    if (quest.claimed) {
+      showNotification('❌ Вы уже получили бонус за этот период');
+      return;
+    }
+    
+    try {
+      if (onBalanceUpdate) {
+        await onBalanceUpdate(quest.reward, 'earn');
+      }
+      
+      setQuests(prev => prev.map(q => 
+        q.id === quest.id ? { ...q, claimed: true } : q
+      ));
+      
+      saveClaimedDate(quest);
+      
+      await fetch(`${API_URL}/api/users/completeQuest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userId,
+          questId: quest.id,
+          reward: quest.reward,
+          claimReward: true
+        })
+      });
+      
+      showNotification(`🎁 Задание "${quest.title}" выполнено! +${quest.reward} бонусов!`);
+      
+    } catch (error) {
+      console.error('Ошибка начисления бонуса:', error);
+      showNotification('❌ Ошибка при получении бонуса');
+    }
+  };
+
+  const handleDailyLogin = async (quest) => {
+    if (!userId || !selectedGroupId) return;
+    
+    if (!canClaimQuestBonus(quest)) {
+      setQuests(prev => prev.map(q => {
+        if (q.id === quest.id) {
+          return { ...q, completed: true, claimed: true };
+        }
+        return q;
+      }));
+      return;
+    }
+    
+    setQuests(prev => prev.map(q => {
+      if (q.id === quest.id) {
+        return { ...q, completed: true, claimed: false };
+      }
+      return q;
+    }));
+    
+    showNotification(`✅ Задание "${quest.title}" выполнено! Нажмите "Забрать" чтобы получить +${quest.reward} бонусов!`);
+  };
+
+  const loadLastCompletedDates = async () => {
+    if (!userId || !selectedGroupId) return {};
+    try {
+      const response = await fetch(`${API_URL}/api/users/${userId}/quests/last-completed/${selectedGroupId}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.dates || {};
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки дат выполнения:', error);
+    }
+    return {};
   };
 
   const loadUserProgress = async () => {
     if (!userId || !selectedGroupId) return null;
-    
     try {
       const response = await fetch(`${API_URL}/api/users/${userId}/quests/progress/all`);
       if (response.ok) {
@@ -68,9 +311,77 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     return null;
   };
 
+  const loadQuestsFromDB = async () => {
+  if (!selectedGroupId) return [];
+  try {
+    const response = await fetch(`${API_URL}/api/quests/${selectedGroupId}`);
+    if (response.ok) {
+      const questsData = await response.json();
+      const userProgress = await loadUserProgress();
+      const userQuestProgress = userProgress?.quests || [];
+      
+      console.log('📥 Загруженный прогресс из БД:', userQuestProgress);
+      
+      const transformed = questsData
+        .filter(q => q.active)
+        .map(q => {
+          const userProgressForQuest = userQuestProgress.find(p => p.id === q.id);
+          
+          // Используем прогресс из БД, если он есть
+          let progress = userProgressForQuest?.progress || 0;
+          let isCompleted = userProgressForQuest?.completed || false;
+          let isClaimed = userProgressForQuest?.claimed || false;
+          
+          // Проверяем в localStorage для заданий с периодом
+          const key = getQuestStorageKey(q);
+          const saved = localStorage.getItem(key);
+          if (saved && !isClaimed) {
+            try {
+              const data = JSON.parse(saved);
+              const lastClaimDate = new Date(data.date);
+              const today = new Date();
+              const durationDays = q.duration_days || 1;
+              const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
+              
+              if (daysDiff < durationDays) {
+                isClaimed = true;
+                isCompleted = true;
+              }
+            } catch(e) {}
+          }
+          
+          return {
+            id: q.id,
+            title: q.title,
+            description: q.description || '',
+            reward: q.reward,
+            type: mapQuestType(q.title),
+            target: getTargetByType(q.title),
+            progress: progress,
+            completed: isCompleted,
+            claimed: isClaimed,
+            emoji: q.emoji || '✅',
+            durationDays: q.duration_days || 1,
+            status: q.active ? 'active' : 'inactive',
+            lastCompletedAt: null
+          };
+        });
+      
+      console.log('📋 ЗАГРУЖЕННЫЕ ЗАДАНИЯ С ПРОГРЕССОМ:');
+      transformed.forEach(q => {
+        console.log(`  - ${q.title}: прогресс ${q.progress}/${q.target}, completed=${q.completed}`);
+      });
+      
+      return transformed;
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки заданий из БД:', error);
+  }
+  return [];
+};
+
   const saveProgressToDB = async (questsData, totalEarnedData, streakData, lastLoginData) => {
     if (!userId || !selectedGroupId) return;
-    
     try {
       await fetch(`${API_URL}/api/users/${userId}/quests/progress`, {
         method: 'POST',
@@ -93,9 +404,8 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   };
 
-  const saveCompletedQuestToDB = async (questId, reward) => {
+  const saveQuestCompletionToDB = async (questId, reward) => {
     if (!userId) return false;
-    
     try {
       const response = await fetch(`${API_URL}/api/users/completeQuest`, {
         method: 'POST',
@@ -103,119 +413,66 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
         body: JSON.stringify({
           userId: userId,
           questId: questId,
-          reward: reward
+          reward: reward,
+          claimReward: false
         })
       });
       
-      return response.ok;
+      const data = await response.json();
+      return response.ok && data.success;
     } catch (error) {
-      console.error('Ошибка сохранения выполненного задания в БД:', error);
+      console.error('Ошибка сохранения выполнения задания:', error);
       return false;
     }
   };
 
-  const checkAndClaimDailyBonus = async () => {
-    if (!userId || !selectedGroupId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/users/dailyBonus/check`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userId,
-          companyId: selectedGroupId
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Если ежедневный бонус отключен в CRM
-        if (data.disabled) {
-          setDailyBonusClaimed(true);
-          return;
-        }
-        
-        if (!data.claimed) {
-          // Используем настройки из CRM
-          const settings = data.settings || { baseAmount: 10, streakBonus: 5 };
-          const bonusAmount = (settings.baseAmount || 10) + Math.floor(streak / 7) * (settings.streakBonus || 5);
-          
-          const claimResponse = await fetch(`${API_URL}/api/users/dailyBonus/claim`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: userId,
-              companyId: selectedGroupId,
-              bonusAmount: bonusAmount,
-              streak: streak + 1
-            })
-          });
-          
-          if (claimResponse.ok) {
-            if (onBalanceUpdate) {
-              await onBalanceUpdate(bonusAmount, 'earn');
-            }
-            setStreak(prev => prev + 1);
-            setDailyBonusClaimed(true);
-            showNotification(`Ежедневный бонус! +${bonusAmount} бонусов! Серия: ${streak + 1} дней 🔥`);
-            updateQuestProgress('daily_login', 1);
-          }
-        } else {
-          setDailyBonusClaimed(true);
-        }
-      }
-    } catch (error) {
-      console.error('Ошибка проверки ежедневного бонуса:', error);
+  const claimReward = async (quest) => {
+    if (!quest.completed || quest.claimed) {
+      return;
     }
+    await claimQuestBonus(quest);
   };
 
+  // Загрузка заданий
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      
       const loadedQuests = await loadQuestsFromDB();
-      const savedProgress = await loadUserProgress();
-      
-      if (savedProgress && savedProgress.quests) {
-        const mergedQuests = loadedQuests.map(quest => {
-          const saved = savedProgress.quests.find(q => q.id === quest.id);
-          if (saved) {
-            return { ...quest, ...saved };
-          }
-          return quest;
-        });
-        setQuests(mergedQuests);
-        setTotalEarned(savedProgress.totalEarned || 0);
-        setStreak(savedProgress.streak || 0);
-        setLastLoginDate(savedProgress.lastLoginDate);
-        
-        const completed = {};
-        const claimed = {};
-        mergedQuests.forEach(q => {
-          if (q.completed) completed[q.id] = true;
-          if (q.claimed) claimed[q.id] = true;
-        });
-        setCompletedQuestsIds(completed);
-        setClaimedQuestsIds(claimed);
-      } else {
-        setQuests(loadedQuests);
-      }
-      
+      setQuests(loadedQuests);
       setLoading(false);
     };
-    
-    if (selectedGroupId && userId) {
-      init();
-    }
+    if (selectedGroupId && userId) init();
   }, [selectedGroupId, userId]);
 
+  // Автоматическая отметка заданий как выполненных при достижении цели
   useEffect(() => {
-    if (!loading && userId && selectedGroupId && !dailyBonusClaimed) {
-      checkAndClaimDailyBonus();
+    if (!loading && quests.length > 0) {
+      const questsToCheck = quests.filter(q => 
+        (q.type === 'spin_wheel' || q.type === 'scratch_card' || q.type === 'play_dice') &&
+        q.progress >= q.target && !q.completed && !q.claimed
+      );
+      
+      console.log('🔍 Проверка заданий для автовыполнения:', questsToCheck.map(q => q.title));
+      
+      for (const quest of questsToCheck) {
+        markQuestAsCompleted(quest);
+      }
     }
-  }, [loading, userId, selectedGroupId]);
+  }, [quests, loading]);
 
+  // Автоматическое выполнение ежедневного входа
+  useEffect(() => {
+    if (!loading && quests.length > 0 && !hasAutoCompleted.current) {
+      hasAutoCompleted.current = true;
+      
+      const dailyLoginQuest = quests.find(q => q.type === 'daily_login');
+      if (dailyLoginQuest && !dailyLoginQuest.completed && !dailyLoginQuest.claimed) {
+        handleDailyLogin(dailyLoginQuest);
+      }
+    }
+  }, [loading, quests]);
+
+  // Сохранение прогресса
   useEffect(() => {
     if (!loading && quests.length > 0 && userId && selectedGroupId) {
       saveProgressToDB(quests, totalEarned, streak, lastLoginDate);
@@ -224,115 +481,37 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
 
   const showNotification = (message) => {
     const notification = document.createElement('div');
-    notification.innerHTML = `
-      <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2ecc71;padding:12px 20px;border-radius:30px;color:white;z-index:1000;animation:slideUp 0.3s ease;">
-        🎉 ${message}
-      </div>
-    `;
+    notification.innerHTML = `<div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2ecc71;padding:12px 20px;border-radius:30px;color:white;z-index:1000;animation:slideUp 0.3s ease;">${message}</div>`;
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 3000);
   };
 
-  const updateQuestProgress = (questType, increment = 1, value = null) => {
-    setQuests(prev => {
-      const updated = prev.map(quest => {
-        if (quest.type === questType && !quest.completed && !quest.claimed) {
-          let newProgress = value !== null ? Math.min(value, quest.target) : Math.min(quest.progress + increment, quest.target);
-          const completed = newProgress >= quest.target;
-          return { ...quest, progress: newProgress, completed };
-        }
-        return quest;
-      });
-      return updated;
-    });
-  };
-
-  const claimReward = async (questId) => {
-    const quest = quests.find(q => q.id === questId);
-    if (!quest || !quest.completed || quest.claimed) return;
-    
-    const saved = await saveCompletedQuestToDB(questId, quest.reward);
-    
-    if (saved) {
-      const updated = quests.map(q => 
-        q.id === questId ? { ...q, claimed: true } : q
-      );
-      setQuests(updated);
-      setTotalEarned(prev => prev + quest.reward);
-      setClaimedQuestsIds(prev => ({ ...prev, [questId]: true }));
-      
-      if (onBalanceUpdate) {
-        await onBalanceUpdate(quest.reward, 'earn');
-      }
-      
-      showNotification(`Задание "${quest.title}" выполнено! +${quest.reward} бонусов!`);
-    }
-  };
-
-  const resetNonPersistentQuests = () => {
-    setQuests(prev => prev.map(q => {
-      if (q.type !== 'reach_balance' && q.type !== 'spend_bonus') {
-        return { ...q, progress: 0, completed: false, claimed: false };
-      }
-      return q;
-    }));
-  };
-
-  useEffect(() => {
-    const checkDailyLogin = () => {
-      if (!userId || !selectedGroupId) return;
-      
-      const today = new Date().toDateString();
-      const lastLogin = lastLoginDate ? new Date(lastLoginDate).toDateString() : null;
-      
-      if (lastLogin !== today) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        if (lastLogin === yesterday.toDateString()) {
-          setStreak(prev => prev + 1);
-        } else {
-          setStreak(1);
-          resetNonPersistentQuests();
-        }
-        
-        setLastLoginDate(new Date().toISOString());
-        updateQuestProgress('daily_login', 1);
-      }
-    };
-    
-    if (!loading && lastLoginDate !== undefined) {
-      checkDailyLogin();
-    }
-  }, [loading, userId, selectedGroupId, lastLoginDate]);
-
-  useEffect(() => {
-    if (userBalance !== undefined) {
-      updateQuestProgress('reach_balance', 0, userBalance);
-    }
-  }, [userBalance]);
-
-  useEffect(() => {
-    window.updateQuestProgress = updateQuestProgress;
-    return () => delete window.updateQuestProgress;
-  }, []);
-
   function mapQuestType(title) {
     const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes('вход')) return 'daily_login';
-    if (lowerTitle.includes('колесо')) return 'spin_wheel';
-    if (lowerTitle.includes('друг') || lowerTitle.includes('пригласи')) return 'invite_friend';
-    if (lowerTitle.includes('накопить')) return 'reach_balance';
-    if (lowerTitle.includes('потратить')) return 'spend_bonus';
-    if (lowerTitle.includes('покупк')) return 'make_purchase';
+    console.log(`🔍 mapQuestType для "${title}" -> lower: "${lowerTitle}"`);
+    
+    if (lowerTitle.includes('ежедневный вход')) return 'daily_login';
+    if (lowerTitle.includes('стрик')) return 'daily_streak';
+    if (lowerTitle.includes('потратить')) return 'spend_amount';
+    if (lowerTitle.includes('покупк')) return 'purchase_count';
+    if (lowerTitle.includes('колесо удачи')) return 'spin_wheel';
+    if (lowerTitle.includes('скретч')) return 'scratch_card';
+    if (lowerTitle.includes('кости')) return 'play_dice';
+    
+    console.log(`⚠️ Тип не определен для "${title}", возвращаю daily_login`);
     return 'daily_login';
-  }
+}
   
   function getTargetByType(title) {
     const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes('накопить')) return 500;
-    if (lowerTitle.includes('потратить')) return 200;
-    if (lowerTitle.includes('покупк')) return 3;
+    if (lowerTitle.includes('потратить 1000')) return 1000;
+    if (lowerTitle.includes('потратить 2000')) return 2000;
+    if (lowerTitle.includes('2 покупки')) return 2;
+    if (lowerTitle.includes('5 покупок')) return 5;
+    if (lowerTitle.includes('колесо удачи 3 раза')) return 3;
+    if (lowerTitle.includes('скретч-карту 3 раза')) return 3;
+    if (lowerTitle.includes('кости 3 раза')) return 3;
+    if (lowerTitle.includes('стрик из 7 дней')) return 7;
     return 1;
   }
 
@@ -342,9 +521,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
   if (loading) {
     return (
       <div style={styles.container}>
-        <div style={{ textAlign: 'center', padding: 20, color: 'white' }}>
-          Загрузка заданий...
-        </div>
+        <div style={{ textAlign: 'center', padding: 20, color: 'white' }}>Загрузка заданий...</div>
       </div>
     );
   }
@@ -353,233 +530,154 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     <div style={styles.container}>
       <div style={styles.header}>
         <div>
-          <h3 style={styles.title}>📋 Ежедневные задания</h3>
+          <h3 style={styles.title}>📋 Задания</h3>
           <div style={styles.streak}>🔥 Серия: {streak} дней</div>
         </div>
-        <div style={styles.rewardInfo}>
-          🎁 Доступно: {totalAvailable} бонусов
-        </div>
+        <div style={styles.rewardInfo}>🎁 Доступно: {totalAvailable} бонусов</div>
       </div>
       
       <div style={styles.progressOverview}>
         <div style={styles.progressBarContainer}>
           <div style={{...styles.progressBarFill, width: quests.length > 0 ? `${(getCompletedCount()/quests.length)*100}%` : '0%'}} />
         </div>
-        <div style={styles.progressText}>
-          Выполнено {getCompletedCount()} из {quests.length}
-        </div>
+        <div style={styles.progressText}>Выполнено {getCompletedCount()} из {quests.length}</div>
       </div>
       
       <div style={styles.questsList}>
-        {quests.map(quest => (
-          <div 
-            key={quest.id} 
-            style={{
-              ...styles.questItem, 
-              background: quest.completed ? 'rgba(46,204,113,0.15)' : 'rgba(0,0,0,0.3)', 
-              borderLeft: quest.completed ? '3px solid #2ecc71' : '3px solid transparent',
-              opacity: quest.claimed ? 0.6 : 1
-            }}
-          >
-            <div style={styles.questInfo}>
-              <div style={styles.questTitle}>
-                <span style={{ fontSize: 24, marginRight: 8 }}>{quest.emoji}</span>
-                {quest.title}
-              </div>
-              <div style={styles.questDescription}>{quest.description}</div>
-              {quest.target > 1 && (
-                <div style={styles.questProgress}>
-                  <div style={styles.progressBarContainerSmall}>
-                    <div style={{...styles.progressBarFillSmall, width: `${(quest.progress/quest.target)*100}%`}} />
-                  </div>
-                  <span style={styles.progressTextSmall}>{quest.progress}/{quest.target}</span>
+        {quests.map(quest => {
+          let statusDisplay = '';
+          let statusColor = '';
+          let timeRemaining = null;
+          
+          if (quest.claimed) {
+            timeRemaining = getTimeRemainingText(quest);
+          }
+          
+          if (quest.claimed) {
+            if (timeRemaining) {
+              statusDisplay = `⏳ ${timeRemaining}`;
+              statusColor = '#f39c12';
+            } else {
+              statusDisplay = '✅ Получено';
+              statusColor = '#2ecc71';
+            }
+          } else if (quest.completed) {
+            statusDisplay = '🎁 Готово к получению';
+            statusColor = '#f39c12';
+          } else if (quest.status === 'active') {
+            statusDisplay = '🟢 Активно';
+            statusColor = '#2ecc71';
+          } else {
+            statusDisplay = '⚫ Неактивно';
+            statusColor = '#888';
+          }
+          
+          return (
+            <div key={quest.id} style={{...styles.questItem, background: quest.completed ? 'rgba(46,204,113,0.15)' : 'rgba(0,0,0,0.3)', borderLeft: quest.completed ? '3px solid #2ecc71' : '3px solid transparent', opacity: quest.claimed && !timeRemaining ? 0.6 : 1}}>
+              <div style={styles.questInfo}>
+                <div style={styles.questTitle}>
+                  <span style={{ fontSize: 24, marginRight: 8 }}>{quest.emoji}</span>
+                  {quest.title}
                 </div>
-              )}
+                <div style={styles.questDescription}>{quest.description}</div>
+                {quest.durationDays > 1 && (quest.type === 'spin_wheel' || quest.type === 'scratch_card' || quest.type === 'play_dice') && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                    ⏱️ Бонус доступен 1 раз в {quest.durationDays} {getDaysWord(quest.durationDays)}
+                  </div>
+                )}
+                {quest.type === 'daily_login' && quest.durationDays > 1 && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                    ⏱️ Бонус доступен 1 раз в {quest.durationDays} {getDaysWord(quest.durationDays)}
+                  </div>
+                )}
+                {/* Прогресс бар */}
+                {quest.target > 1 && !quest.claimed && !quest.completed && (
+                  <div style={styles.questProgress}>
+                    <div style={styles.progressBarContainerSmall}>
+                      <div style={{...styles.progressBarFillSmall, width: `${(quest.progress/quest.target)*100}%`}} />
+                    </div>
+                    <span style={styles.progressTextSmall}>{quest.progress}/{quest.target}</span>
+                  </div>
+                )}
+                {/* Показываем прогресс даже если задание выполнено но не получено */}
+                {quest.target > 1 && quest.completed && !quest.claimed && (
+                  <div style={styles.questProgress}>
+                    <div style={styles.progressBarContainerSmall}>
+                      <div style={{...styles.progressBarFillSmall, width: `100%`, background: '#2ecc71'}} />
+                    </div>
+                    <span style={styles.progressTextSmall}>{quest.target}/{quest.target}</span>
+                  </div>
+                )}
+                <div style={{ ...styles.questStatus, color: statusColor }}>{statusDisplay}</div>
+              </div>
+              <div style={styles.questReward}>
+                <div style={styles.rewardValue}>+{quest.reward}</div>
+                <div style={styles.rewardLabel}>бонусов</div>
+                {!quest.completed ? (
+                  <div style={{ ...styles.statusPending, color: quest.status === 'active' ? '#aaa' : '#888' }}>
+                    {quest.status === 'active' ? '⏳ Не выполнено' : '🔒 Неактивно'}
+                  </div>
+                ) : quest.claimed ? (
+                  timeRemaining ? (
+                    <div style={{ ...styles.statusPending, color: '#f39c12', fontSize: 10 }}>
+                      {timeRemaining}
+                    </div>
+                  ) : (
+                    <div style={styles.statusClaimed}>✅ Получено</div>
+                  )
+                ) : (
+                  <button onClick={() => claimReward(quest)} style={styles.claimButton}>Забрать</button>
+                )}
+              </div>
             </div>
-            <div style={styles.questReward}>
-              <div style={styles.rewardValue}>+{quest.reward}</div>
-              <div style={styles.rewardLabel}>бонусов</div>
-              {!quest.completed ? (
-                <div style={styles.statusPending}>⏳ Не выполнено</div>
-              ) : quest.claimed ? (
-                <div style={styles.statusClaimed}>✅ Получено</div>
-              ) : (
-                <button onClick={() => claimReward(quest.id)} style={styles.claimButton}>
-                  Забрать
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       
       {quests.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 20, opacity: 0.7, color: 'white' }}>
-          Нет активных заданий
-        </div>
+        <div style={{ textAlign: 'center', padding: 20, opacity: 0.7, color: 'white' }}>Нет активных заданий</div>
       )}
       
-      <style>
-        {`
-          @keyframes slideUp {
-            from {
-              opacity: 0;
-              transform: translateX(-50%) translateY(20px);
-            }
-            to {
-              opacity: 1;
-              transform: translateX(-50%) translateY(0);
-            }
-          }
-        `}
-      </style>
+      <style>{`
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
 
+function getDaysWord(days) {
+  if (days === 1) return 'день';
+  if (days >= 2 && days <= 4) return 'дня';
+  return 'дней';
+}
+
 const styles = {
-  container: { 
-    background: 'rgba(30, 35, 48, 0.7)', 
-    borderRadius: 28, 
-    padding: 20, 
-    marginBottom: 20 
-  },
-  header: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 16, 
-    flexWrap: 'wrap', 
-    gap: 10 
-  },
-  title: { 
-    fontSize: 18, 
-    fontWeight: 700, 
-    margin: 0, 
-    color: 'white' 
-  },
-  streak: { 
-    fontSize: 12, 
-    color: '#ffd966', 
-    marginTop: 4 
-  },
-  rewardInfo: { 
-    fontSize: 13, 
-    color: '#ffd966', 
-    background: 'rgba(255,215,0,0.15)', 
-    padding: '6px 12px', 
-    borderRadius: 20 
-  },
-  progressOverview: { 
-    marginBottom: 20, 
-    padding: '12px 16px', 
-    background: 'rgba(0,0,0,0.3)', 
-    borderRadius: 16 
-  },
-  progressBarContainer: { 
-    height: 6, 
-    background: 'rgba(255,255,255,0.2)', 
-    borderRadius: 3, 
-    overflow: 'hidden', 
-    marginBottom: 8 
-  },
-  progressBarFill: { 
-    height: '100%', 
-    background: 'linear-gradient(90deg,#2ecc71,#27ae60)', 
-    borderRadius: 3, 
-    transition: 'width 0.3s' 
-  },
-  progressText: { 
-    fontSize: 11, 
-    opacity: 0.7, 
-    textAlign: 'center',
-    color: 'white' 
-  },
-  questsList: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: 10 
-  },
-  questItem: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: '14px 16px', 
-    borderRadius: 20, 
-    flexWrap: 'wrap', 
-    gap: 12 
-  },
-  questInfo: { 
-    flex: 1 
-  },
-  questTitle: { 
-    fontWeight: 700, 
-    marginBottom: 4,
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center'
-  },
-  questDescription: { 
-    fontSize: 12, 
-    opacity: 0.7, 
-    marginBottom: 8,
-    color: 'white' 
-  },
-  questProgress: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: 10 
-  },
-  progressBarContainerSmall: { 
-    flex: 1, 
-    height: 4, 
-    background: 'rgba(255,255,255,0.2)', 
-    borderRadius: 2, 
-    overflow: 'hidden' 
-  },
-  progressBarFillSmall: { 
-    height: '100%', 
-    background: '#ffd966', 
-    borderRadius: 2, 
-    transition: 'width 0.3s' 
-  },
-  progressTextSmall: { 
-    fontSize: 10, 
-    opacity: 0.7, 
-    minWidth: 50,
-    color: 'white' 
-  },
-  questReward: { 
-    textAlign: 'center', 
-    minWidth: 90 
-  },
-  rewardValue: { 
-    fontSize: 18, 
-    fontWeight: 'bold', 
-    color: '#ffd966' 
-  },
-  rewardLabel: { 
-    fontSize: 10, 
-    opacity: 0.7, 
-    marginBottom: 8,
-    color: 'white' 
-  },
-  statusPending: { 
-    fontSize: 11, 
-    color: '#aaa' 
-  },
-  statusClaimed: { 
-    fontSize: 11, 
-    color: '#2ecc71' 
-  },
-  claimButton: { 
-    background: '#ff4d4d', 
-    border: 'none', 
-    padding: '6px 12px', 
-    borderRadius: 20, 
-    color: 'white', 
-    fontSize: 12, 
-    cursor: 'pointer', 
-    width: '100%' 
-  }
+  container: { background: 'rgba(30, 35, 48, 0.7)', borderRadius: 28, padding: 20, marginBottom: 20 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 },
+  title: { fontSize: 18, fontWeight: 700, margin: 0, color: 'white' },
+  streak: { fontSize: 12, color: '#ffd966', marginTop: 4 },
+  rewardInfo: { fontSize: 13, color: '#ffd966', background: 'rgba(255,215,0,0.15)', padding: '6px 12px', borderRadius: 20 },
+  progressOverview: { marginBottom: 20, padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderRadius: 16 },
+  progressBarContainer: { height: 6, background: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
+  progressBarFill: { height: '100%', background: 'linear-gradient(90deg,#2ecc71,#27ae60)', borderRadius: 3, transition: 'width 0.3s' },
+  progressText: { fontSize: 11, opacity: 0.7, textAlign: 'center', color: 'white' },
+  questsList: { display: 'flex', flexDirection: 'column', gap: 10 },
+  questItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderRadius: 20, flexWrap: 'wrap', gap: 12 },
+  questInfo: { flex: 1 },
+  questTitle: { fontWeight: 700, marginBottom: 4, color: 'white', display: 'flex', alignItems: 'center' },
+  questDescription: { fontSize: 12, opacity: 0.7, marginBottom: 4, color: 'white' },
+  questStatus: { fontSize: 11, marginBottom: 8, fontWeight: 500 },
+  questProgress: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 },
+  progressBarContainerSmall: { flex: 1, height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2, overflow: 'hidden' },
+  progressBarFillSmall: { height: '100%', background: '#ffd966', borderRadius: 2, transition: 'width 0.3s' },
+  progressTextSmall: { fontSize: 10, opacity: 0.7, minWidth: 50, color: 'white' },
+  questReward: { textAlign: 'center', minWidth: 90 },
+  rewardValue: { fontSize: 18, fontWeight: 'bold', color: '#ffd966' },
+  rewardLabel: { fontSize: 10, opacity: 0.7, marginBottom: 8, color: 'white' },
+  statusPending: { fontSize: 11 },
+  statusClaimed: { fontSize: 11, color: '#2ecc71' },
+  claimButton: { background: '#ff4d4d', border: 'none', padding: '6px 12px', borderRadius: 20, color: 'white', fontSize: 12, cursor: 'pointer', width: '100%' }
 };

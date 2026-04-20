@@ -232,7 +232,7 @@ const loadUserData = async (companyId, vkUserId, userName) => {
           history: [] 
         };
         
-        // Обновляем баланс из БД
+        // Обновляем баланс из БД (ВСЕГДА используем данные из БД)
         groupData.bonusBalance = data.user.bonus_balance || 0;
         groupData.totalEarned = data.user.total_earned || 0;
         groupData.totalSpent = data.user.total_spent || 0;
@@ -375,6 +375,39 @@ const loadUserData = async (companyId, vkUserId, userName) => {
     return true;
   };
   
+  // Функция для синхронизации баланса из БД
+  const syncBalanceFromDB = async () => {
+    if (!userId || !selectedGroup) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/users/getOrCreate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vkId: userInfo?.id,
+          companyId: selectedGroup.id,
+          name: `${userInfo?.first_name} ${userInfo?.last_name}`
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        const cur = getCurrentGroupData();
+        // Обновляем только из БД, игнорируя localStorage
+        const newData = {
+          ...cur,
+          bonusBalance: data.user.bonus_balance || 0,
+          totalEarned: data.user.total_earned || 0,
+          totalSpent: data.user.total_spent || 0
+        };
+        saveCurrentGroupData(newData);
+        console.log('Баланс синхронизирован из БД:', newData.bonusBalance);
+      }
+    } catch (error) {
+      console.error('Ошибка синхронизации баланса:', error);
+    }
+  };
+  
   const showModal = (title, message) => setModal({ show: true, title, message });
   const closeModal = () => setModal({ show: false, title: '', message: '' });
 
@@ -491,6 +524,29 @@ const loadUserData = async (companyId, vkUserId, userName) => {
     };
     getUserData();
   }, []);
+  
+  // Синхронизируем баланс при возврате в приложение
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && userId && selectedGroup) {
+        syncBalanceFromDB();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Также синхронизируем при фокусе окна
+    window.addEventListener('focus', () => {
+      if (userId && selectedGroup) {
+        syncBalanceFromDB();
+      }
+    });
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', syncBalanceFromDB);
+    };
+  }, [userId, selectedGroup]);
 
   const handleSelectGroup = async (company) => {
     // Извлекаем цвет бренда из компании (поддерживаем оба формата)
@@ -946,6 +1002,17 @@ const loadUserData = async (companyId, vkUserId, userName) => {
 
 {activeTab === 'games' && (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* СКРЫТЫЙ КОМПОНЕНТ ДЛЯ РЕГИСТРАЦИИ ФУНКЦИИ - ВСЕГДА МОНТИРУЕТСЯ */}
+        <div style={{ display: 'none' }}>
+            <DailyQuests 
+                userBalance={currentBalance} 
+                onBalanceUpdate={updateBalanceAndStats} 
+                userId={userId} 
+                selectedGroupId={selectedGroup?.id}
+                vkId={userInfo?.id}
+            />
+        </div>
+        
         <GameWheel 
             onBalanceUpdate={updateBalanceAndStats} 
             userBalance={currentBalance}
