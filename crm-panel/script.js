@@ -120,6 +120,8 @@ let questsManager = [];
 let currentEditingQuestId = null;
 let currentEditingPromotionId = null;
 let presetQuestsList = [];
+let giveaways = [];
+let currentEditingGiveawayId = null;
 
 const API_URL = 'http://localhost:3001';
 
@@ -239,6 +241,7 @@ async function loadCRMPanel() {
     
     await loadPresetQuests();
     await loadPromotionsAndQuestsFromDB();
+    await loadGiveaways();
     loadAnalytics();
     loadLoyaltySettings();
     await loadWheelSettings();
@@ -2376,4 +2379,206 @@ async function saveDiceSettings() {
     } catch (error) {
         console.error('Ошибка сохранения настроек костей:', error);
     }
+}
+
+// ========== РОЗЫГРЫШИ (GIVEAWAYS) ==========
+
+// Load giveaways from database
+async function loadGiveaways() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/giveaways/${currentBusiness.id}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            giveaways = data.giveaways;
+            renderGiveawaysList();
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки розыгрышей:', error);
+    }
+}
+
+// Render giveaways list
+function renderGiveawaysList() {
+    const container = document.getElementById('giveawaysList');
+    if (!container) return;
+    
+    if (giveaways.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">Нет розыгрышей. Добавьте первый розыгрыш!</div>';
+        return;
+    }
+    
+    container.innerHTML = giveaways.map(giveaway => `
+        <div style="background: white; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">
+                        🎰 ${escapeHtml(giveaway.name)}
+                    </div>
+                    <div style="font-size: 13px; color: #666; margin-bottom: 4px;">
+                        <a href="${escapeHtml(giveaway.link)}" target="_blank" style="color: #3498db; word-break: break-all;">
+                            ${escapeHtml(giveaway.link)}
+                        </a>
+                    </div>
+                    ${giveaway.description ? `<div style="font-size: 13px; color: #555; margin-top: 8px;">${escapeHtml(giveaway.description)}</div>` : ''}
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-left: 16px;">
+                    <span style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: ${giveaway.active ? '#e8f5e9' : '#ffebee'}; color: ${giveaway.active ? '#2e7d32' : '#c62828'};">
+                        ${giveaway.active ? '✅ Активен' : '❌ Неактивен'}
+                    </span>
+                    <button onclick="editGiveaway(${giveaway.id})" style="background: #3498db; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                        ✏️
+                    </button>
+                    <button onclick="deleteGiveaway(${giveaway.id})" style="background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+            <div style="font-size: 11px; color: #999; margin-top: 8px;">
+                Создан: ${new Date(giveaway.created_at).toLocaleString('ru-RU')}
+            </div>
+        </div>
+    `).join('');
+}
+
+// Open giveaway modal
+function openGiveawayModal() {
+    currentEditingGiveawayId = null;
+    document.getElementById('giveawayModalTitle').textContent = 'Добавить розыгрыш';
+    document.getElementById('giveawayName').value = '';
+    document.getElementById('giveawayLink').value = '';
+    document.getElementById('giveawayDescription').value = '';
+    document.getElementById('giveawayActive').checked = true;
+    document.getElementById('giveawayError').style.display = 'none';
+    openModal('giveaway');
+}
+
+// Edit giveaway
+function editGiveaway(id) {
+    const giveaway = giveaways.find(g => g.id === id);
+    if (!giveaway) return;
+    
+    currentEditingGiveawayId = id;
+    document.getElementById('giveawayModalTitle').textContent = 'Редактировать розыгрыш';
+    document.getElementById('giveawayName').value = giveaway.name;
+    document.getElementById('giveawayLink').value = giveaway.link;
+    document.getElementById('giveawayDescription').value = giveaway.description || '';
+    document.getElementById('giveawayActive').checked = giveaway.active;
+    document.getElementById('giveawayError').style.display = 'none';
+    openModal('giveaway');
+}
+
+// Save giveaway
+async function saveGiveaway() {
+    const name = document.getElementById('giveawayName').value.trim();
+    const link = document.getElementById('giveawayLink').value.trim();
+    const description = document.getElementById('giveawayDescription').value.trim();
+    const active = document.getElementById('giveawayActive').checked;
+    const errorElement = document.getElementById('giveawayError');
+    
+    if (!name || !link) {
+        errorElement.textContent = 'Заполните название и ссылку';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    // Simple URL validation
+    try {
+        new URL(link);
+    } catch (e) {
+        errorElement.textContent = 'Введите корректную ссылку';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    try {
+        const data = {
+            companyId: currentBusiness.id,
+            name,
+            link,
+            description,
+            active
+        };
+        
+        let response;
+        if (currentEditingGiveawayId) {
+            response = await fetch(`${API_URL}/api/giveaways/${currentEditingGiveawayId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else {
+            response = await fetch(`${API_URL}/api/giveaways`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        }
+        
+        const result = await response.json();
+        if (result.success) {
+            closeModal('giveaway');
+            await loadGiveaways();
+            showNotification('Розыгрыш сохранен', 'success');
+        } else {
+            errorElement.textContent = result.message || 'Ошибка сохранения';
+            errorElement.style.display = 'block';
+            setTimeout(() => errorElement.style.display = 'none', 3000);
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения розыгрыша:', error);
+        errorElement.textContent = 'Ошибка сервера';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+    }
+}
+
+// Delete giveaway
+async function deleteGiveaway(id) {
+    if (!confirm('Удалить этот розыгрыш?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/giveaways/${id}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            await loadGiveaways();
+            showNotification('Розыгрыш удален', 'success');
+        }
+    } catch (error) {
+        console.error('Ошибка удаления:', error);
+        alert('Ошибка удаления розыгрыша');
+    }
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notif = document.createElement('div');
+    notif.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 16px 24px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        background: ${type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#3498db'};
+    `;
+    notif.textContent = message;
+    document.body.appendChild(notif);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notif.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notif.remove(), 300);
+    }, 3000);
 }

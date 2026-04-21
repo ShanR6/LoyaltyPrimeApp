@@ -45,7 +45,19 @@ const {
     checkPromotionCycle,
     trackPurchaseProgress,
     trackPromotionUsage,
-    resetQuestProgress
+    resetQuestProgress,
+    // Giveaways
+    getGiveaways,
+    addGiveaway,
+    updateGiveaway,
+    deleteGiveaway,
+    // User Classification
+    initializeUserClassification,
+    updateUserClassification,
+    getUserClassification,
+    getAllUsersClassification,
+    getUsersByType,
+    getClassificationStats
 } = require('./database-pg');
 
 const app = express();
@@ -368,6 +380,10 @@ app.post('/api/users/getOrCreate', async (req, res) => {
         if (!user) {
             user = await createUser(vkId, companyId, name);
         }
+        
+        // Отслеживаем посещение приложения для классификации пользователя
+        await initializeUserClassification(user.id, companyId);
+        await updateUserClassification(user.id, companyId, 'app_visit');
         
         const allQuests = await getQuests(companyId);
         const now = new Date();
@@ -1416,6 +1432,10 @@ app.post('/api/pos/apply-bonus-v2', async (req, res) => {
         // Отслеживаем прогресс покупок для заданий
         await trackPurchaseProgress(user.id, user.company_id, amount);
         
+        // Отслеживаем классификацию пользователя (покупка)
+        await initializeUserClassification(user.id, user.company_id);
+        await updateUserClassification(user.id, user.company_id, 'purchase');
+        
         res.json({
             success: true,
             message: `✅ Начислено ${bonusEarned} бонусов!`,
@@ -1567,6 +1587,138 @@ app.post('/api/users/:userId/quests/progress/update', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// ============ API ДЛЯ РОЗЫГРЫШЕЙ (GIVEAWAYS) ============
+
+// Получение всех розыгрышей компании
+app.get('/api/giveaways/:companyId', async (req, res) => {
+    try {
+        const giveaways = await getGiveaways(req.params.companyId);
+        res.json({ success: true, giveaways });
+    } catch (error) {
+        console.error('Ошибка получения розыгрышей:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение активных розыгрышей для mini-app
+app.get('/api/giveaways/:companyId/active', async (req, res) => {
+    try {
+        const giveaways = await getGiveaways(req.params.companyId);
+        const activeGiveaways = giveaways.filter(g => g.active);
+        res.json({ success: true, giveaways: activeGiveaways });
+    } catch (error) {
+        console.error('Ошибка получения активных розыгрышей:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Создание розыгрыша
+app.post('/api/giveaways', async (req, res) => {
+    try {
+        const { companyId, name, link, description, active } = req.body;
+        
+        if (!companyId || !name || !link) {
+            return res.status(400).json({ success: false, message: 'companyId, name и link обязательны' });
+        }
+        
+        const giveaway = await addGiveaway(companyId, { name, link, description, active });
+        res.json({ success: true, giveaway });
+    } catch (error) {
+        console.error('Ошибка создания розыгрыша:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Обновление розыгрыша
+app.put('/api/giveaways/:id', async (req, res) => {
+    try {
+        const { name, link, description, active } = req.body;
+        const giveaway = await updateGiveaway(req.params.id, { name, link, description, active });
+        res.json({ success: true, giveaway });
+    } catch (error) {
+        console.error('Ошибка обновления розыгрыша:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Удаление розыгрыша
+app.delete('/api/giveaways/:id', async (req, res) => {
+    try {
+        await deleteGiveaway(req.params.id);
+        res.json({ success: true, message: 'Розыгрыш удален' });
+    } catch (error) {
+        console.error('Ошибка удаления розыгрыша:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============ API ДЛЯ КЛАССИФИКАЦИИ ПОЛЬЗОВАТЕЛЕЙ ============
+
+// Получение классификации конкретного пользователя
+app.get('/api/users/:userId/classification/:companyId', async (req, res) => {
+    try {
+        const classification = await getUserClassification(req.params.userId, req.params.companyId);
+        
+        if (!classification) {
+            // Инициализируем если не существует
+            await initializeUserClassification(req.params.userId, req.params.companyId);
+            const newClassification = await getUserClassification(req.params.userId, req.params.companyId);
+            return res.json({ success: true, classification: newClassification });
+        }
+        
+        res.json({ success: true, classification });
+    } catch (error) {
+        console.error('Ошибка получения классификации:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение всех пользователей с классификацией
+app.get('/api/companies/:companyId/users/classification', async (req, res) => {
+    try {
+        const users = await getAllUsersClassification(req.params.companyId);
+        res.json({ success: true, users });
+    } catch (error) {
+        console.error('Ошибка получения пользователей:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение пользователей по типу
+app.get('/api/companies/:companyId/users/classification/:userType', async (req, res) => {
+    try {
+        const users = await getUsersByType(req.params.companyId, req.params.userType);
+        res.json({ success: true, users });
+    } catch (error) {
+        console.error('Ошибка получения пользователей:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение статистики по классификации
+app.get('/api/companies/:companyId/users/classification/stats', async (req, res) => {
+    try {
+        const stats = await getClassificationStats(req.params.companyId);
+        res.json({ success: true, stats });
+    } catch (error) {
+        console.error('Ошибка получения статистики:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Отслеживание посещения приложения
+app.post('/api/users/:userId/app-visit/:companyId', async (req, res) => {
+    try {
+        await initializeUserClassification(req.params.userId, req.params.companyId);
+        await updateUserClassification(req.params.userId, req.params.companyId, 'app_visit');
+        res.json({ success: true, message: 'Посещение записано' });
+    } catch (error) {
+        console.error('Ошибка записи посещения:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`✅ Backend running on http://localhost:${PORT}`);

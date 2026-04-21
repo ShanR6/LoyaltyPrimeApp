@@ -7,6 +7,7 @@ import { ReferralSystem } from './components/ReferralSystem';
 import { LoyaltyCard } from './components/LoyaltyCard';
 import { DiceRoll } from './components/DiceRoll';
 import { ScratchCard } from './components/ScratchCard';
+import { Giveaways } from './components/Giveaways';
 
 
 const API_URL = 'http://localhost:3001';
@@ -686,9 +687,9 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       </header>
 
       <nav style={{ display:'flex', gap:8, background:'rgba(0,0,0,0.3)', padding:6, borderRadius:60, marginBottom:24, flexWrap:'wrap', justifyContent:'center' }}>
-        {['home','card','offers','games','quests','referral','history'].map(tab => (
+        {['home','card','offers','giveaways','games','quests','referral','history'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex:'0 1 auto', background:activeTab===tab ? brandColor : 'transparent', border:'none', padding:'10px 12px', borderRadius:40, fontSize:12, fontWeight:600, color:activeTab===tab ? 'white' : '#aaa', cursor:'pointer', whiteSpace:'nowrap' }}>
-            {tab==='home'?'🏠 Главная':tab==='card'?'🎫 Карта':tab==='offers'?'🎁 Акции':tab==='games'?'🎮 Игры':tab==='quests'?'📋 Задания':tab==='referral'?'👥 Друзья':'📜 История'}
+            {tab==='home'?'🏠 Главная':tab==='card'?'🎫 Карта':tab==='offers'?'🎁 Акции':tab==='giveaways'?'🎰 Розыгрыши':tab==='games'?'🎮 Игры':tab==='quests'?'📋 Задания':tab==='referral'?'👥 Друзья':'📜 История'}
           </button>
         ))}
       </nav>
@@ -1032,6 +1033,10 @@ const loadUserData = async (companyId, vkUserId, userName) => {
         />
     </div>
 )}
+      
+      {activeTab === 'giveaways' && selectedGroup && (
+        <Giveaways selectedGroupId={selectedGroup?.id} />
+      )}
       
       {activeTab === 'quests' && (
         <DailyQuests 

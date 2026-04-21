@@ -154,6 +154,39 @@ async function initDatabase() {
             )
         `);
 
+        await query(`
+            CREATE TABLE IF NOT EXISTS giveaways (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                link TEXT NOT NULL,
+                description TEXT,
+                active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS user_classification (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                user_type VARCHAR(50) DEFAULT 'new', -- new, active, regular, dormant
+                first_visit_date TIMESTAMP,
+                last_purchase_date TIMESTAMP,
+                last_app_visit_date TIMESTAMP,
+                purchases_this_week INTEGER DEFAULT 0,
+                app_visits_this_week INTEGER DEFAULT 0,
+                purchases_last_two_weeks INTEGER DEFAULT 0,
+                consecutive_weeks_with_4_purchases INTEGER DEFAULT 0,
+                week_reset_date TIMESTAMP,
+                classified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, company_id)
+            )
+        `);
+
         console.log('✅ Таблицы созданы/проверены');
         
         await addMissingColumns();
@@ -1757,6 +1790,247 @@ async function checkPromotionCycle(promotionId) {
     return result.rows[0];
 }
 
+// ============ Функции для Розыгрышей (Giveaways) ============
+async function getGiveaways(companyId) {
+    const result = await query(
+        'SELECT * FROM giveaways WHERE company_id = $1 ORDER BY created_at DESC',
+        [companyId]
+    );
+    return result.rows;
+}
+
+async function addGiveaway(companyId, giveawayData) {
+    const { name, link, description, active } = giveawayData;
+    const result = await query(
+        `INSERT INTO giveaways (company_id, name, link, description, active, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) 
+         RETURNING *`,
+        [companyId, name, link, description || '', active !== undefined ? active : true]
+    );
+    return result.rows[0];
+}
+
+async function updateGiveaway(giveawayId, giveawayData) {
+    const { name, link, description, active } = giveawayData;
+    const result = await query(
+        `UPDATE giveaways 
+         SET name = $2, link = $3, description = $4, active = $5, updated_at = NOW() 
+         WHERE id = $1 
+         RETURNING *`,
+        [giveawayId, name, link, description, active]
+    );
+    return result.rows[0];
+}
+
+async function deleteGiveaway(giveawayId) {
+    await query('DELETE FROM giveaways WHERE id = $1', [giveawayId]);
+    return true;
+}
+
+// ============ Функции для Классификации Пользователей ============
+async function initializeUserClassification(userId, companyId) {
+    const existing = await query(
+        'SELECT * FROM user_classification WHERE user_id = $1 AND company_id = $2',
+        [userId, companyId]
+    );
+    
+    if (existing.rows.length === 0) {
+        const now = new Date();
+        const weekResetDate = new Date(now);
+        // Устанавливаем дату сброса на конец текущей недели (воскресенье)
+        weekResetDate.setDate(weekResetDate.getDate() + (7 - weekResetDate.getDay()));
+        weekResetDate.setHours(23, 59, 59, 999);
+        
+        await query(
+            `INSERT INTO user_classification 
+             (user_id, company_id, user_type, first_visit_date, last_app_visit_date, week_reset_date, classified_at, updated_at) 
+             VALUES ($1, $2, 'new', $3, $3, $4, NOW(), NOW())`,
+            [userId, companyId, now, weekResetDate]
+        );
+    }
+}
+
+async function updateUserClassification(userId, companyId, activityType) {
+    // activityType: 'purchase' или 'app_visit'
+    const classification = await query(
+        'SELECT * FROM user_classification WHERE user_id = $1 AND company_id = $2',
+        [userId, companyId]
+    );
+    
+    if (classification.rows.length === 0) {
+        await initializeUserClassification(userId, companyId);
+        return;
+    }
+    
+    const user = classification.rows[0];
+    const now = new Date();
+    
+    // Проверяем, нужно ли сбросить недельные счетчики
+    const weekResetDate = new Date(user.week_reset_date);
+    if (now > weekResetDate) {
+        // Сбрасываем недельные счетчики
+        const newWeekResetDate = new Date(now);
+        newWeekResetDate.setDate(newWeekResetDate.getDate() + (7 - newWeekResetDate.getDay()));
+        newWeekResetDate.setHours(23, 59, 59, 999);
+        
+        await query(
+            `UPDATE user_classification 
+             SET purchases_this_week = 0, 
+                 app_visits_this_week = 0,
+                 week_reset_date = $1,
+                 updated_at = NOW()
+             WHERE user_id = $2 AND company_id = $3`,
+            [newWeekResetDate, userId, companyId]
+        );
+        
+        user.purchases_this_week = 0;
+        user.app_visits_this_week = 0;
+    }
+    
+    // Обновляем счетчики активности
+    if (activityType === 'purchase') {
+        await query(
+            `UPDATE user_classification 
+             SET purchases_this_week = purchases_this_week + 1,
+                 purchases_last_two_weeks = purchases_last_two_weeks + 1,
+                 last_purchase_date = NOW(),
+                 updated_at = NOW()
+             WHERE user_id = $1 AND company_id = $2`,
+            [userId, companyId]
+        );
+    } else if (activityType === 'app_visit') {
+        await query(
+            `UPDATE user_classification 
+             SET app_visits_this_week = app_visits_this_week + 1,
+                 last_app_visit_date = NOW(),
+                 updated_at = NOW()
+             WHERE user_id = $1 AND company_id = $2`,
+            [userId, companyId]
+        );
+    }
+    
+    // Пересчитываем тип пользователя
+    await recalculateUserType(userId, companyId);
+}
+
+async function recalculateUserType(userId, companyId) {
+    const user = await query(
+        'SELECT * FROM user_classification WHERE user_id = $1 AND company_id = $2',
+        [userId, companyId]
+    );
+    
+    if (user.rows.length === 0) return;
+    
+    const userData = user.rows[0];
+    const now = new Date();
+    const firstVisitDate = new Date(userData.first_visit_date);
+    const daysSinceFirstVisit = Math.floor((now - firstVisitDate) / (1000 * 60 * 60 * 24));
+    
+    let newUserType = 'dormant'; // По умолчанию спящий
+    
+    // Проверяем, новый ли пользователь (первые 7 дней)
+    if (daysSinceFirstVisit <= 7) {
+        newUserType = 'new';
+    } else {
+        // Проверяем постоянного пользователя (4+ покупки в неделю на протяжении 2 недель)
+        if (userData.consecutive_weeks_with_4_purchases >= 2) {
+            newUserType = 'regular';
+        }
+        // Проверяем активного пользователя
+        else if (userData.purchases_this_week >= 1 || userData.app_visits_this_week >= 3) {
+            newUserType = 'active';
+        }
+        // Иначе спящий
+        else {
+            newUserType = 'dormant';
+        }
+    }
+    
+    // Обновляем тип пользователя
+    await query(
+        `UPDATE user_classification 
+         SET user_type = $1, classified_at = NOW(), updated_at = NOW()
+         WHERE user_id = $2 AND company_id = $3`,
+        [newUserType, userId, companyId]
+    );
+    
+    // Если пользователь сделал 4+ покупки на этой неделе, увеличиваем счетчик недель
+    if (userData.purchases_this_week >= 4) {
+        // Проверяем, увеличивали ли уже на этой неделе
+        const currentWeekStart = new Date(now);
+        currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
+        currentWeekStart.setHours(0, 0, 0, 0);
+        
+        await query(
+            `UPDATE user_classification 
+             SET consecutive_weeks_with_4_purchases = consecutive_weeks_with_4_purchases + 1,
+                 updated_at = NOW()
+             WHERE user_id = $1 AND company_id = $2 
+             AND purchases_this_week >= 4`,
+            [userId, companyId]
+        );
+    }
+}
+
+async function getUserClassification(userId, companyId) {
+    const result = await query(
+        'SELECT * FROM user_classification WHERE user_id = $1 AND company_id = $2',
+        [userId, companyId]
+    );
+    return result.rows[0];
+}
+
+async function getAllUsersClassification(companyId) {
+    const result = await query(
+        `SELECT uc.*, u.name, u.vk_id, u.bonus_balance, u.created_at as user_created_at
+         FROM user_classification uc
+         JOIN users u ON uc.user_id = u.id
+         WHERE uc.company_id = $1
+         ORDER BY uc.classified_at DESC`,
+        [companyId]
+    );
+    return result.rows;
+}
+
+async function getUsersByType(companyId, userType) {
+    const result = await query(
+        `SELECT uc.*, u.name, u.vk_id, u.bonus_balance, u.created_at as user_created_at
+         FROM user_classification uc
+         JOIN users u ON uc.user_id = u.id
+         WHERE uc.company_id = $1 AND uc.user_type = $2
+         ORDER BY uc.classified_at DESC`,
+        [companyId, userType]
+    );
+    return result.rows;
+}
+
+async function getClassificationStats(companyId) {
+    const result = await query(
+        `SELECT 
+            user_type,
+            COUNT(*) as count
+         FROM user_classification
+         WHERE company_id = $1
+         GROUP BY user_type`,
+        [companyId]
+    );
+    
+    const stats = {
+        new: 0,
+        active: 0,
+        regular: 0,
+        dormant: 0,
+        total: 0
+    };
+    
+    result.rows.forEach(row => {
+        stats[row.user_type] = parseInt(row.count);
+        stats.total += parseInt(row.count);
+    });
+    
+    return stats;
+}
+
 module.exports = {
     pool,
     query,
@@ -1812,5 +2086,18 @@ module.exports = {
 	checkAndResetQuests,
     trackPurchaseProgress,
     trackPromotionUsage,
-    resetQuestProgress
+    resetQuestProgress,
+    // Giveaways
+    getGiveaways,
+    addGiveaway,
+    updateGiveaway,
+    deleteGiveaway,
+    // User Classification
+    initializeUserClassification,
+    updateUserClassification,
+    recalculateUserType,
+    getUserClassification,
+    getAllUsersClassification,
+    getUsersByType,
+    getClassificationStats
 };

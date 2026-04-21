@@ -171,6 +171,34 @@
         </div>
     </div>
 
+    <!-- Модальное окно добавления/редактирования розыгрыша -->
+    <div id="giveawayModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal('giveaway')">&times;</span>
+            <div class="modal-title" id="giveawayModalTitle">Добавить розыгрыш</div>
+            <div class="form-group">
+                <label>Название розыгрыша</label>
+                <input type="text" id="giveawayName" class="form-input" placeholder="Например: Розыгрыш iPhone 15">
+            </div>
+            <div class="form-group">
+                <label>Ссылка на пост с розыгрышем</label>
+                <input type="url" id="giveawayLink" class="form-input" placeholder="https://vk.com/wall-123456_789">
+            </div>
+            <div class="form-group">
+                <label>Описание (необязательно)</label>
+                <textarea id="giveawayDescription" class="form-input" rows="3" placeholder="Описание розыгрыша..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="giveawayActive" checked>
+                    Активен
+                </label>
+            </div>
+            <div class="error-message" id="giveawayError"></div>
+            <button class="modal-btn" onclick="saveGiveaway()">💾 Сохранить</button>
+        </div>
+    </div>
+
     <!-- CRM Панель -->
     <div id="crmPanel" style="display: none;">
         <div class="crm-container">
@@ -294,6 +322,11 @@
         <h3>📋 Задания</h3>
         <p class="info-text" style="margin-bottom:16px;">⚡ Задания создаются автоматически. Вы можете активировать их, настроить награду и указать срок действия.</p>
         <div id="questsManagerList"></div>
+    </div>
+    <div class="settings-card">
+        <h3>🎰 Розыгрыши</h3>
+        <button class="btn-save" onclick="openGiveawayModal()" style="margin-bottom:16px;">➕ Добавить розыгрыш</button>
+        <div id="giveawaysList"></div>
     </div>
 </div>
 
