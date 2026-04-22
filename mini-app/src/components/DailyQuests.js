@@ -611,24 +611,18 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
                 <div style={{ ...styles.questStatus, color: statusColor }}>{statusDisplay}</div>
               </div>
               <div style={styles.questReward}>
-                <div style={styles.rewardValue}>+{quest.reward}</div>
-                <div style={styles.rewardLabel}>бонусов</div>
-                {!quest.completed ? (
-                  <div style={{ ...styles.statusPending, color: quest.status === 'active' ? '#aaa' : '#888' }}>
-                    {quest.status === 'active' ? '⏳ Не выполнено' : '🔒 Неактивно'}
-                  </div>
-                ) : quest.claimed ? (
-                  timeRemaining ? (
-                    <div style={{ ...styles.statusPending, color: '#f39c12', fontSize: 10 }}>
-                      {timeRemaining}
-                    </div>
-                  ) : (
-                    <div style={styles.statusClaimed}>✅ Получено</div>
-                  )
-                ) : (
-                  <button onClick={() => claimReward(quest)} style={styles.claimButton}>Забрать</button>
-                )}
-              </div>
+  <div style={styles.rewardValue}>+{quest.reward}</div>
+  <div style={styles.rewardLabel}>бонусов</div>
+  {!quest.completed ? (
+    <div style={{ ...styles.statusPending, color: quest.status === 'active' ? '#aaa' : '#888' }}>
+      {quest.status === 'active' ? '⏳ Не выполнено' : '🔒 Неактивно'}
+    </div>
+  ) : quest.claimed ? (
+    <div style={styles.statusClaimed}>✅ Получено</div>
+  ) : (
+    <button onClick={() => claimReward(quest)} style={styles.claimButton}>Забрать</button>
+  )}
+</div>
             </div>
           );
         })}

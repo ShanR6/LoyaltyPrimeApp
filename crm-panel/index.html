@@ -21,7 +21,6 @@
                 </nav>
                 <div class="auth-buttons">
                     <button class="btn-outline" onclick="openCRMLogin()">Вход в CRM</button>
-                    <button class="btn-solid" onclick="openCRMRegister()">Регистрация CRM</button>
                     <button class="btn-demo" onclick="document.querySelector('#cta').scrollIntoView({behavior: 'smooth'})">
                         Получить демо
                     </button>
@@ -51,44 +50,7 @@
         </div>
     </div>
 
-    <div class="modal" id="registerModal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeModal('register')">&times;</span>
-            <div class="modal-title">Регистрация бизнеса</div>
-            <div class="form-group">
-                <label class="form-label">Название компании</label>
-                <input type="text" class="form-input" id="registerCompany" placeholder="ООО Ромашка">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Имя владельца</label>
-                <input type="text" class="form-input" id="registerName" placeholder="Иван Петров">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" id="registerEmail" placeholder="example@mail.com">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Телефон</label>
-                <input type="tel" class="form-input" id="registerPhone" placeholder="+7 (999) 123-45-67">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Пароль</label>
-                <input type="password" class="form-input" id="registerPassword" placeholder="********">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Подтвердите пароль</label>
-                <input type="password" class="form-input" id="registerConfirm" placeholder="********">
-            </div>
-            <div class="error-message" id="registerError"></div>
-            <button class="modal-btn" onclick="handleCRMRegister()">Зарегистрироваться</button>
-            <div class="modal-link">
-                Уже есть аккаунт? <span onclick="switchToLogin()">Войти</span>
-            </div>
-        </div>
-    </div>
-
     <!-- Модальное окно добавления/редактирования акции -->
-<!-- Модальное окно редактирования акции -->
 <div id="promotionModal" class="modal">
     <div class="modal-content">
         <span class="modal-close" onclick="closeModal('promotion')">&times;</span>
@@ -172,32 +134,58 @@
     </div>
 
     <!-- Модальное окно добавления/редактирования розыгрыша -->
-    <div id="giveawayModal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeModal('giveaway')">&times;</span>
-            <div class="modal-title" id="giveawayModalTitle">Добавить розыгрыш</div>
-            <div class="form-group">
-                <label>Название розыгрыша</label>
-                <input type="text" id="giveawayName" class="form-input" placeholder="Например: Розыгрыш iPhone 15">
-            </div>
-            <div class="form-group">
-                <label>Ссылка на пост с розыгрышем</label>
-                <input type="url" id="giveawayLink" class="form-input" placeholder="https://vk.com/wall-123456_789">
-            </div>
-            <div class="form-group">
-                <label>Описание (необязательно)</label>
-                <textarea id="giveawayDescription" class="form-input" rows="3" placeholder="Описание розыгрыша..."></textarea>
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="giveawayActive" checked>
-                    Активен
-                </label>
-            </div>
-            <div class="error-message" id="giveawayError"></div>
-            <button class="modal-btn" onclick="saveGiveaway()">💾 Сохранить</button>
+<div id="giveawayModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal('giveaway')">&times;</span>
+        <div class="modal-title" id="giveawayModalTitle">Добавить розыгрыш</div>
+        
+        <div class="form-group">
+            <label>Название розыгрыша</label>
+            <input type="text" id="giveawayName" class="form-input" placeholder="Например: Розыгрыш iPhone 15">
         </div>
+        
+        <div class="form-group">
+            <label>Ссылка на пост с розыгрышем</label>
+            <input type="url" id="giveawayLink" class="form-input" placeholder="https://vk.com/wall-123456_789">
+        </div>
+        
+        <div class="form-group">
+            <label>Описание (необязательно)</label>
+            <textarea id="giveawayDescription" class="form-input" rows="3" placeholder="Описание розыгрыша..."></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="giveawayIsPaid" onchange="toggleGiveawayPaidFields()">
+                Платный розыгрыш (требуется оплата бонусами)
+            </label>
+        </div>
+        
+        <div id="giveawayPaidFields" style="display: none;">
+            <div class="form-group">
+                <label>💰 Стоимость доступа (бонусов)</label>
+                <input type="number" id="giveawayBonusCost" class="form-input" value="100" min="1" max="10000">
+                <small style="display: block; margin-top: 4px; color: #666;">Пользователь должен будет заплатить это количество бонусов для участия</small>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label>📅 Дата окончания розыгрыша</label>
+            <input type="datetime-local" id="giveawayEndDate" class="form-input">
+            <small style="display: block; margin-top: 4px; color: #666;">После этой даты розыгрыш станет недоступен для пользователей</small>
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="giveawayActive" checked>
+                Активен
+            </label>
+        </div>
+        
+        <div class="error-message" id="giveawayError"></div>
+        <button class="modal-btn" onclick="saveGiveaway()">💾 Сохранить</button>
     </div>
+</div>
 
     <!-- CRM Панель -->
     <div id="crmPanel" style="display: none;">
@@ -242,14 +230,8 @@
                 <div id="analyticsModule" class="crm-module active">
                     <div class="module-header">
                         <h2>📊 Аналитика и сегментация</h2>
-                        <div class="date-range">
-                            <button class="date-btn active" data-period="day">День</button>
-                            <button class="date-btn" data-period="week">Неделя</button>
-                            <button class="date-btn" data-period="month">Месяц</button>
-                            <button class="date-btn" data-period="year">Год</button>
-                        </div>
                     </div>
-                    <div class="stats-grid" id="statsGrid"></div>
+                    <div class="stats-grid" id="statsGrid" style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;"></div>
                     <div class="charts-row">
                         <div class="chart-card">
                             <h3>📊 Сегментация пользователей</h3>
@@ -443,7 +425,7 @@
 
     <!-- Остальной сайт (лендинг) -->
     <div id="mainSite">
-        <section class="hero"><div class="container"><div class="hero-grid"><div class="hero-content"><h1 class="hero-title">Программа лояльности<span>для малого и среднего бизнеса</span></h1><div class="hero-buttons"><button class="btn-primary" onclick="openCRMRegister()">Попробовать бесплатно</button></div></div><div class="hero-visual"><div class="card-preview"><div>💰 Текущий баланс</div><div class="balance-main"><span class="balance-amount" id="balance">0 <small>бонусов</small></span><span id="userRankBadge">🏅 Новичок</span></div><div class="progress-bar"><div class="progress-fill" id="rankProgress" style="width: 0%;"></div></div><div style="display: flex; justify-content: space-between;"><span id="currentRank">Новичок</span><span id="nextRank">Серебро</span></div></div></div></div></div></section>
+        <section class="hero"><div class="container"><div class="hero-grid"><div class="hero-content"><h1 class="hero-title">Программа лояльности<span>для малого и среднего бизнеса</span></h1><div class="hero-buttons"></div></div><div class="hero-visual"><div class="card-preview"><div>💰 Текущий баланс</div><div class="balance-main"><span class="balance-amount" id="balance">0 <small>бонусов</small></span><span id="userRankBadge">🏅 Новичок</span></div><div class="progress-bar"><div class="progress-fill" id="rankProgress" style="width: 0%;"></div></div><div style="display: flex; justify-content: space-between;"><span id="currentRank">Новичок</span><span id="nextRank">Серебро</span></div></div></div></div></div></section>
         <section id="card" class="card-features"><div class="container"><div class="section-header"><h2>Цифровая карта лояльности</h2></div><div class="card-grid"><div class="card-feature-item"><h3>📱 VK Mini App</h3><p>Полноценный личный кабинет прямо в VK. Не нужно скачивать приложение.</p></div><div class="card-feature-item"><h3>💳 Карта лояльности</h3><p>Всегда под рукой. Обновление баланса в реальном времени.</p></div></div></div></section>
         <section id="ranks" class="ranks"><div class="container"><div class="section-header"><h2>Ранговая бонусная система</h2></div><div class="ranks-grid"><div class="rank-card"><div class="rank-name bronze">Bronze</div><div class="rank-cashback">3%</div><p>кешбэк</p></div><div class="rank-card"><div class="rank-name silver">Silver</div><div class="rank-cashback">5%</div><p>кешбэк</p></div><div class="rank-card"><div class="rank-name gold">Gold</div><div class="rank-cashback">10%</div><p>кешбэк</p></div></div></div></section>
         <section id="marketing" class="marketing"><div class="container"><div class="section-header"><h2>Конструктор акций и рассылок</h2></div><div class="scenario-grid"><div class="scenario-card"><h4>🔄 Возврат потерянных</h4><p>Персональные предложения неактивным гостям</p></div><div class="scenario-card"><h4>🎂 Дни рождения</h4><p>Бонусы и поздравления</p></div><div class="scenario-card"><h4>⏰ Тихие часы</h4><p>Поддержка продаж в часы спада</p></div><div class="scenario-card"><h4>👥 Рефералы</h4><p>Приводите друзей и получайте бонусы</p></div></div></div></section>

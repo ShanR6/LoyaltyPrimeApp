@@ -2696,3 +2696,50 @@ body.crm-open .auth-buttons {
 .info-notice .support-email a:hover {
     text-decoration: underline;
 }
+/* Стили для розыгрышей в CRM */
+.promotion-status.waiting {
+    background: #f39c12;
+    color: white;
+}
+
+.promotion-status.expired {
+    background: #95a5a6;
+    color: white;
+}
+
+/* Стили для полей ввода в модальном окне */
+input[type="datetime-local"] {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+
+select.form-input {
+    background: white;
+    cursor: pointer;
+}
+/* Стили для статуса парсинга */
+#autoParseStatus {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+}
+
+#postPreview {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

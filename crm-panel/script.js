@@ -100,12 +100,48 @@ function toggleFaq(element) {
     }
 }
 
-function submitDemo() {
+// ========== ОТПРАВКА ДЕМО-ЗАЯВКИ НА ПОЧТУ ==========
+async function submitDemo() {
+    const brandName = document.getElementById('demoBrand')?.value;
     const email = document.getElementById('demoEmail')?.value;
-    if (email && email.includes('@')) {
-        alert('Спасибо! Мы свяжемся с вами в ближайшее время.');
-    } else {
+    
+    if (!brandName || !email) {
+        alert('Пожалуйста, заполните оба поля');
+        return;
+    }
+    
+    if (!email.includes('@')) {
         alert('Пожалуйста, введите корректный email');
+        return;
+    }
+    
+    const button = document.querySelector('.cta-button');
+    const originalText = button.textContent;
+    button.textContent = '⏳ Отправка...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/demo-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ brandName, email })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('✅ Спасибо! Заявка отправлена. Мы свяжемся с вами в ближайшее время.');
+            document.getElementById('demoBrand').value = '';
+            document.getElementById('demoEmail').value = '';
+        } else {
+            alert('❌ ' + (data.message || 'Ошибка отправки. Попробуйте позже.'));
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('❌ Не удалось отправить заявку. Проверьте подключение к интернету.');
+    } finally {
+        button.textContent = originalText;
+        button.disabled = false;
     }
 }
 
@@ -124,6 +160,123 @@ let giveaways = [];
 let currentEditingGiveawayId = null;
 
 const API_URL = 'http://localhost:3001';
+
+// ========== ФУНКЦИИ ДЛЯ РАБОТЫ С COOKIE ==========
+function setCookie(name, value, days = 7) {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; SameSite=Lax';
+    console.log('🍪 Cookie saved:', name, '=', value);
+}
+
+function getCookie(name) {
+    const value = document.cookie.split('; ').reduce((r, v) => {
+        const parts = v.split('=');
+        return parts[0] === name ? decodeURIComponent(parts[1]) : r;
+    }, '');
+    console.log('🍪 Cookie read:', name, '=', value);
+    return value;
+}
+
+function deleteCookie(name) {
+    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    console.log('🍪 Cookie deleted:', name);
+}
+
+// Fallback to localStorage if cookies don't work (file:// protocol)
+function setStorage(name, value, days = 7) {
+    const expires = Date.now() + days * 864e5;
+    const data = { value, expires };
+    localStorage.setItem('crm_' + name, JSON.stringify(data));
+    console.log('💾 LocalStorage saved:', name, '=', value);
+}
+
+function getStorage(name) {
+    const dataStr = localStorage.getItem('crm_' + name);
+    if (!dataStr) return null;
+    
+    try {
+        const data = JSON.parse(dataStr);
+        if (Date.now() > data.expires) {
+            localStorage.removeItem('crm_' + name);
+            console.log('💾 LocalStorage expired:', name);
+            return null;
+        }
+        console.log('💾 LocalStorage read:', name, '=', data.value);
+        return data.value;
+    } catch (e) {
+        return null;
+    }
+}
+
+function deleteStorage(name) {
+    localStorage.removeItem('crm_' + name);
+    console.log('💾 LocalStorage deleted:', name);
+}
+
+// Проверка сохраненной сессии при загрузке страницы
+async function checkSavedSession() {
+    console.log('🔍 Checking saved session...');
+    
+    // Пробуем cookies first
+    let savedCompanyId = getCookie('crm_company_id');
+    
+    // Если cookies не работают, пробуем localStorage
+    if (!savedCompanyId) {
+        savedCompanyId = getStorage('company_id');
+    }
+    
+    if (savedCompanyId) {
+        try {
+            console.log('🔍 Found saved company ID:', savedCompanyId);
+            // Проверяем, что компания все еще существует
+            const response = await fetch(`${API_URL}/api/companies/list`);
+            const companies = await response.json();
+            
+            const company = companies.find(c => c.id === parseInt(savedCompanyId));
+            
+            if (company) {
+                console.log('✅ Восстановлена сессия для:', company.company || company.name);
+                currentBusiness = company;
+                loadCRMPanel();
+                return true;
+            } else {
+                console.log('❌ Company not found in database');
+            }
+        } catch (error) {
+            console.error('❌ Ошибка восстановления сессии:', error);
+        }
+        
+        // Если сессия невалидна, очищаем
+        deleteCookie('crm_company_id');
+        deleteCookie('crm_company_name');
+        deleteStorage('company_id');
+        deleteStorage('company_name');
+    } else {
+        console.log('ℹ️ No saved session found');
+    }
+    
+    return false;
+}
+
+// Сохранение сессии при входе
+function saveSession(company) {
+    console.log('💾 Saving session for:', company.company || company.name);
+    setCookie('crm_company_id', company.id, 7); // 7 дней
+    setCookie('crm_company_name', company.company || company.name, 7);
+    
+    // Fallback to localStorage
+    setStorage('company_id', company.id, 7);
+    setStorage('company_name', company.company || company.name, 7);
+}
+
+// Очистка сессии при выходе
+function clearSession() {
+    console.log('🗑️ Clearing session');
+    deleteCookie('crm_company_id');
+    deleteCookie('crm_company_name');
+    deleteStorage('company_id');
+    deleteStorage('company_name');
+}
 
 // ========== РЕГИСТРАЦИЯ И ВХОД ==========
 function openCRMLogin() { openModal('login'); }
@@ -209,6 +362,7 @@ async function handleCRMLogin() {
         
         if (data.success) {
             currentBusiness = data.company;
+            saveSession(data.company); // Сохраняем сессию в cookie
             closeModal('login');
             loadCRMPanel();
         } else {
@@ -242,7 +396,7 @@ async function loadCRMPanel() {
     await loadPresetQuests();
     await loadPromotionsAndQuestsFromDB();
     await loadGiveaways();
-    loadAnalytics();
+    await loadAnalytics('month');
     loadLoyaltySettings();
     await loadWheelSettings();
     await loadScratchSettings();
@@ -256,6 +410,7 @@ function closeCRMPanel() {
     document.body.style.background = '#ffffff';
     document.body.classList.remove('crm-open');
     currentBusiness = null;
+    clearSession(); // Очищаем сессию при выходе
 }
 
 function escapeHtml(text) {
@@ -264,52 +419,272 @@ function escapeHtml(text) {
 }
 
 // ========== МОДУЛЬ 1: АНАЛИТИКА ==========
-function loadAnalytics() {
-    const stats = {
-        revenue: 1250000, activeUsers: 1234, newUsers: 89,
-        segments: [
-            { name: 'Новые', count: 234, percent: 18, color: '#3498db' },
-            { name: 'Активные', count: 567, percent: 44, color: '#2ecc71' },
-            { name: 'Постоянные', count: 345, percent: 27, color: '#f39c12' },
-            { name: 'Спящие', count: 456, percent: 35, color: '#e74c3c' }
-        ],
-        dailyActivity: [45, 52, 48, 61, 55, 67, 72, 68, 75, 82, 78, 85, 91, 88],
-        topProducts: [
-            { name: 'Пицца Маргарита', sales: 234, revenue: 234000 },
-            { name: 'Капучино', sales: 189, revenue: 94500 },
-            { name: 'Бургер Классик', sales: 156, revenue: 156000 }
-        ]
-    };
-    const totalRevenue = stats.revenue;
+async function loadAnalytics(period = 'month') {
+    if (!currentBusiness) return;
     
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/analytics?period=${period}`);
+        const data = await response.json();
+        
+        if (data.success && data.analytics) {
+            const analytics = data.analytics;
+            
+            // Update stats grid with REAL data
+            const statsGrid = document.getElementById('statsGrid');
+            if (statsGrid) {
+                const revenue = analytics.revenue || 0;
+                const activeUsers = analytics.activeUsers || 0;
+                const newUsers = analytics.newUsers || 0;
+                const trend = analytics.revenueTrend || 0;
+                
+                const trendIcon = trend >= 0 ? '↑' : '↓';
+                const trendClass = trend >= 0 ? 'up' : 'down';
+                const trendValue = Math.abs(trend);
+                
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-info">
+                            <div class="stat-value">${revenue.toLocaleString()} ₽</div>
+                            <div class="stat-label">Выручка за период</div>
+                            <div class="stat-trend ${trendClass}">${trendIcon} ${trendValue}%</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-info">
+                            <div class="stat-value">${activeUsers}</div>
+                            <div class="stat-label">Активных покупателей</div>
+                            <div class="stat-trend up">Совершили покупки</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🆕</div>
+                        <div class="stat-info">
+                            <div class="stat-value">${newUsers}</div>
+                            <div class="stat-label">Новых пользователей</div>
+                            <div class="stat-trend up">Зарегистрировались</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Update user segmentation with REAL classification data
+            const segmentsList = document.getElementById('segmentsList');
+            if (segmentsList) {
+                const classif = analytics.classification || { new: 0, active: 0, regular: 0, dormant: 0, total: 0 };
+                const total = classif.total || 0;
+                
+                const segments = [
+                    { name: '🌱 Новичок', desc: '1 покупка, ≤14 дней', count: classif.new || 0, percent: total > 0 ? Math.round((classif.new / total) * 100) : 0, color: '#3498db' },
+                    { name: '🔥 Активный', desc: '2+ покупок, ≤7 дней между', count: classif.active || 0, percent: total > 0 ? Math.round((classif.active / total) * 100) : 0, color: '#2ecc71' },
+                    { name: '⭐ Постоянный', desc: '2+ покупок, ≤3 дней между', count: classif.regular || 0, percent: total > 0 ? Math.round((classif.regular / total) * 100) : 0, color: '#f39c12' },
+                    { name: '😴 Спящий', desc: '1+ покупок, ≥20 дней', count: classif.dormant || 0, percent: total > 0 ? Math.round((classif.dormant / total) * 100) : 0, color: '#e74c3c' }
+                ];
+                
+                segmentsList.innerHTML = segments.map(seg => `
+                    <div class="segment-item">
+                        <div class="segment-header">
+                            <div class="segment-color" style="background-color: ${seg.color}"></div>
+                            <div>
+                                <div class="segment-name">${seg.name}</div>
+                                <div style="font-size: 11px; color: #999; margin-top: 2px;">${seg.desc}</div>
+                            </div>
+                            <div class="segment-count">${seg.count} чел.</div>
+                            <div class="segment-percent">${seg.percent}%</div>
+                        </div>
+                        <div class="segment-bar">
+                            <div class="segment-fill" style="width: ${seg.percent}%; background-color: ${seg.color}"></div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            // Update daily activity chart
+            const activityChart = document.getElementById('activityChart');
+            if (activityChart) {
+                const dailyActivity = analytics.dailyActivity || [];
+                
+                if (dailyActivity.length > 0) {
+                    const maxValue = Math.max(...dailyActivity.map(d => parseInt(d.transactions) || 0));
+                    activityChart.innerHTML = `
+                        <div class="activity-chart">
+                            ${dailyActivity.slice(-14).map((day, i) => `
+                                <div class="bar-container">
+                                    <div class="bar" style="height: ${maxValue > 0 ? (parseInt(day.transactions) / maxValue) * 150 : 0}px">
+                                        <span class="bar-value">${day.transactions}</span>
+                                    </div>
+                                    <div class="bar-label">${new Date(day.date).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short'})}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    // Показываем сообщение при отсутствии данных
+                    activityChart.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #999;">
+                            <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет данных активности</div>
+                            <div style="font-size: 13px;">Покупки через POS терминал появятся здесь</div>
+                        </div>
+                    `;
+                }
+            }
+            
+            // Update top products
+            const topProducts = document.getElementById('topProducts');
+            if (topProducts) {
+                const products = analytics.topProducts || [];
+                const totalRevenue = analytics.revenue || 0;
+                
+                if (products.length > 0) {
+                    topProducts.innerHTML = `
+                        <div class="products-table">
+                            <div class="table-header">
+                                <div>Продукт</div>
+                                <div>Продажи</div>
+                                <div>Выручка</div>
+                                <div>Доля</div>
+                            </div>
+                            ${products.map((p, i) => {
+                                const items = typeof p.items === 'string' ? JSON.parse(p.items) : p.items;
+                                const productName = Array.isArray(items) ? items.join(', ') : String(items);
+                                const salesCount = parseInt(p.sales_count) || 0;
+                                const revenue = parseInt(p.revenue) || 0;
+                                const share = totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 100) : 0;
+                                
+                                return `
+                                    <div class="table-row">
+                                        <div class="product-name">
+                                            <span class="product-rank">${i+1}</span> 
+                                            ${productName.substring(0, 30)}${productName.length > 30 ? '...' : ''}
+                                        </div>
+                                        <div>${salesCount} шт.</div>
+                                        <div>${revenue.toLocaleString()} ₽</div>
+                                        <div>
+                                            <div class="product-bar">
+                                                <div class="product-fill" style="width: ${share}%"></div>
+                                                <span>${share}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `;
+                } else {
+                    // Показываем сообщение при отсутствии данных
+                    topProducts.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #999;">
+                            <div style="font-size: 48px; margin-bottom: 16px;">🛒</div>
+                            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет продаж</div>
+                            <div style="font-size: 13px;">Продажи через POS терминал появятся здесь</div>
+                        </div>
+                    `;
+                }
+            }
+        } else {
+            console.warn('Аналитика не получена:', data);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки аналитики:', error);
+        // При ошибке показываем нули
+        showEmptyAnalytics();
+    }
+}
+
+// Показать пустую аналитику с нулями
+function showEmptyAnalytics() {
     const statsGrid = document.getElementById('statsGrid');
     if (statsGrid) {
         statsGrid.innerHTML = `
-            <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-info"><div class="stat-value">${stats.revenue.toLocaleString()} ₽</div><div class="stat-label">Выручка за месяц</div><div class="stat-trend up">↑ +12%</div></div></div>
-            <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><div class="stat-value">${stats.activeUsers}</div><div class="stat-label">Активных пользователей</div><div class="stat-trend up">↑ +8%</div></div></div>
-            <div class="stat-card"><div class="stat-icon">🆕</div><div class="stat-info"><div class="stat-value">${stats.newUsers}</div><div class="stat-label">Новых за месяц</div><div class="stat-trend up">↑ +23%</div></div></div>
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-info">
+                    <div class="stat-value">0 ₽</div>
+                    <div class="stat-label">Выручка за период</div>
+                    <div class="stat-trend up">↑ 0%</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-info">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Активных покупателей</div>
+                    <div class="stat-trend up">Совершили покупки</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🆕</div>
+                <div class="stat-info">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Новых пользователей</div>
+                    <div class="stat-trend up">Зарегистрировались</div>
+                </div>
+            </div>
         `;
     }
     
     const segmentsList = document.getElementById('segmentsList');
     if (segmentsList) {
-        segmentsList.innerHTML = stats.segments.map(seg => `
-            <div class="segment-item"><div class="segment-header"><div class="segment-color" style="background-color: ${seg.color}"></div><div class="segment-name">${seg.name}</div><div class="segment-count">${seg.count} чел.</div><div class="segment-percent">${seg.percent}%</div></div><div class="segment-bar"><div class="segment-fill" style="width: ${seg.percent}%; background-color: ${seg.color}"></div></div></div>
-        `).join('');
-    }
-    
-    const activityChart = document.getElementById('activityChart');
-    if (activityChart) {
-        const maxValue = Math.max(...stats.dailyActivity);
-        activityChart.innerHTML = `<div class="activity-chart">${stats.dailyActivity.slice(-14).map((val, i) => `<div class="bar-container"><div class="bar" style="height: ${(val / maxValue) * 150}px"><span class="bar-value">${val}</span></div><div class="bar-label">Д${i+1}</div></div>`).join('')}</div>`;
-    }
-    
-    const topProducts = document.getElementById('topProducts');
-    if (topProducts) {
-        topProducts.innerHTML = `
-            <div class="products-table"><div class="table-header"><div>Продукт</div><div>Продажи</div><div>Выручка</div><div>Доля</div></div>
-            ${stats.topProducts.map((p,i) => `<div class="table-row"><div class="product-name"><span class="product-rank">${i+1}</span> ${p.name}</div><div>${p.sales} шт.</div><div>${p.revenue.toLocaleString()} ₽</div><div><div class="product-bar"><div class="product-fill" style="width: ${(p.revenue/totalRevenue)*100}%"></div><span>${Math.round((p.revenue/totalRevenue)*100)}%</span></div></div></div>`).join('')}
-            </div>`;
+        segmentsList.innerHTML = `
+            <div class="segment-item">
+                <div class="segment-header">
+                    <div class="segment-color" style="background-color: #3498db"></div>
+                    <div>
+                        <div class="segment-name">🌱 Новичок</div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">1 покупка, ≤14 дней</div>
+                    </div>
+                    <div class="segment-count">0 чел.</div>
+                    <div class="segment-percent">0%</div>
+                </div>
+                <div class="segment-bar">
+                    <div class="segment-fill" style="width: 0%; background-color: #3498db"></div>
+                </div>
+            </div>
+            <div class="segment-item">
+                <div class="segment-header">
+                    <div class="segment-color" style="background-color: #2ecc71"></div>
+                    <div>
+                        <div class="segment-name">🔥 Активный</div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">2+ покупок, ≤7 дней между</div>
+                    </div>
+                    <div class="segment-count">0 чел.</div>
+                    <div class="segment-percent">0%</div>
+                </div>
+                <div class="segment-bar">
+                    <div class="segment-fill" style="width: 0%; background-color: #2ecc71"></div>
+                </div>
+            </div>
+            <div class="segment-item">
+                <div class="segment-header">
+                    <div class="segment-color" style="background-color: #f39c12"></div>
+                    <div>
+                        <div class="segment-name">⭐ Постоянный</div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">2+ покупок, ≤3 дней между</div>
+                    </div>
+                    <div class="segment-count">0 чел.</div>
+                    <div class="segment-percent">0%</div>
+                </div>
+                <div class="segment-bar">
+                    <div class="segment-fill" style="width: 0%; background-color: #f39c12"></div>
+                </div>
+            </div>
+            <div class="segment-item">
+                <div class="segment-header">
+                    <div class="segment-color" style="background-color: #e74c3c"></div>
+                    <div>
+                        <div class="segment-name">😴 Спящий</div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">1+ покупок, ≥20 дней</div>
+                    </div>
+                    <div class="segment-count">0 чел.</div>
+                    <div class="segment-percent">0%</div>
+                </div>
+                <div class="segment-bar">
+                    <div class="segment-fill" style="width: 0%; background-color: #e74c3c"></div>
+                </div>
+            </div>
+        `;
     }
 }
 
@@ -2410,37 +2785,54 @@ function renderGiveawaysList() {
         return;
     }
     
-    container.innerHTML = giveaways.map(giveaway => `
-        <div style="background: white; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #e0e0e0;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                <div style="flex: 1;">
-                    <div style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">
-                        🎰 ${escapeHtml(giveaway.name)}
+    container.innerHTML = giveaways.map(giveaway => {
+        const now = new Date();
+        const endDate = giveaway.end_date ? new Date(giveaway.end_date) : null;
+        const isExpired = endDate && endDate < now;
+        const isPaid = giveaway.is_paid;
+        
+        // Форматируем дату окончания
+        let endDateText = '';
+        if (endDate) {
+            endDateText = endDate.toLocaleDateString('ru-RU') + ' ' + endDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        return `
+            <div style="background: white; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #e0e0e0; ${isExpired ? 'opacity: 0.6;' : ''}">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">
+                            🎰 ${escapeHtml(giveaway.name)}
+                            ${isPaid ? '<span style="background: #ffd966; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 8px;">💎 Платный</span>' : '<span style="background: #a8e6cf; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 8px;">🎁 Бесплатный</span>'}
+                            ${isExpired ? '<span style="background: #e74c3c; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 8px;">⏰ Завершен</span>' : ''}
+                        </div>
+                        <div style="font-size: 13px; color: #666; margin-bottom: 4px;">
+                            <a href="${escapeHtml(giveaway.link)}" target="_blank" style="color: #3498db; word-break: break-all;">
+                                ${escapeHtml(giveaway.link)}
+                            </a>
+                        </div>
+                        ${isPaid ? `<div style="font-size: 13px; color: #e67e22; margin-top: 4px;">💰 Стоимость доступа: ${giveaway.bonus_cost} бонусов</div>` : ''}
+                        ${endDate ? `<div style="font-size: 12px; color: #999; margin-top: 4px;">📅 Действует до: ${endDateText}</div>` : ''}
+                        ${giveaway.description ? `<div style="font-size: 13px; color: #555; margin-top: 8px;">${escapeHtml(giveaway.description)}</div>` : ''}
                     </div>
-                    <div style="font-size: 13px; color: #666; margin-bottom: 4px;">
-                        <a href="${escapeHtml(giveaway.link)}" target="_blank" style="color: #3498db; word-break: break-all;">
-                            ${escapeHtml(giveaway.link)}
-                        </a>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-left: 16px;">
+                        <span style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: ${giveaway.active && !isExpired ? '#e8f5e9' : '#ffebee'}; color: ${giveaway.active && !isExpired ? '#2e7d32' : '#c62828'};">
+                            ${giveaway.active && !isExpired ? '✅ Активен' : '❌ Неактивен'}
+                        </span>
+                        <button onclick="editGiveaway(${giveaway.id})" style="background: #3498db; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                            ✏️
+                        </button>
+                        <button onclick="deleteGiveaway(${giveaway.id})" style="background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                            🗑️
+                        </button>
                     </div>
-                    ${giveaway.description ? `<div style="font-size: 13px; color: #555; margin-top: 8px;">${escapeHtml(giveaway.description)}</div>` : ''}
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px; margin-left: 16px;">
-                    <span style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: ${giveaway.active ? '#e8f5e9' : '#ffebee'}; color: ${giveaway.active ? '#2e7d32' : '#c62828'};">
-                        ${giveaway.active ? '✅ Активен' : '❌ Неактивен'}
-                    </span>
-                    <button onclick="editGiveaway(${giveaway.id})" style="background: #3498db; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">
-                        ✏️
-                    </button>
-                    <button onclick="deleteGiveaway(${giveaway.id})" style="background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">
-                        🗑️
-                    </button>
+                <div style="font-size: 11px; color: #999; margin-top: 8px;">
+                    Создан: ${new Date(giveaway.created_at).toLocaleString('ru-RU')}
                 </div>
             </div>
-            <div style="font-size: 11px; color: #999; margin-top: 8px;">
-                Создан: ${new Date(giveaway.created_at).toLocaleString('ru-RU')}
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // Open giveaway modal
@@ -2450,6 +2842,10 @@ function openGiveawayModal() {
     document.getElementById('giveawayName').value = '';
     document.getElementById('giveawayLink').value = '';
     document.getElementById('giveawayDescription').value = '';
+    document.getElementById('giveawayIsPaid').checked = false;
+    document.getElementById('giveawayPaidFields').style.display = 'none';
+    document.getElementById('giveawayBonusCost').value = 100;
+    document.getElementById('giveawayEndDate').value = '';
     document.getElementById('giveawayActive').checked = true;
     document.getElementById('giveawayError').style.display = 'none';
     openModal('giveaway');
@@ -2465,17 +2861,40 @@ function editGiveaway(id) {
     document.getElementById('giveawayName').value = giveaway.name;
     document.getElementById('giveawayLink').value = giveaway.link;
     document.getElementById('giveawayDescription').value = giveaway.description || '';
+    document.getElementById('giveawayIsPaid').checked = giveaway.is_paid || false;
+    
+    // Показываем/скрываем поля в зависимости от is_paid
+    const paidFields = document.getElementById('giveawayPaidFields');
+    if (paidFields) {
+        paidFields.style.display = (giveaway.is_paid) ? 'block' : 'none';
+    }
+    
+    document.getElementById('giveawayBonusCost').value = giveaway.bonus_cost || 100;
+    
+    // Устанавливаем дату окончания
+    if (giveaway.end_date) {
+        const endDate = new Date(giveaway.end_date);
+        const offset = endDate.getTimezoneOffset();
+        const localDate = new Date(endDate.getTime() - (offset * 60 * 1000));
+        document.getElementById('giveawayEndDate').value = localDate.toISOString().slice(0, 16);
+    } else {
+        document.getElementById('giveawayEndDate').value = '';
+    }
+    
     document.getElementById('giveawayActive').checked = giveaway.active;
     document.getElementById('giveawayError').style.display = 'none';
     openModal('giveaway');
 }
 
-// Save giveaway
+
 async function saveGiveaway() {
     const name = document.getElementById('giveawayName').value.trim();
     const link = document.getElementById('giveawayLink').value.trim();
     const description = document.getElementById('giveawayDescription').value.trim();
     const active = document.getElementById('giveawayActive').checked;
+    const is_paid = document.getElementById('giveawayIsPaid').checked;
+    const bonus_cost = is_paid ? parseInt(document.getElementById('giveawayBonusCost').value) || 0 : 0;
+    const end_date = document.getElementById('giveawayEndDate').value || null;
     const errorElement = document.getElementById('giveawayError');
     
     if (!name || !link) {
@@ -2485,11 +2904,17 @@ async function saveGiveaway() {
         return;
     }
     
-    // Simple URL validation
     try {
         new URL(link);
     } catch (e) {
         errorElement.textContent = 'Введите корректную ссылку';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    if (is_paid && (bonus_cost <= 0 || bonus_cost > 10000)) {
+        errorElement.textContent = 'Стоимость доступа должна быть от 1 до 10000 бонусов';
         errorElement.style.display = 'block';
         setTimeout(() => errorElement.style.display = 'none', 3000);
         return;
@@ -2501,8 +2926,13 @@ async function saveGiveaway() {
             name,
             link,
             description,
-            active
+            active,
+            is_paid,      // <-- ВАЖНО: передаём is_paid
+            bonus_cost,   // <-- ВАЖНО: передаём bonus_cost
+            end_date      // <-- ВАЖНО: передаём end_date
         };
+        
+        console.log('Отправляем данные розыгрыша:', data);
         
         let response;
         if (currentEditingGiveawayId) {
@@ -2536,7 +2966,6 @@ async function saveGiveaway() {
         setTimeout(() => errorElement.style.display = 'none', 3000);
     }
 }
-
 // Delete giveaway
 async function deleteGiveaway(id) {
     if (!confirm('Удалить этот розыгрыш?')) return;
@@ -2582,3 +3011,21 @@ function showNotification(message, type = 'info') {
         setTimeout(() => notif.remove(), 300);
     }, 3000);
 }
+
+// ========== РОЗЫГРЫШИ (GIVEAWAYS) С ПЛАТНЫМ ДОСТУПОМ ==========
+
+// Переключение полей для платного розыгрыша
+function toggleGiveawayPaidFields() {
+    const isPaidCheckbox = document.getElementById('giveawayIsPaid');
+    const paidFields = document.getElementById('giveawayPaidFields');
+    
+    if (isPaidCheckbox && paidFields) {
+        paidFields.style.display = isPaidCheckbox.checked ? 'block' : 'none';
+    }
+}
+
+// ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ ==========
+document.addEventListener('DOMContentLoaded', function() {
+    // Проверяем сохраненную сессию
+    checkSavedSession();
+});

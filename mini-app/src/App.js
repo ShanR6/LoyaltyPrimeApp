@@ -1035,8 +1035,13 @@ const loadUserData = async (companyId, vkUserId, userName) => {
 )}
       
       {activeTab === 'giveaways' && selectedGroup && (
-        <Giveaways selectedGroupId={selectedGroup?.id} />
-      )}
+  <Giveaways 
+    selectedGroupId={selectedGroup?.id}
+    userId={userId}
+    userBalance={currentBalance}
+    onBalanceUpdate={updateBalanceAndStats}
+  />
+)}
       
       {activeTab === 'quests' && (
         <DailyQuests 

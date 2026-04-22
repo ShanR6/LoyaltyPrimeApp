@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const nodemailer = require('nodemailer');
 const { 
     initDatabase, 
     addCompany, 
@@ -51,13 +52,17 @@ const {
     addGiveaway,
     updateGiveaway,
     deleteGiveaway,
+	hasUserPurchasedGiveaway,
+    purchaseGiveaway,
     // User Classification
     initializeUserClassification,
     updateUserClassification,
     getUserClassification,
     getAllUsersClassification,
     getUsersByType,
-    getClassificationStats
+    getClassificationStats,
+    getRealAnalytics,
+    recalculateAllUsersClassification
 } = require('./database-pg');
 
 const app = express();
@@ -1601,28 +1606,25 @@ app.get('/api/giveaways/:companyId', async (req, res) => {
     }
 });
 
-// Получение активных розыгрышей для mini-app
-app.get('/api/giveaways/:companyId/active', async (req, res) => {
-    try {
-        const giveaways = await getGiveaways(req.params.companyId);
-        const activeGiveaways = giveaways.filter(g => g.active);
-        res.json({ success: true, giveaways: activeGiveaways });
-    } catch (error) {
-        console.error('Ошибка получения активных розыгрышей:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
 
 // Создание розыгрыша
 app.post('/api/giveaways', async (req, res) => {
     try {
-        const { companyId, name, link, description, active } = req.body;
+        const { companyId, name, link, description, active, is_paid, bonus_cost, end_date } = req.body;
         
         if (!companyId || !name || !link) {
             return res.status(400).json({ success: false, message: 'companyId, name и link обязательны' });
         }
         
-        const giveaway = await addGiveaway(companyId, { name, link, description, active });
+        const giveaway = await addGiveaway(companyId, { 
+            name, 
+            link, 
+            description, 
+            active,
+            is_paid: is_paid || false,
+            bonus_cost: bonus_cost || 0,
+            end_date: end_date || null
+        });
         res.json({ success: true, giveaway });
     } catch (error) {
         console.error('Ошибка создания розыгрыша:', error);
@@ -1633,8 +1635,16 @@ app.post('/api/giveaways', async (req, res) => {
 // Обновление розыгрыша
 app.put('/api/giveaways/:id', async (req, res) => {
     try {
-        const { name, link, description, active } = req.body;
-        const giveaway = await updateGiveaway(req.params.id, { name, link, description, active });
+        const { name, link, description, active, is_paid, bonus_cost, end_date } = req.body;
+        const giveaway = await updateGiveaway(req.params.id, { 
+            name, 
+            link, 
+            description, 
+            active,
+            is_paid: is_paid || false,
+            bonus_cost: bonus_cost || 0,
+            end_date: end_date || null
+        });
         res.json({ success: true, giveaway });
     } catch (error) {
         console.error('Ошибка обновления розыгрыша:', error);
@@ -1652,7 +1662,6 @@ app.delete('/api/giveaways/:id', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
-
 // ============ API ДЛЯ КЛАССИФИКАЦИИ ПОЛЬЗОВАТЕЛЕЙ ============
 
 // Получение классификации конкретного пользователя
@@ -1719,6 +1728,229 @@ app.post('/api/users/:userId/app-visit/:companyId', async (req, res) => {
     }
 });
 
+// Добавьте эти эндпоинты в server.js после существующих API для розыгрышей
+
+// ============ API ДЛЯ ПОКУПКИ ПЛАТНЫХ РОЗЫГРЫШЕЙ ============
+
+// Получение активных розыгрышей с проверкой дат и доступности для пользователя
+app.get('/api/giveaways/:companyId/active', async (req, res) => {
+    try {
+        const companyId = req.params.companyId;
+        const userId = req.query.userId;
+        
+        let giveaways = await getGiveaways(companyId);
+        
+        // Фильтруем по дате окончания
+        const now = new Date();
+        giveaways = giveaways.filter(g => {
+            if (!g.active) return false;
+            if (g.end_date && new Date(g.end_date) < now) return false;
+            return true;
+        });
+        
+        // Если передан userId, проверяем для каждого розыгрыша, куплен ли он
+        if (userId) {
+            const giveawaysWithPurchaseStatus = await Promise.all(giveaways.map(async (g) => {
+                const isPurchased = g.is_paid ? await hasUserPurchasedGiveaway(userId, g.id) : true;
+                return {
+                    ...g,
+                    is_purchased: isPurchased
+                };
+            }));
+            res.json({ success: true, giveaways: giveawaysWithPurchaseStatus });
+        } else {
+            res.json({ success: true, giveaways });
+        }
+    } catch (error) {
+        console.error('Ошибка получения активных розыгрышей:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Покупка платного розыгрыша
+app.post('/api/giveaways/:giveawayId/purchase', async (req, res) => {
+    try {
+        const { giveawayId } = req.params;
+        const { userId, companyId } = req.body;
+        
+        if (!userId || !companyId) {
+            return res.status(400).json({ success: false, message: 'userId и companyId обязательны' });
+        }
+        
+        // Получаем информацию о розыгрыше
+        const giveawayResult = await query('SELECT * FROM giveaways WHERE id = $1', [giveawayId]);
+        if (giveawayResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Розыгрыш не найден' });
+        }
+        
+        const giveaway = giveawayResult.rows[0];
+        
+        // Проверяем, что розыгрыш активен
+        if (!giveaway.active) {
+            return res.status(400).json({ success: false, message: 'Розыгрыш неактивен' });
+        }
+        
+        // Проверяем дату окончания
+        if (giveaway.end_date && new Date(giveaway.end_date) < new Date()) {
+            return res.status(400).json({ success: false, message: 'Розыгрыш уже завершен' });
+        }
+        
+        // Проверяем, платный ли розыгрыш
+        if (!giveaway.is_paid) {
+            return res.status(400).json({ success: false, message: 'Этот розыгрыш бесплатный, не требует оплаты' });
+        }
+        
+        // Проверяем, не купил ли пользователь уже этот розыгрыш
+        const alreadyPurchased = await hasUserPurchasedGiveaway(userId, giveawayId);
+        if (alreadyPurchased) {
+            return res.status(400).json({ success: false, message: 'Вы уже купили доступ к этому розыгрышу' });
+        }
+        
+        // Покупаем доступ
+        const purchase = await purchaseGiveaway(userId, giveawayId, companyId, giveaway.bonus_cost);
+        
+        res.json({ 
+            success: true, 
+            purchase,
+            message: `Доступ к розыгрышу "${giveaway.name}" успешно куплен за ${giveaway.bonus_cost} баллов` 
+        });
+    } catch (error) {
+        console.error('Ошибка покупки розыгрыша:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение купленных розыгрышей пользователя
+app.get('/api/users/:userId/giveaways/purchased/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        
+        const result = await query(
+            `SELECT upg.*, g.name, g.link, g.description, g.is_paid, g.bonus_cost, g.end_date
+             FROM user_purchased_giveaways upg
+             JOIN giveaways g ON upg.giveaway_id = g.id
+             WHERE upg.user_id = $1 AND upg.company_id = $2
+             ORDER BY upg.purchased_at DESC`,
+            [userId, companyId]
+        );
+        
+        res.json({ success: true, purchased: result.rows });
+    } catch (error) {
+        console.error('Ошибка получения купленных розыгрышей:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+// ============ НАСТРОЙКА ПОЧТЫ ДЛЯ ЯНДЕКС 360 ============
+const transporter = nodemailer.createTransport({
+    host: 'smtp.yandex.ru',
+    port: 465,
+    secure: true,
+    auth: {
+        user: 'padavydov@stud.kantiana.ru',     
+        pass: 'lqycznijgonufenu'     
+    }
+});
+
+// ============ ЭНДПОИНТ ДЛЯ ДЕМО-ЗАЯВКИ ============
+app.post('/api/demo-request', async (req, res) => {
+    try {
+        const { brandName, email } = req.body;
+        
+        if (!brandName || !email) {
+            return res.status(400).json({ success: false, message: 'Заполните все поля' });
+        }
+        
+        if (!email.includes('@')) {
+            return res.status(400).json({ success: false, message: 'Введите корректный email' });
+        }
+        
+        // Формируем письмо - ОТПРАВЛЯЕМ НА ВАШ ЯНДЕКС 360
+        const mailOptions = {
+            from: '"LoyaltyPrime" <padavydov@stud.kantiana.ru>',  
+            to: 'padavydov@stud.kantiana.ru',                         
+            subject: `📋 Новая заявка на демо от ${brandName}`,
+            text: `
+Новая заявка на демо-доступ к программе лояльности!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏢 Бренд: ${brandName}
+📧 Email для связи: ${email}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Свяжитесь с клиентом как можно скорее для демонстрации возможностей LoyaltyPrime.
+            `,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px;">
+                    <h2 style="color: #ff4d4d; margin-bottom: 20px;">📋 Новая заявка на демо</h2>
+                    
+                    <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                        <p style="margin: 8px 0;"><strong>🏢 Бренд:</strong> ${brandName}</p>
+                        <p style="margin: 8px 0;"><strong>📧 Email для связи:</strong> ${email}</p>
+                    </div>
+                    
+                    <p style="color: #555;">Свяжитесь с клиентом как можно скорее для демонстрации возможностей <strong>LoyaltyPrime</strong>.</p>
+                    
+                    <hr style="margin: 20px 0; border-color: #e0e0e0;">
+                    
+                    <p style="color: #888; font-size: 12px;">Письмо сгенерировано автоматически из CRM-системы LoyaltyPrime.</p>
+                </div>
+            `
+        };
+        
+        // Отправляем письмо
+        await transporter.sendMail(mailOptions);
+        
+        console.log(`📧 Демо-заявка отправлена на Яндекс 360: ${brandName} - ${email}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Заявка отправлена! Мы свяжемся с вами в ближайшее время.' 
+        });
+        
+    } catch (error) {
+        console.error('Ошибка отправки письма:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Ошибка отправки. Попробуйте позже.' 
+        });
+    }
+});
+
+// ============ API ДЛЯ РЕАЛЬНОЙ АНАЛИТИКИ CRM ============
+app.get('/api/companies/:companyId/analytics', async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const period = req.query.period || 'month';
+        
+        console.log('🔄 Пересчет классификации всех пользователей перед аналитикой...');
+        await recalculateAllUsersClassification(companyId);
+        
+        const analytics = await getRealAnalytics(companyId, period);
+        
+        res.json({ success: true, analytics });
+    } catch (error) {
+        console.error('Ошибка получения аналитики:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// API для ручного пересчета классификации пользователей
+app.post('/api/companies/:companyId/recalculate-classification', async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        
+        await recalculateAllUsersClassification(companyId);
+        
+        res.json({ success: true, message: 'Классификация пользователей пересчитана' });
+    } catch (error) {
+        console.error('Ошибка пересчета классификации:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
 const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`✅ Backend running on http://localhost:${PORT}`);
@@ -1726,4 +1958,3 @@ app.listen(PORT, () => {
     console.log(`🔑 Тестовый вход: email: pizza@test.com, password: 123456`);
     console.log(`💳 POS API доступны: /api/pos/verify-qr, /api/pos/apply-bonus, /api/pos/spend-bonus`);
 });
-

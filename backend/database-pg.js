@@ -154,18 +154,21 @@ async function initDatabase() {
             )
         `);
 
-        await query(`
-            CREATE TABLE IF NOT EXISTS giveaways (
-                id SERIAL PRIMARY KEY,
-                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
-                name VARCHAR(255) NOT NULL,
-                link TEXT NOT NULL,
-                description TEXT,
-                active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+       await query(`
+    CREATE TABLE IF NOT EXISTS giveaways (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        link TEXT NOT NULL,
+        description TEXT,
+        active BOOLEAN DEFAULT TRUE,
+        is_paid BOOLEAN DEFAULT FALSE,
+        bonus_cost INTEGER DEFAULT 0,
+        end_date TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+`);
 
         await query(`
             CREATE TABLE IF NOT EXISTS user_classification (
@@ -190,6 +193,8 @@ async function initDatabase() {
         console.log('✅ Таблицы созданы/проверены');
         
         await addMissingColumns();
+		await addGiveawayColumns();
+		await migrateGiveawaysTable();
         await addPromotionRewardColumns();
         await addGameSettingsTable();  
         await addGameSettingsColumns();
@@ -1791,33 +1796,49 @@ async function checkPromotionCycle(promotionId) {
 }
 
 // ============ Функции для Розыгрышей (Giveaways) ============
-async function getGiveaways(companyId) {
-    const result = await query(
-        'SELECT * FROM giveaways WHERE company_id = $1 ORDER BY created_at DESC',
-        [companyId]
-    );
+async function getGiveaways(companyId, includeInactive = false) {
+    await migrateGiveawaysTable();
+    
+    let queryText = 'SELECT * FROM giveaways WHERE company_id = $1';
+    const params = [companyId];
+    
+    if (!includeInactive) {
+        queryText += ' AND active = true';
+    }
+    
+    queryText += ' ORDER BY created_at DESC';
+    
+    const result = await query(queryText, params);
     return result.rows;
 }
 
 async function addGiveaway(companyId, giveawayData) {
-    const { name, link, description, active } = giveawayData;
+    const { name, link, description, active, is_paid, bonus_cost, end_date } = giveawayData;
+    
+    // Проверяем обязательные поля
+    if (!name || !link) {
+        throw new Error('name и link обязательны');
+    }
+    
     const result = await query(
-        `INSERT INTO giveaways (company_id, name, link, description, active, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) 
+        `INSERT INTO giveaways (company_id, name, link, description, active, is_paid, bonus_cost, end_date, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()) 
          RETURNING *`,
-        [companyId, name, link, description || '', active !== undefined ? active : true]
+        [companyId, name, link, description || '', active !== undefined ? active : true, 
+         is_paid === true, bonus_cost || 0, end_date || null]
     );
     return result.rows[0];
 }
 
 async function updateGiveaway(giveawayId, giveawayData) {
-    const { name, link, description, active } = giveawayData;
+    const { name, link, description, active, is_paid, bonus_cost, end_date } = giveawayData;
+    
     const result = await query(
         `UPDATE giveaways 
-         SET name = $2, link = $3, description = $4, active = $5, updated_at = NOW() 
+         SET name = $2, link = $3, description = $4, active = $5, is_paid = $6, bonus_cost = $7, end_date = $8, updated_at = NOW()
          WHERE id = $1 
          RETURNING *`,
-        [giveawayId, name, link, description, active]
+        [giveawayId, name, link, description, active, is_paid === true, bonus_cost || 0, end_date || null]
     );
     return result.rows[0];
 }
@@ -1827,6 +1848,54 @@ async function deleteGiveaway(giveawayId) {
     return true;
 }
 
+async function purchaseGiveaway(userId, giveawayId, companyId, bonusCost) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // Проверяем баланс
+        const user = await client.query('SELECT bonus_balance FROM users WHERE id = $1', [userId]);
+        if (user.rows[0].bonus_balance < bonusCost) {
+            throw new Error('Недостаточно бонусов');
+        }
+        
+        // Списываем бонусы
+        await client.query(
+            'UPDATE users SET bonus_balance = bonus_balance - $1, total_spent = total_spent + $1 WHERE id = $2',
+            [bonusCost, userId]
+        );
+        
+        // Записываем покупку розыгрыша
+        const result = await client.query(
+            `INSERT INTO user_purchased_giveaways (user_id, giveaway_id, company_id, purchased_at) 
+             VALUES ($1, $2, $3, NOW()) 
+             RETURNING *`,
+            [userId, giveawayId, companyId]
+        );
+        
+        // Добавляем транзакцию
+        await client.query(
+            `INSERT INTO transactions (user_id, company_id, bonus_spent, description, source, created_at, metadata) 
+             VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+            [userId, companyId, bonusCost, `Покупка доступа к розыгрышу #${giveawayId}`, 'app', JSON.stringify({ giveaway_id: giveawayId })]
+        );
+        
+        await client.query('COMMIT');
+        return result.rows[0];
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+async function hasUserPurchasedGiveaway(userId, giveawayId) {
+    const result = await query(
+        'SELECT id FROM user_purchased_giveaways WHERE user_id = $1 AND giveaway_id = $2',
+        [userId, giveawayId]
+    );
+    return result.rows.length > 0;
+}
 // ============ Функции для Классификации Пользователей ============
 async function initializeUserClassification(userId, companyId) {
     const existing = await query(
@@ -1923,27 +1992,69 @@ async function recalculateUserType(userId, companyId) {
     
     const userData = user.rows[0];
     const now = new Date();
-    const firstVisitDate = new Date(userData.first_visit_date);
-    const daysSinceFirstVisit = Math.floor((now - firstVisitDate) / (1000 * 60 * 60 * 24));
+    
+    // Получаем все покупки пользователя
+    const allPurchases = await query(
+        `SELECT created_at FROM transactions 
+         WHERE user_id = $1 AND company_id = $2 
+         AND source = 'pos' 
+         AND amount > 0
+         ORDER BY created_at DESC`,
+        [userId, companyId]
+    );
+    
+    // Если нет покупок - спящий
+    if (allPurchases.rows.length === 0) {
+        await query(
+            `UPDATE user_classification 
+             SET user_type = 'dormant', classified_at = NOW(), updated_at = NOW()
+             WHERE user_id = $1 AND company_id = $2`,
+            [userId, companyId]
+        );
+        console.log(`📊 Пользователь ${userId}: dormant (нет покупок)`);
+        return;
+    }
+    
+    const lastPurchaseDate = new Date(allPurchases.rows[0].created_at);
+    const daysSinceLastPurchase = Math.floor((now - lastPurchaseDate) / (1000 * 60 * 60 * 24));
+    const totalPurchases = allPurchases.rows.length;
+    
+    // Вычисляем максимальный интервал между покупками (в днях)
+    let maxIntervalDays = 0;
+    if (allPurchases.rows.length >= 2) {
+        for (let i = 0; i < allPurchases.rows.length - 1; i++) {
+            const currentDate = new Date(allPurchases.rows[i].created_at);
+            const nextDate = new Date(allPurchases.rows[i + 1].created_at);
+            const intervalDays = Math.floor((currentDate - nextDate) / (1000 * 60 * 60 * 24));
+            if (intervalDays > maxIntervalDays) {
+                maxIntervalDays = intervalDays;
+            }
+        }
+    }
     
     let newUserType = 'dormant'; // По умолчанию спящий
     
-    // Проверяем, новый ли пользователь (первые 7 дней)
-    if (daysSinceFirstVisit <= 7) {
+    // Логика классификации (проверяем в порядке приоритета):
+    
+    // 1. Спящий - 1+ покупок и прошло ≥20 дней с последней покупки
+    if (daysSinceLastPurchase >= 20) {
+        newUserType = 'dormant';
+    }
+    // 2. Постоянный - 2+ покупок и между каждыми покупками ≤3 дней
+    else if (totalPurchases >= 2 && maxIntervalDays <= 3) {
+        newUserType = 'regular';
+    }
+    // 3. Активный - 2+ покупок и между каждыми покупками ≤7 дней
+    else if (totalPurchases >= 2 && maxIntervalDays <= 7) {
+        newUserType = 'active';
+    }
+    // 4. Новичок - 1 покупка и прошло ≤14 дней
+    else if (totalPurchases === 1 && daysSinceLastPurchase <= 14) {
         newUserType = 'new';
-    } else {
-        // Проверяем постоянного пользователя (4+ покупки в неделю на протяжении 2 недель)
-        if (userData.consecutive_weeks_with_4_purchases >= 2) {
-            newUserType = 'regular';
-        }
-        // Проверяем активного пользователя
-        else if (userData.purchases_this_week >= 1 || userData.app_visits_this_week >= 3) {
-            newUserType = 'active';
-        }
-        // Иначе спящий
-        else {
-            newUserType = 'dormant';
-        }
+    }
+    // 5. Если не подошел ни один критерий - спящий
+    else {
+        newUserType = 'dormant';
     }
     
     // Обновляем тип пользователя
@@ -1954,22 +2065,23 @@ async function recalculateUserType(userId, companyId) {
         [newUserType, userId, companyId]
     );
     
-    // Если пользователь сделал 4+ покупки на этой неделе, увеличиваем счетчик недель
-    if (userData.purchases_this_week >= 4) {
-        // Проверяем, увеличивали ли уже на этой неделе
-        const currentWeekStart = new Date(now);
-        currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
-        currentWeekStart.setHours(0, 0, 0, 0);
-        
-        await query(
-            `UPDATE user_classification 
-             SET consecutive_weeks_with_4_purchases = consecutive_weeks_with_4_purchases + 1,
-                 updated_at = NOW()
-             WHERE user_id = $1 AND company_id = $2 
-             AND purchases_this_week >= 4`,
-            [userId, companyId]
-        );
+    console.log(`📊 Пользователь ${userId}: ${newUserType} (всего покупок: ${totalPurchases}, последняя: ${daysSinceLastPurchase}дн назад, макс. интервал: ${maxIntervalDays}дн)`);
+}
+
+// Пересчет классификации всех пользователей компании
+async function recalculateAllUsersClassification(companyId) {
+    const users = await query(
+        'SELECT user_id FROM user_classification WHERE company_id = $1',
+        [companyId]
+    );
+    
+    console.log(`🔄 Начинаем пересчет классификации для ${users.rows.length} пользователей компании ${companyId}`);
+    
+    for (const userRow of users.rows) {
+        await recalculateUserType(userRow.user_id, companyId);
     }
+    
+    console.log(`✅ Пересчет классификации завершен`);
 }
 
 async function getUserClassification(userId, companyId) {
@@ -2031,6 +2143,311 @@ async function getClassificationStats(companyId) {
     return stats;
 }
 
+// ============ Функции для Реальной Аналитики CRM ============
+async function getRealAnalytics(companyId, period = 'month') {
+    const now = new Date();
+    let startDate;
+    
+    // Определяем начало периода
+    switch (period) {
+        case 'day':
+            startDate = new Date(now);
+            startDate.setHours(0, 0, 0, 0);
+            break;
+        case 'week':
+            startDate = new Date(now);
+            startDate.setDate(startDate.getDate() - 7);
+            break;
+        case 'month':
+            startDate = new Date(now);
+            startDate.setMonth(startDate.getMonth() - 1);
+            break;
+        case 'year':
+            startDate = new Date(now);
+            startDate.setFullYear(startDate.getFullYear() - 1);
+            break;
+        default:
+            startDate = new Date(now);
+            startDate.setMonth(startDate.getMonth() - 1);
+    }
+    
+    // Получаем реальную выручку (сумма всех покупок)
+    const revenueResult = await query(
+        `SELECT 
+            COUNT(*) as total_transactions,
+            COALESCE(SUM(amount), 0) as total_revenue,
+            COALESCE(SUM(bonus_earned), 0) as total_bonuses_earned,
+            COALESCE(SUM(bonus_spent), 0) as total_bonuses_spent
+         FROM transactions
+         WHERE company_id = $1
+         AND source = 'pos'
+         AND created_at >= $2`,
+        [companyId, startDate]
+    );
+    
+    // Получаем количество активных пользователей (совершивших покупку в период)
+    const activeUsersResult = await query(
+        `SELECT COUNT(DISTINCT user_id) as count
+         FROM transactions
+         WHERE company_id = $1
+         AND source = 'pos'
+         AND created_at >= $2`,
+        [companyId, startDate]
+    );
+    
+    // Получаем количество новых пользователей (зарегистрировались в период)
+    const newUsersResult = await query(
+        `SELECT COUNT(*) as count
+         FROM users
+         WHERE company_id = $1
+         AND created_at >= $2`,
+        [companyId, startDate]
+    );
+    
+    // Получаем классификацию пользователей
+    const classificationStats = await getClassificationStats(companyId);
+    
+    // Получаем топ продуктов
+    const topProductsResult = await query(
+        `SELECT 
+            items,
+            COUNT(*) as sales_count,
+            COALESCE(SUM(amount), 0) as revenue
+         FROM transactions
+         WHERE company_id = $1
+         AND source = 'pos'
+         AND items != '[]'
+         AND created_at >= $2
+         GROUP BY items
+         ORDER BY sales_count DESC
+         LIMIT 10`,
+        [companyId, startDate]
+    );
+    
+    // Получаем активность по дням
+    const dailyActivityResult = await query(
+        `SELECT 
+            DATE(created_at) as date,
+            COUNT(*) as transactions,
+            COUNT(DISTINCT user_id) as unique_users,
+            COALESCE(SUM(amount), 0) as revenue
+         FROM transactions
+         WHERE company_id = $1
+         AND source = 'pos'
+         AND created_at >= $2
+         GROUP BY DATE(created_at)
+         ORDER BY date ASC`,
+        [companyId, startDate]
+    );
+    
+    // Получаем средний чек
+    const avgCheckResult = await query(
+        `SELECT 
+            COALESCE(AVG(amount), 0) as avg_check,
+            COALESCE(AVG(bonus_earned), 0) as avg_bonus
+         FROM transactions
+         WHERE company_id = $1
+         AND source = 'pos'
+         AND amount > 0
+         AND created_at >= $2`,
+        [companyId, startDate]
+    );
+    
+    return {
+        revenue: parseInt(revenueResult.rows[0].total_revenue),
+        totalTransactions: parseInt(revenueResult.rows[0].total_transactions),
+        totalBonusesEarned: parseInt(revenueResult.rows[0].total_bonuses_earned),
+        totalBonusesSpent: parseInt(revenueResult.rows[0].total_bonuses_spent),
+        activeUsers: parseInt(activeUsersResult.rows[0].count),
+        newUsers: parseInt(newUsersResult.rows[0].count),
+        classification: classificationStats,
+        avgCheck: Math.round(parseInt(avgCheckResult.rows[0].avg_check)),
+        avgBonus: Math.round(parseInt(avgCheckResult.rows[0].avg_bonus)),
+        dailyActivity: dailyActivityResult.rows,
+        topProducts: topProductsResult.rows
+    };
+}
+async function addGiveawayColumns() {
+    try {
+        // Проверяем и добавляем колонку is_paid (платный/бесплатный)
+        const checkIsPaid = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'giveaways' AND column_name = 'is_paid'
+        `);
+        
+        if (checkIsPaid.rows.length === 0) {
+            console.log('📝 Добавляем колонку is_paid в таблицу giveaways...');
+            await query(`ALTER TABLE giveaways ADD COLUMN is_paid BOOLEAN DEFAULT FALSE`);
+            console.log('✅ Колонка is_paid добавлена');
+        }
+        
+        // Проверяем и добавляем колонку bonus_cost (стоимость в бонусах для платных розыгрышей)
+        const checkBonusCost = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'giveaways' AND column_name = 'bonus_cost'
+        `);
+        
+        if (checkBonusCost.rows.length === 0) {
+            console.log('📝 Добавляем колонку bonus_cost в таблицу giveaways...');
+            await query(`ALTER TABLE giveaways ADD COLUMN bonus_cost INTEGER DEFAULT 0`);
+            console.log('✅ Колонка bonus_cost добавлена');
+        }
+        
+        // Проверяем и добавляем колонку end_date (дата окончания розыгрыша)
+        const checkEndDate = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'giveaways' AND column_name = 'end_date'
+        `);
+        
+        if (checkEndDate.rows.length === 0) {
+            console.log('📝 Добавляем колонку end_date в таблицу giveaways...');
+            await query(`ALTER TABLE giveaways ADD COLUMN end_date TIMESTAMP`);
+            console.log('✅ Колонка end_date добавлена');
+        }
+        
+        // Создаем таблицу user_purchased_giveaways для отслеживания покупок платных розыгрышей
+        const checkPurchasedTable = await query(`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_name = 'user_purchased_giveaways'
+        `);
+        
+        if (checkPurchasedTable.rows.length === 0) {
+            console.log('📝 Создаем таблицу user_purchased_giveaways...');
+            await query(`
+                CREATE TABLE user_purchased_giveaways (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    giveaway_id INTEGER REFERENCES giveaways(id) ON DELETE CASCADE,
+                    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    used BOOLEAN DEFAULT FALSE,
+                    UNIQUE(user_id, giveaway_id)
+                )
+            `);
+            console.log('✅ Таблица user_purchased_giveaways создана');
+        }
+        
+        console.log('✅ Все колонки giveaways проверены');
+    } catch (error) {
+        console.error('❌ Ошибка добавления колонок giveaways:', error);
+    }
+}
+
+async function migrateGiveawaysTable() {
+    try {
+        // Проверяем существование таблицы
+        const tableExists = await query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'giveaways'
+            )
+        `);
+        
+        if (!tableExists.rows[0].exists) {
+            console.log('📝 Таблица giveaways не существует, будет создана позже');
+            return;
+        }
+        
+        // Получаем список существующих колонок
+        const columns = await query(`
+            SELECT column_name, is_nullable 
+            FROM information_schema.columns 
+            WHERE table_name = 'giveaways'
+        `);
+        
+        const existingColumns = columns.rows.map(c => c.column_name);
+        console.log('📋 Существующие колонки giveaways:', existingColumns);
+        
+        // Удаляем устаревшие колонки
+        const columnsToDrop = ['title', 'start_date', 'end_date_old'];
+        for (const col of columnsToDrop) {
+            if (existingColumns.includes(col)) {
+                console.log(`📝 Удаляем устаревшую колонку ${col}...`);
+                await query(`ALTER TABLE giveaways DROP COLUMN ${col}`);
+            }
+        }
+        
+        // Обновляем список колонок после удаления
+        const updatedColumns = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'giveaways'
+        `);
+        const currentColumns = updatedColumns.rows.map(c => c.column_name);
+        
+        // Добавляем колонку name если её нет
+        if (!currentColumns.includes('name')) {
+            console.log('📝 Добавляем колонку name...');
+            await query(`ALTER TABLE giveaways ADD COLUMN name VARCHAR(255)`);
+            await query(`UPDATE giveaways SET name = 'Розыгрыш' WHERE name IS NULL`);
+            await query(`ALTER TABLE giveaways ALTER COLUMN name SET NOT NULL`);
+        }
+        
+        // Добавляем колонку link если её нет
+        if (!currentColumns.includes('link')) {
+            console.log('📝 Добавляем колонку link...');
+            await query(`ALTER TABLE giveaways ADD COLUMN link TEXT NOT NULL DEFAULT ''`);
+        }
+        
+        // Добавляем колонку description если её нет
+        if (!currentColumns.includes('description')) {
+            console.log('📝 Добавляем колонку description...');
+            await query(`ALTER TABLE giveaways ADD COLUMN description TEXT`);
+        }
+        
+        // Добавляем колонку active если её нет
+        if (!currentColumns.includes('active')) {
+            console.log('📝 Добавляем колонку active...');
+            await query(`ALTER TABLE giveaways ADD COLUMN active BOOLEAN DEFAULT TRUE`);
+        }
+        
+        // Добавляем колонку is_paid если её нет
+        if (!currentColumns.includes('is_paid')) {
+            console.log('📝 Добавляем колонку is_paid...');
+            await query(`ALTER TABLE giveaways ADD COLUMN is_paid BOOLEAN DEFAULT FALSE`);
+        }
+        
+        // Добавляем колонку bonus_cost если её нет
+        if (!currentColumns.includes('bonus_cost')) {
+            console.log('📝 Добавляем колонку bonus_cost...');
+            await query(`ALTER TABLE giveaways ADD COLUMN bonus_cost INTEGER DEFAULT 0`);
+        }
+        
+        // Добавляем колонку end_date если её нет
+        if (!currentColumns.includes('end_date')) {
+            console.log('📝 Добавляем колонку end_date...');
+            await query(`ALTER TABLE giveaways ADD COLUMN end_date TIMESTAMP`);
+        } else {
+            // Удаляем ограничение NOT NULL если оно есть
+            console.log('📝 Проверяем ограничение NOT NULL на end_date...');
+            const endDateCol = columns.rows.find(c => c.column_name === 'end_date');
+            if (endDateCol && endDateCol.is_nullable === 'NO') {
+                await query(`ALTER TABLE giveaways ALTER COLUMN end_date DROP NOT NULL`);
+                console.log('✅ Удалено ограничение NOT NULL с end_date');
+            }
+        }
+        
+        // Добавляем колонку created_at если её нет
+        if (!currentColumns.includes('created_at')) {
+            console.log('📝 Добавляем колонку created_at...');
+            await query(`ALTER TABLE giveaways ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+        }
+        
+        // Добавляем колонку updated_at если её нет
+        if (!currentColumns.includes('updated_at')) {
+            console.log('📝 Добавляем колонку updated_at...');
+            await query(`ALTER TABLE giveaways ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+        }
+        
+        console.log('✅ Все колонки giveaways добавлены/проверены');
+    } catch (error) {
+        console.error('❌ Ошибка миграции giveaways:', error);
+    }
+}
 module.exports = {
     pool,
     query,
@@ -2099,5 +2516,11 @@ module.exports = {
     getUserClassification,
     getAllUsersClassification,
     getUsersByType,
-    getClassificationStats
+    getClassificationStats,
+	addGiveawayColumns,
+	hasUserPurchasedGiveaway,
+	purchaseGiveaway,
+	migrateGiveawaysTable,
+    getRealAnalytics,
+    recalculateAllUsersClassification
 };
