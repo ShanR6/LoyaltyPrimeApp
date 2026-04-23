@@ -41,7 +41,7 @@
             margin-bottom: 20px;
         }
         
-        input, button, textarea {
+        input, button, textarea, select {
             padding: 12px 16px;
             margin: 5px;
             border-radius: 12px;
@@ -50,7 +50,7 @@
             transition: all 0.2s;
         }
         
-        input:focus, textarea:focus {
+        input:focus, textarea:focus, select:focus {
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
@@ -102,6 +102,14 @@
             color: #1976d2;
         }
         
+        .warning {
+            background: #fff3e0;
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 12px;
+            color: #e67e22;
+        }
+        
         .user-info { 
             background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
             padding: 16px;
@@ -113,6 +121,12 @@
             font-size: 28px; 
             font-weight: bold; 
             color: #2c3e50;
+        }
+        
+        .total-amount {
+            font-size: 24px;
+            font-weight: bold;
+            color: #27ae60;
         }
         
         .test-buttons {
@@ -188,6 +202,66 @@
             word-break: break-all;
             margin-top: 10px;
         }
+        
+        .bonus-rate-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 12px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #27ae60;
+            transition: width 0.3s ease;
+        }
+        
+        .order-summary {
+            background: linear-gradient(135deg, #f8f9fa, #fff);
+            border-radius: 16px;
+            padding: 16px;
+            margin: 15px 0;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .summary-row:last-child {
+            border-bottom: none;
+        }
+        
+        .summary-row.total {
+            font-weight: bold;
+            font-size: 18px;
+            padding-top: 12px;
+            margin-top: 8px;
+            border-top: 2px solid #ddd;
+            border-bottom: none;
+        }
+        
+        .discount-badge {
+            display: inline-block;
+            background: #27ae60;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -223,6 +297,7 @@
             <button onclick="setTestAmount(10000)" class="test-btn">10000₽</button>
         </div>
         <div id="bonusResult"></div>
+        <div id="bonusRateInfo" class="bonus-rate-info" style="display: none;"></div>
     </div>
 
     <div class="card" id="bonusSection" style="display:none;">
@@ -232,11 +307,45 @@
         <div id="applyResult"></div>
     </div>
 
-    <div class="card" id="spendSection">
+    <div class="card" id="spendSection" style="display: none;">
         <h3>💸 Списание бонусов</h3>
+        <div id="spendInfo" style="background: #e8f5e9; padding: 12px; border-radius: 12px; margin-bottom: 15px; display: none;">
+            <div id="exchangeRateInfo" style="font-size: 13px; margin-bottom: 8px;">📌 1 ₽ = <span id="rubToBonusValue">10</span> бонусов</div>
+            <div id="maxPaymentInfo" style="font-size: 13px;">📌 Максимальный процент оплаты бонусами: <span id="maxPercentValue">25</span>%</div>
+            <div id="minPurchaseInfo" style="font-size: 13px; margin-top: 8px;">📌 Минимальная сумма для начисления бонусов: <span id="minPurchaseValue">1000</span> ₽</div>
+        </div>
+        
+        <!-- Сводка по заказу -->
+        <div class="order-summary" id="orderSummary" style="display: none;">
+            <h4 style="margin: 0 0 10px 0;">🧾 Сводка заказа</h4>
+            <div class="summary-row">
+                <span>💰 Исходная сумма:</span>
+                <span id="originalAmountDisplay">0 ₽</span>
+            </div>
+            <div class="summary-row" id="bonusDiscountRow" style="display: none;">
+                <span>🎁 Скидка бонусами:</span>
+                <span id="bonusDiscountAmount">0 ₽</span>
+            </div>
+            <div class="summary-row total">
+                <span>💳 Итоговая сумма к оплате:</span>
+                <span id="finalAmountDisplay" class="total-amount">0 ₽</span>
+            </div>
+        </div>
+        
+        <div>
+            <label>Сумма заказа (₽):</label>
+            <input type="number" id="orderAmountForSpend" placeholder="1000" style="width: calc(100% - 120px);" oninput="updateOrderSummary()">
+            <button onclick="calculateMaxSpend()">Рассчитать максимум</button>
+        </div>
+        
+        <div id="maxSpendInfo" style="background: #f0f0f0; padding: 12px; border-radius: 12px; margin: 10px 0; display: none;">
+            <div>💰 Максимум можно списать: <strong id="maxSpendRub">0</strong> ₽ (<span id="maxSpendBonuses">0</span> бонусов)</div>
+            <div style="font-size: 12px; color: #666; margin-top: 5px;" id="spendLimitExplanation"></div>
+        </div>
+        
         <div>
             <label>Списать бонусов:</label>
-            <input type="number" id="spendAmount" placeholder="50" style="width: calc(100% - 120px);">
+            <input type="number" id="spendAmount" placeholder="50" style="width: calc(100% - 120px);" oninput="updateOrderSummary()">
             <button onclick="spendBonus()">Списать</button>
         </div>
         <div class="test-buttons">
@@ -290,7 +399,153 @@
         let currentCompanyId = null;
         let currentMultiplier = 1;
         let purchasedPromotions = [];
+        let currentBonusSettings = {
+            rubToBonus: 10,
+            maxBonusPaymentPercent: 25,
+            minPurchaseForBonus: 1000,
+            bonusRatePerThousand: 10
+        };
+        let currentSpendAmount = 0;
+        let currentOrderAmount = 0;
 
+        // ============ ОБНОВЛЕНИЕ СВОДКИ ЗАКАЗА ============
+        function updateOrderSummary() {
+            const orderAmount = parseInt(document.getElementById('orderAmountForSpend').value);
+            const spendBonuses = parseInt(document.getElementById('spendAmount').value);
+            
+            if (!orderAmount || orderAmount <= 0) {
+                document.getElementById('orderSummary').style.display = 'none';
+                return;
+            }
+            
+            currentOrderAmount = orderAmount;
+            currentSpendAmount = spendBonuses || 0;
+            
+            // Рассчитываем скидку в рублях
+            const discountRub = Math.floor(currentSpendAmount / currentBonusSettings.rubToBonus);
+            const finalAmount = Math.max(0, orderAmount - discountRub);
+            
+            // Обновляем отображение
+            document.getElementById('originalAmountDisplay').innerHTML = `${orderAmount.toLocaleString()} ₽`;
+            
+            if (currentSpendAmount > 0) {
+                document.getElementById('bonusDiscountRow').style.display = 'flex';
+                document.getElementById('bonusDiscountAmount').innerHTML = `- ${discountRub.toLocaleString()} ₽ <span class="discount-badge">(${currentSpendAmount} бонусов)</span>`;
+            } else {
+                document.getElementById('bonusDiscountRow').style.display = 'none';
+            }
+            
+            document.getElementById('finalAmountDisplay').innerHTML = `${finalAmount.toLocaleString()} ₽`;
+            document.getElementById('orderSummary').style.display = 'block';
+            
+            // Проверяем, не превышает ли списание лимит
+            const maxRub = Math.floor(orderAmount * currentBonusSettings.maxBonusPaymentPercent / 100);
+            const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
+            
+            const spendInput = document.getElementById('spendAmount');
+            if (currentSpendAmount > maxBonuses) {
+                spendInput.style.borderColor = '#e74c3c';
+                spendInput.style.backgroundColor = '#fdf0ed';
+                document.getElementById('spendLimitExplanation').innerHTML = 
+                    `<span style="color: #e74c3c;">⚠️ Превышен лимит! Максимум: ${maxBonuses} бонусов (${currentBonusSettings.maxBonusPaymentPercent}% от суммы)</span>`;
+            } else {
+                spendInput.style.borderColor = '#27ae60';
+                spendInput.style.backgroundColor = '#e8f5e9';
+                document.getElementById('spendLimitExplanation').innerHTML = 
+                    `Вы можете оплатить бонусами не более ${currentBonusSettings.maxBonusPaymentPercent}% от суммы заказа.<br>
+                     Максимум: ${maxRub}₽ = ${maxBonuses} бонусов`;
+            }
+        }
+
+        // ============ ЗАГРУЗКА НАСТРОЕК БОНУСОВ ИЗ CRM ============
+        async function loadBonusSettings() {
+            if (!currentCompanyId) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/companies/${currentCompanyId}/bonus-settings`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentBonusSettings = result.settings;
+                    
+                    // Обновляем отображение информации о списании
+                    const spendInfo = document.getElementById('spendInfo');
+                    if (spendInfo) {
+                        spendInfo.style.display = 'block';
+                        document.getElementById('rubToBonusValue').textContent = currentBonusSettings.rubToBonus;
+                        document.getElementById('maxPercentValue').textContent = currentBonusSettings.maxBonusPaymentPercent;
+                        document.getElementById('minPurchaseValue').textContent = currentBonusSettings.minPurchaseForBonus;
+                    }
+                    
+                    // Обновляем информацию о начислении
+                    const bonusRateInfo = document.getElementById('bonusRateInfo');
+                    if (bonusRateInfo) {
+                        bonusRateInfo.style.display = 'block';
+                        bonusRateInfo.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                <span>⭐ Базовое начисление: <strong>${currentBonusSettings.bonusRatePerThousand}</strong> бонусов за 1000₽</span>
+                                <span>📈 Минимальная сумма: <strong>${currentBonusSettings.minPurchaseForBonus}</strong> ₽</span>
+                                <span>💱 Курс: 1 ₽ = <strong>${currentBonusSettings.rubToBonus}</strong> бонусов</span>
+                            </div>
+                            <div class="progress-bar" style="margin-top: 10px;">
+                                <div class="progress-fill" style="width: 0%;"></div>
+                            </div>
+                        `;
+                    }
+                    
+                    // Если есть сумма заказа, обновляем сводку
+                    const orderAmount = document.getElementById('orderAmountForSpend').value;
+                    if (orderAmount && parseInt(orderAmount) > 0) {
+                        updateOrderSummary();
+                        calculateMaxSpend();
+                    }
+                    
+                    // Если есть сумма заказа для начисления, пересчитываем бонусы
+                    const earnAmount = document.getElementById('orderAmount').value;
+                    if (earnAmount && parseInt(earnAmount) > 0) {
+                        calculateBonus();
+                    }
+                    
+                    console.log('✅ Настройки бонусов загружены:', currentBonusSettings);
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки настроек бонусов:', error);
+            }
+        }
+
+        // ============ РАСЧЁТ МАКСИМУМА ДЛЯ СПИСАНИЯ ============
+        function calculateMaxSpend() {
+            if (!currentBonusSettings) {
+                alert('Загрузка настроек... Подождите');
+                return;
+            }
+            
+            const orderAmount = parseInt(document.getElementById('orderAmountForSpend').value);
+            if (!orderAmount || orderAmount <= 0) {
+                document.getElementById('maxSpendInfo').style.display = 'none';
+                return;
+            }
+            
+            const maxRub = Math.floor(orderAmount * currentBonusSettings.maxBonusPaymentPercent / 100);
+            const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
+            
+            document.getElementById('maxSpendRub').textContent = maxRub;
+            document.getElementById('maxSpendBonuses').textContent = maxBonuses;
+            document.getElementById('spendLimitExplanation').innerHTML = 
+                `Вы можете оплатить бонусами не более ${currentBonusSettings.maxBonusPaymentPercent}% от суммы заказа.<br>
+                 Максимум: ${maxRub}₽ = ${maxBonuses} бонусов`;
+            document.getElementById('maxSpendInfo').style.display = 'block';
+            
+            // Обновляем placeholder для списания
+            const spendInput = document.getElementById('spendAmount');
+            spendInput.placeholder = `до ${maxBonuses}`;
+            spendInput.max = maxBonuses;
+            
+            // Обновляем сводку
+            updateOrderSummary();
+        }
+
+        // ============ ПРОВЕРКА QR-КОДА ============
         async function verifyQR() {
             const qrData = document.getElementById('qrData').value;
             if (!qrData) {
@@ -298,10 +553,12 @@
                 return;
             }
             
-            const verifyBtn = event ? event.target : document.querySelector('button');
-            const originalText = verifyBtn.innerText;
-            verifyBtn.innerText = '⏳ Проверка...';
-            verifyBtn.disabled = true;
+            const verifyBtn = event ? event.target : document.querySelector('#verifyQRBtn');
+            const originalText = verifyBtn ? verifyBtn.innerText : 'Проверить';
+            if (verifyBtn) {
+                verifyBtn.innerText = '⏳ Проверка...';
+                verifyBtn.disabled = true;
+            }
             
             try {
                 try {
@@ -309,7 +566,11 @@
                     currentCompanyId = currentQrData.companyId;
                 } catch(e) {
                     currentQrData = qrData;
+                    const match = qrData.match(/companyId["']?\s*:\s*(\d+)/);
+                    if (match) currentCompanyId = parseInt(match[1]);
                 }
+                
+                await loadBonusSettings();
                 
                 const response = await fetch(`${API_URL}/api/pos/get-user-balance`, {
                     method: 'POST',
@@ -347,11 +608,9 @@
                     
                     document.getElementById('userInfoCard').style.display = 'block';
                     document.getElementById('orderSection').style.display = 'block';
+                    document.getElementById('spendSection').style.display = 'block';
                     
-                    // Загружаем историю
                     await loadUserHistory();
-                    
-                    // Загружаем купленные акции
                     await loadPurchasedPromotions();
                 } else {
                     document.getElementById('verifyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
@@ -359,11 +618,14 @@
             } catch (error) {
                 document.getElementById('verifyResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
             } finally {
-                verifyBtn.innerText = originalText;
-                verifyBtn.disabled = false;
+                if (verifyBtn) {
+                    verifyBtn.innerText = originalText;
+                    verifyBtn.disabled = false;
+                }
             }
         }
 
+        // ============ ЗАГРУЗКА ИСТОРИИ ПОЛЬЗОВАТЕЛЯ ============
         async function loadUserHistory() {
             if (!currentUser || !currentCompanyId) return;
             
@@ -428,6 +690,7 @@
             await loadUserHistory();
         }
 
+        // ============ ЗАГРУЗКА КУПЛЕННЫХ АКЦИЙ ============
         async function loadPurchasedPromotions() {
             if (!currentUser || !currentCompanyId) return;
             
@@ -437,8 +700,6 @@
                 
                 if (result.success && result.purchased && result.purchased.length > 0) {
                     purchasedPromotions = result.purchased;
-                    
-                    // Фильтруем только неиспользованные акции
                     const unusedPromos = purchasedPromotions.filter(p => !p.used);
                     
                     document.getElementById('purchasedPromosInfo').innerHTML = `
@@ -448,7 +709,6 @@
                         </div>
                     `;
                     
-                    // Заполняем выпадающий список
                     const select = document.getElementById('promotionSelect');
                     select.innerHTML = '<option value="">-- Выберите акцию --</option>';
                     
@@ -461,14 +721,13 @@
                         select.appendChild(option);
                     });
                     
-                    // Показываем продукты при выборе акции
                     select.addEventListener('change', function() {
                         const selectedOption = this.options[this.selectedIndex];
                         const products = selectedOption.dataset.products;
                         const productsDiv = document.getElementById('promotionProducts');
                         const productsList = document.getElementById('productsList');
                         
-                        if (products) {
+                        if (products && products !== 'null' && products !== 'undefined') {
                             productsDiv.style.display = 'block';
                             productsList.innerHTML = products.split(',').map(p => 
                                 `<div style="padding: 4px 0; border-bottom: 1px solid #eee;">✓ ${p.trim()}</div>`
@@ -496,6 +755,7 @@
             }
         }
 
+        // ============ ПРОВЕРКА КУПЛЕННОЙ АКЦИИ ============
         async function checkPurchasedPromotion() {
             const promotionId = document.getElementById('promotionSelect').value;
             
@@ -528,7 +788,7 @@
                 
                 if (result.success) {
                     if (result.hasPromotion) {
-                        const productsText = result.products ? 
+                        const productsText = result.products && result.products !== 'null' ? 
                             `<div style="margin-top: 8px; font-size: 12px; color: #666;">📦 Продукты: ${result.products}</div>` : '';
                         
                         document.getElementById('purchasedPromosResult').innerHTML = `
@@ -561,6 +821,7 @@
             }
         }
 
+        // ============ ИСПОЛЬЗОВАНИЕ КУПЛЕННОЙ АКЦИИ ============
         async function usePurchasedPromotion(promotionId, discount) {
             if (!currentQrData) {
                 alert('Сначала отсканируйте QR-код');
@@ -591,9 +852,7 @@
                         </div>
                     `;
                     
-                    // Обновляем список купленных акций
                     await loadPurchasedPromotions();
-                    
                     showNotification(`Скидка ${discount}% применена`, 'success');
                 } else {
                     document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
@@ -605,6 +864,7 @@
             }
         }
 
+        // ============ РАСЧЁТ БОНУСОВ ЗА ПОКУПКУ ============
         async function calculateBonus() {
             const amount = document.getElementById('orderAmount').value;
             if (!amount || amount <= 0) {
@@ -613,14 +873,34 @@
             }
             
             const amountNum = parseInt(amount);
-            const bonusRate = currentMultiplier * 10;
+            const minPurchase = currentBonusSettings.minPurchaseForBonus || 1000;
+            
+            if (amountNum < minPurchase) {
+                document.getElementById('bonusResult').innerHTML = `
+                    <div class="warning">
+                        ⚠️ Минимальная сумма для начисления бонусов: ${minPurchase}₽<br>
+                        Текущая сумма: ${amountNum}₽. Бонусы не будут начислены.
+                    </div>
+                `;
+                currentBonusEarned = 0;
+                return;
+            }
+            
+            const bonusRate = currentMultiplier * (currentBonusSettings.bonusRatePerThousand || 10);
             const bonusEarned = Math.floor(amountNum / 1000) * bonusRate;
             currentBonusEarned = bonusEarned;
+            
+            const progressFill = document.querySelector('#bonusRateInfo .progress-fill');
+            if (progressFill) {
+                const progressPercent = Math.min(100, (amountNum / minPurchase) * 100);
+                progressFill.style.width = `${progressPercent}%`;
+            }
             
             document.getElementById('bonusResult').innerHTML = `
                 <div class="success">
                     🎉 За заказ на сумму ${amountNum}₽ клиент получит ${bonusEarned} бонусов!<br>
-                    📈 Множитель: x${currentMultiplier} (${bonusRate} бонусов за 1000₽)
+                    📈 Множитель: x${currentMultiplier} (${bonusRate} бонусов за 1000₽)<br>
+                    ⭐ Базовое начисление: ${currentBonusSettings.bonusRatePerThousand} бонусов за 1000₽
                 </div>
             `;
             
@@ -629,13 +909,15 @@
                     <strong>Сводка заказа:</strong><br>
                     💰 Сумма: ${amountNum}₽<br>
                     ⭐ Бонусов к начислению: ${bonusEarned}<br>
-                    👤 Пользователь: ${currentUser?.name}
+                    👤 Пользователь: ${currentUser?.name}<br>
+                    🏆 Уровень: x${currentMultiplier}
                 </div>
             `;
             
             document.getElementById('bonusSection').style.display = 'block';
         }
 
+        // ============ ПРИМЕНЕНИЕ БОНУСОВ (НАЧИСЛЕНИЕ) ============
         async function applyBonus() {
             const amount = document.getElementById('orderAmount').value;
             
@@ -672,23 +954,19 @@
                         </div>
                     `;
                     
-                    // Обновляем информацию о пользователе
                     if (currentUser) {
                         currentUser.balance = result.newBalance;
                         const balanceSpan = document.querySelector('#userInfo .balance');
                         if (balanceSpan) balanceSpan.innerText = result.newBalance;
                     }
                     
-                    // Обновляем историю
                     await loadUserHistory();
                     
-                    // Очищаем форму
                     document.getElementById('orderAmount').value = '';
                     document.getElementById('bonusResult').innerHTML = '';
                     document.getElementById('purchaseSummary').innerHTML = '';
                     document.getElementById('bonusSection').style.display = 'none';
                     
-                    // Показываем уведомление
                     showNotification('Покупка оформлена!', 'success');
                 } else {
                     document.getElementById('applyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
@@ -703,11 +981,29 @@
             }
         }
 
+        // ============ СПИСАНИЕ БОНУСОВ ============
         async function spendBonus() {
             const spendAmount = document.getElementById('spendAmount').value;
-            if (!spendAmount || spendAmount <= 0) {
+            const orderAmount = document.getElementById('orderAmountForSpend').value;
+            
+            if (!orderAmount || parseInt(orderAmount) <= 0) {
+                alert('Сначала введите сумму заказа');
+                return;
+            }
+            
+            if (!spendAmount || parseInt(spendAmount) <= 0) {
                 alert('Введите сумму списания больше 0');
                 return;
+            }
+            
+            if (currentBonusSettings) {
+                const maxRub = Math.floor(parseInt(orderAmount) * currentBonusSettings.maxBonusPaymentPercent / 100);
+                const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
+                
+                if (parseInt(spendAmount) > maxBonuses) {
+                    alert(`❌ Нельзя списать больше ${maxBonuses} бонусов (${currentBonusSettings.maxBonusPaymentPercent}% от суммы заказа)`);
+                    return;
+                }
             }
             
             if (!currentQrData) {
@@ -735,10 +1031,13 @@
                 const result = await response.json();
                 
                 if (result.success) {
+                    const discountRub = Math.floor(parseInt(spendAmount) / currentBonusSettings.rubToBonus);
+                    
                     document.getElementById('spendResult').innerHTML = `
                         <div class="success">
                             ✅ ${result.message}<br>
-                            💰 Новый баланс: ${result.newBalance} бонусов
+                            💰 Новый баланс: ${result.newBalance} бонусов<br>
+                            🎁 Скидка составила: ${discountRub} ₽
                         </div>
                     `;
                     
@@ -750,7 +1049,11 @@
                     
                     await loadUserHistory();
                     document.getElementById('spendAmount').value = '';
-                    showNotification(`Списано ${spendAmount} бонусов`, 'success');
+                    document.getElementById('orderAmountForSpend').value = '';
+                    document.getElementById('maxSpendInfo').style.display = 'none';
+                    document.getElementById('orderSummary').style.display = 'none';
+                    
+                    showNotification(`Списано ${spendAmount} бонусов (скидка ${discountRub}₽)`, 'success');
                 } else {
                     document.getElementById('spendResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
                     showNotification(result.message, 'error');
@@ -764,6 +1067,7 @@
             }
         }
         
+        // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
         function showNotification(message, type = 'info') {
             const notification = document.createElement('div');
             notification.style.cssText = `
@@ -797,6 +1101,7 @@
         
         function setTestSpend(amount) {
             document.getElementById('spendAmount').value = amount;
+            updateOrderSummary();
         }
         
         function loadTestQR(companyId) {
@@ -813,7 +1118,6 @@
             verifyQR();
         }
         
-        // Добавляем стили для анимаций
         const style = document.createElement('style');
         style.textContent = `
             @keyframes slideUp {

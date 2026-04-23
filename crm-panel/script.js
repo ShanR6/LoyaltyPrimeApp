@@ -401,7 +401,9 @@ async function loadCRMPanel() {
     await loadWheelSettings();
     await loadScratchSettings();
     await loadDiceSettings();  
-    loadNotificationsHistory();
+    await loadNotificationsHistory();
+    await loadCampaigns();
+    await loadBonusSettings();  
 }
 
 function closeCRMPanel() {
@@ -869,8 +871,16 @@ function saveLoyaltySettings() {
 }
 
 // ========== МОДУЛЬ 3: УВЕДОМЛЕНИЯ ==========
-function sendNotification() {
-    const type = document.getElementById('notifType')?.value || 'Push';
+let notificationCampaigns = [];
+let currentEditingCampaignId = null;
+
+// Отправка рассылки через backend API
+async function sendNotification() {
+    if (!currentBusiness) {
+        alert('❌ Компания не выбрана');
+        return;
+    }
+    
     const segment = document.getElementById('notifSegment')?.value || 'all';
     const title = document.getElementById('notifTitle')?.value || '';
     const message = document.getElementById('notifMessage')?.value || '';
@@ -880,46 +890,414 @@ function sendNotification() {
         return;
     }
     
-    const notification = { 
-        id: Date.now(), 
-        type, 
-        segment, 
-        title, 
-        message, 
-        date: new Date().toLocaleString(), 
-        status: 'sent' 
-    };
-    notificationsHistory.unshift(notification);
-    if (notificationsHistory.length > 20) notificationsHistory.pop();
-    loadNotificationsHistory();
-    
-    document.getElementById('notifTitle').value = '';
-    document.getElementById('notifMessage').value = '';
-    alert(`✅ Уведомление отправлено!\nАудитория: ${getSegmentName(segment)}`);
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                audience: segment,
+                title: title,
+                message: message
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Очищаем поля
+            document.getElementById('notifTitle').value = '';
+            document.getElementById('notifMessage').value = '';
+            
+            // Обновляем историю
+            await loadNotificationsHistory();
+            
+            alert(`✅ Рассылка отправлена!\nАудитория: ${getSegmentName(segment)}\nПолучателей: ${data.sentCount || 0}`);
+        } else {
+            console.error('Ошибка отправки:', data);
+            alert('❌ Ошибка отправки: ' + (data.message || data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('❌ Ошибка подключения к серверу');
+    }
 }
 
 function getSegmentName(segment) {
-    const segments = { 'all':'Все', 'active':'Активные', 'sleeping':'Спящие', 'vip':'VIP', 'new':'Новые' };
+    const segments = { 
+        'all': 'Все', 
+        'new': '🌱 Новички', 
+        'active': '🔥 Активные', 
+        'regular': '⭐ Постоянные', 
+        'dormant': '😴 Спящие' 
+    };
     return segments[segment] || segment;
 }
 
-function loadNotificationsHistory() {
+// Загрузка истории рассылок из БД
+async function loadNotificationsHistory() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/notifications/history?limit=50`);
+        const data = await response.json();
+        
+        if (data.success && data.history) {
+            renderNotificationsHistory(data.history);
+        } else {
+            renderNotificationsHistory([]);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+        renderNotificationsHistory([]);
+    }
+}
+
+function renderNotificationsHistory(history) {
     const container = document.getElementById('notificationsHistory');
     if (!container) return;
-    if (notificationsHistory.length === 0) {
+    
+    if (history.length === 0) {
         container.innerHTML = '<div class="empty-state">Нет отправленных уведомлений</div>';
         return;
     }
-    container.innerHTML = notificationsHistory.map(n => `
-        <div class="history-item">
-            <div class="history-info">
-                <div class="history-title">${escapeHtml(n.title)}</div>
-                <div class="history-message">${escapeHtml(n.message)}</div>
-                <div class="history-meta">Аудитория: ${getSegmentName(n.segment)} • ${n.date}</div>
+    
+    container.innerHTML = history.map(n => {
+        const sentDate = n.sent_at ? new Date(n.sent_at).toLocaleString('ru-RU') : new Date(n.created_at).toLocaleString('ru-RU');
+        return `
+            <div class="history-item">
+                <div class="history-info">
+                    <div class="history-title">${escapeHtml(n.title)}</div>
+                    <div class="history-message">${escapeHtml(n.message)}</div>
+                    <div class="history-meta">
+                        Аудитория: ${getSegmentName(n.audience)} • 
+                        Отправлено: ${sentDate} • 
+                        Получателей: ${n.sent_count || 0}
+                    </div>
+                </div>
+                <div class="history-status ${n.status === 'sent' ? 'sent' : 'failed'}">
+                    ${n.status === 'sent' ? '✅ Отправлено' : '❌ Ошибка'}
+                </div>
             </div>
-            <div class="history-status sent">✅ Отправлено</div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
+}
+
+// Загрузка кампаний при загрузке CRM
+async function loadCampaigns() {
+    if (!currentBusiness) return;
+    
+    try {
+        console.log('📥 Загрузка кампаний для компании:', currentBusiness.id);
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`);
+        const data = await response.json();
+        
+        console.log('📦 Получены кампании:', data);
+        
+        if (data.success && data.campaigns) {
+            notificationCampaigns = data.campaigns;
+            console.log('✅ Загружено кампаний:', notificationCampaigns.length);
+            renderAutoCampaigns();
+        } else {
+            console.log('⚠️ Кампаний нет, создаем стандартные...');
+            // Если кампаний нет, создаем стандартные
+            await createDefaultCampaigns();
+        }
+    } catch (error) {
+        console.error('❌ Ошибка загрузки кампаний:', error);
+    }
+}
+
+// Создание стандартных автоматических кампаний
+async function createDefaultCampaigns() {
+    if (!currentBusiness) return;
+    
+    console.log('🏗️ Создание стандартных кампаний для компании:', currentBusiness.id);
+    
+    const defaultCampaigns = [
+        {
+            name: '😴 Возвращение спящих',
+            title: 'Мы скучаем по вам!',
+            message: 'Вернитесь к нам и получите двойные бонусы на следующую покупку!',
+            audience: 'dormant',
+            is_active: true,
+            interval_days: 3,
+            is_default: true
+        },
+        {
+            name: '🎂 Поздравление с днем рождения',
+            title: 'С днем рождения! 🎉',
+            message: 'Поздравляем! В честь вашего праздника дарим вам специальные бонусы!',
+            audience: 'all',
+            is_active: true,
+            interval_days: 1,
+            is_default: true
+        },
+        {
+            name: '🔥 Достижение стрика',
+            title: 'Отличная серия! 🔥',
+            message: 'Вы с нами уже несколько дней подряд! Продолжайте получать бонусы!',
+            audience: 'active',
+            is_active: true,
+            interval_days: 2,
+            is_default: true
+        }
+    ];
+    
+    for (const campaign of defaultCampaigns) {
+        try {
+            console.log('📝 Создание кампании:', campaign.name);
+            const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(campaign)
+            });
+            const result = await response.json();
+            console.log('✅ Кампания создана:', result);
+        } catch (error) {
+            console.error('❌ Ошибка создания кампании:', error);
+        }
+    }
+    
+    // Перезагружаем кампании
+    console.log('🔄 Перезагрузка кампаний...');
+    await loadCampaigns();
+}
+
+// Отрисовка автоматических кампаний
+function renderAutoCampaigns() {
+    const container = document.getElementById('autoCampaignsList');
+    if (!container) return;
+    
+    if (notificationCampaigns.length === 0) {
+        container.innerHTML = '<div class="empty-state">Нет автоматических кампаний</div>';
+        return;
+    }
+    
+    container.innerHTML = notificationCampaigns.map(campaign => {
+        return `
+            <div class="campaign-item" style="border-left: 4px solid ${campaign.is_active ? '#2ecc71' : '#95a5a6'}; padding: 12px; margin-bottom: 12px; background: white; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${escapeHtml(campaign.name)} ${campaign.is_default ? '<span style="font-size: 11px; color: #999; margin-left: 8px;">(Стандартная)</span>' : ''}</div>
+                        <div style="font-size: 11px; color: #999; margin-bottom: 4px;">Аудитория: ${getSegmentName(campaign.audience)} • Интервал: ${campaign.interval_days || 1} дн.</div>
+                        ${campaign.image_url ? `<div style="margin-top: 8px;"><img src="${escapeHtml(campaign.image_url)}" style="max-width: 200px; max-height: 100px; border-radius: 6px; object-fit: cover;"></div>` : ''}
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                            <input type="checkbox" ${campaign.is_active ? 'checked' : ''} onchange="toggleCampaign(${campaign.id}, this.checked)">
+                            ${campaign.is_active ? 'Активна' : 'Отключена'}
+                        </label>
+                        <button class="btn-edit" onclick="editCampaign(${campaign.id})" style="background:#17a2b8; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size: 12px;">✏️ Редактировать</button>
+                    </div>
+                </div>
+                <div style="font-size: 12px; color: #555; background: #f8f9fa; padding: 8px; border-radius: 6px;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(campaign.title)}</div>
+                    <div>${escapeHtml(campaign.message)}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Показать модальное окно добавления кампании
+function showAddCampaignModal() {
+    currentEditingCampaignId = null;
+    
+    document.getElementById('campaignModalTitle').textContent = '➕ Добавить автоматическую кампанию';
+    document.getElementById('campaignName').value = '';
+    document.getElementById('campaignAudience').value = 'all';
+    document.getElementById('campaignTitle').value = '';
+    document.getElementById('campaignMessage').value = '';
+    document.getElementById('campaignInterval').value = '1';
+    document.getElementById('campaignImage').value = '';
+    document.getElementById('campaignActive').checked = true;
+    document.getElementById('deleteCampaignBtn').style.display = 'none';
+    
+    openModal('campaign');
+}
+
+// Редактирование кампании
+function editCampaign(campaignId) {
+    const campaign = notificationCampaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+    
+    currentEditingCampaignId = campaignId;
+    
+    document.getElementById('campaignModalTitle').textContent = '✏️ Редактировать кампанию';
+    document.getElementById('campaignName').value = campaign.name;
+    document.getElementById('campaignAudience').value = campaign.audience;
+    document.getElementById('campaignTitle').value = campaign.title;
+    document.getElementById('campaignMessage').value = campaign.message;
+    document.getElementById('campaignInterval').value = campaign.interval_days || 1;
+    document.getElementById('campaignImage').value = campaign.image_url || '';
+    document.getElementById('campaignActive').checked = campaign.is_active;
+    // Скрываем кнопку удаления для всех кампаний (можно только отключить)
+    document.getElementById('deleteCampaignBtn').style.display = 'none';
+    
+    openModal('campaign');
+}
+
+// Сохранение кампании
+async function saveCampaign() {
+    if (!currentBusiness) {
+        alert('❌ Компания не выбрана');
+        return;
+    }
+    
+    const name = document.getElementById('campaignName').value.trim();
+    const audience = document.getElementById('campaignAudience').value;
+    const title = document.getElementById('campaignTitle').value.trim();
+    const message = document.getElementById('campaignMessage').value.trim();
+    const interval_days = parseInt(document.getElementById('campaignInterval').value) || 1;
+    const image_url = document.getElementById('campaignImage').value.trim() || null;
+    const is_active = document.getElementById('campaignActive').checked;
+    const errorElement = document.getElementById('campaignError');
+    
+    if (!name || !title || !message) {
+        errorElement.textContent = '❌ Заполните все обязательные поля';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    // Validate interval (minimum 1 day)
+    if (interval_days < 1) {
+        errorElement.textContent = '❌ Интервал должен быть минимум 1 день';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    try {
+        let response;
+        
+        if (currentEditingCampaignId) {
+            // Обновляем существующую кампанию
+            response = await fetch(`${API_URL}/api/campaigns/${currentEditingCampaignId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name,
+                    title,
+                    message,
+                    audience,
+                    is_active,
+                    interval_days,
+                    image_url
+                })
+            });
+        } else {
+            // Создаем новую кампанию
+            response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name,
+                    title,
+                    message,
+                    audience,
+                    is_active,
+                    interval_days,
+                    image_url
+                })
+            });
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            closeModal('campaign');
+            await loadCampaigns();
+            alert(`✅ Кампания ${currentEditingCampaignId ? 'обновлена' : 'создана'}!`);
+        } else {
+            console.error('Ошибка сохранения кампании:', data);
+            errorElement.textContent = data.message || data.error || 'Ошибка сохранения';
+            errorElement.style.display = 'block';
+            setTimeout(() => errorElement.style.display = 'none', 3000);
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        errorElement.textContent = '❌ Ошибка подключения к серверу';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+    }
+}
+
+// Удаление кампании
+async function deleteCampaign(campaignId) {
+    if (!confirm('Вы уверены, что хотите удалить эту кампанию?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/api/campaigns/${campaignId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await loadCampaigns();
+            alert('✅ Кампания удалена');
+        } else {
+            alert('❌ Ошибка удаления');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('❌ Ошибка подключения к серверу');
+    }
+}
+
+// Переключение активности кампании
+async function toggleCampaign(campaignId, isActive) {
+    try {
+        // Сначала обновляем статус кампании
+        const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/toggle`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: isActive })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Если кампания активирована, выполняем её немедленно
+            if (isActive) {
+                console.log('🚀 Кампания активирована, выполняем:', campaignId);
+                
+                const execResponse = await fetch(`${API_URL}/api/campaigns/${campaignId}/execute`, {
+                    method: 'POST'
+                });
+                
+                const execData = await execResponse.json();
+                
+                if (execData.success) {
+                    console.log('✅ Кампания выполнена, отправлено:', execData.sentCount, 'сообщений');
+                    alert(`✅ Кампания активирована и отправлена!\nПолучателей: ${execData.sentCount || 0}`);
+                } else {
+                    console.error('❌ Ошибка выполнения кампании:', execData);
+                    alert('⚠️ Кампания активирована, но произошла ошибка при отправке: ' + (execData.message || execData.error || 'Неизвестная ошибка'));
+                }
+            } else {
+                alert('✅ Кампания отключена');
+            }
+            
+            await loadCampaigns();
+        } else {
+            alert('❌ Ошибка переключения кампании');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('❌ Ошибка подключения к серверу');
+    }
+}
+
+// Удаление текущей кампании из модального окна
+async function deleteCurrentCampaign() {
+    if (currentEditingCampaignId) {
+        await deleteCampaign(currentEditingCampaignId);
+        closeModal('campaign');
+    }
 }
 
 // ========== МОДУЛЬ 4: МАРКЕТИНГ ==========
@@ -3029,3 +3407,228 @@ document.addEventListener('DOMContentLoaded', function() {
     // Проверяем сохраненную сессию
     checkSavedSession();
 });
+
+// ============ НАСТРОЙКИ БОНУСНОЙ СИСТЕМЫ ==========
+
+let bonusSettings = {
+    rubToBonus: 10,
+    maxBonusPaymentPercent: 25,
+    minPurchaseForBonus: 1000,
+    bonusRatePerThousand: 10
+};
+
+async function loadBonusSettings() {
+    if (!currentBusiness) {
+        console.log('❌ currentBusiness не загружен, пропускаем загрузку настроек бонусов');
+        return;
+    }
+    
+    console.log('📝 Загрузка настроек бонусов для компании:', currentBusiness.id);
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/bonus-settings`);
+        const data = await response.json();
+        
+        if (data.success) {
+            bonusSettings = data.settings;
+            console.log('✅ Настройки бонусов загружены:', bonusSettings);
+            renderBonusSettings();
+        } else {
+            console.error('Ошибка загрузки:', data);
+            renderBonusSettings(); // Рендерим с настройками по умолчанию
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки настроек бонусов:', error);
+        renderBonusSettings(); // Рендерим с настройками по умолчанию
+    }
+}
+
+function renderBonusSettings() {
+    const container = document.getElementById('bonusSettingsContainer');
+    if (!container) {
+        console.error('❌ Контейнер bonusSettingsContainer не найден в DOM!');
+        return;
+    }
+    
+    console.log('🎨 Рендерим настройки бонусов');
+    
+    container.innerHTML = `
+        <div class="settings-card">
+            <h3>💰 Настройки бонусной системы</h3>
+            <div class="bonus-settings-description" style="margin-bottom: 20px; padding: 12px; background: #e8f5e9; border-radius: 12px;">
+                <p style="margin: 0; font-size: 13px; color: #2e7d32;">
+                    💡 Настройте параметры начисления и использования бонусов в вашей программе лояльности.
+                    Эти настройки влияют на работу POS-терминала и отображение в мини-приложении.
+                </p>
+            </div>
+            
+            <div class="bonus-setting-row">
+                <div class="setting-info">
+                    <label>💱 Курс: 1 рубль = ? бонусов</label>
+                    <div class="setting-description">Сколько бонусов нужно потратить, чтобы оплатить 1 рубль</div>
+                </div>
+                <div class="setting-control">
+                    <input type="number" id="rubToBonus" value="${bonusSettings.rubToBonus}" min="1" max="1000" step="1" style="width: 120px; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+                    <span class="setting-unit">бонусов = 1 ₽</span>
+                </div>
+            </div>
+            
+            <div class="bonus-setting-row">
+                <div class="setting-info">
+                    <label>📊 Максимальный % оплаты бонусами</label>
+                    <div class="setting-description">Какую часть стоимости заказа можно оплатить бонусами (0-100%)</div>
+                </div>
+                <div class="setting-control">
+                    <input type="number" id="maxBonusPaymentPercent" value="${bonusSettings.maxBonusPaymentPercent}" min="0" max="100" step="5" style="width: 120px; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+                    <span class="setting-unit">% от суммы заказа</span>
+                </div>
+            </div>
+            
+            <div class="bonus-setting-row">
+                <div class="setting-info">
+                    <label>💰 Минимальная сумма для начисления бонусов</label>
+                    <div class="setting-description">Минимальная сумма покупки для получения бонусов</div>
+                </div>
+                <div class="setting-control">
+                    <input type="number" id="minPurchaseForBonus" value="${bonusSettings.minPurchaseForBonus}" min="0" max="100000" step="100" style="width: 120px; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+                    <span class="setting-unit">₽</span>
+                </div>
+            </div>
+            
+            <div class="bonus-setting-row">
+                <div class="setting-info">
+                    <label>⭐ Бонусов за 1000₽ (базовый)</label>
+                    <div class="setting-description">Сколько бонусов получает пользователь за каждые 1000₽ (до умножения на уровень)</div>
+                </div>
+                <div class="setting-control">
+                    <input type="number" id="bonusRatePerThousand" value="${bonusSettings.bonusRatePerThousand}" min="0" max="1000" step="5" style="width: 120px; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+                    <span class="setting-unit">бонусов</span>
+                </div>
+            </div>
+            
+            <div class="bonus-preview" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 12px;">
+                <h4 style="margin-bottom: 12px;">📱 Предпросмотр в POS-терминале:</h4>
+                <div style="background: white; padding: 16px; border-radius: 8px;">
+                    <div style="margin-bottom: 8px;">
+                        <span style="color: #666;">💰 Списание бонусов:</span>
+                        <div style="font-size: 12px; color: #888; margin-top: 4px;">
+                            📌 1 ₽ = <strong id="previewRubToBonus">${bonusSettings.rubToBonus}</strong> бонусов
+                        </div>
+                    </div>
+                    <div id="previewMaxPayment" style="margin-bottom: 8px;">
+                        <div style="font-size: 12px; color: #888;">
+                            📌 Максимальный процент оплаты бонусами: <strong>${bonusSettings.maxBonusPaymentPercent}%</strong>
+                        </div>
+                        <div id="previewExample" style="font-size: 11px; color: #2ecc71; margin-top: 4px;">
+                            Пример: при заказе на 1000₽ можно оплатить бонусами до ${Math.floor(1000 * bonusSettings.maxBonusPaymentPercent / 100)}₽ 
+                            (${Math.floor(1000 * bonusSettings.maxBonusPaymentPercent / 100 * bonusSettings.rubToBonus)} бонусов)
+                        </div>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 12px; color: #f39c12;">
+                        ⭐ Базовое начисление: ${bonusSettings.bonusRatePerThousand} бонусов за 1000₽ 
+                        (с учетом уровня x множитель)
+                    </div>
+                </div>
+            </div>
+            
+            <button class="btn-save" onclick="saveBonusSettings()" style="margin-top: 20px; width: 100%;">💾 Сохранить настройки бонусов</button>
+        </div>
+    `;
+    
+    // Добавляем обработчики для обновления предпросмотра
+    const rubToBonusInput = document.getElementById('rubToBonus');
+    const maxPercentInput = document.getElementById('maxBonusPaymentPercent');
+    
+    if (rubToBonusInput) {
+        rubToBonusInput.addEventListener('input', updateBonusPreview);
+    }
+    if (maxPercentInput) {
+        maxPercentInput.addEventListener('input', updateBonusPreview);
+    }
+}
+
+function updateBonusPreview() {
+    const rubToBonus = parseInt(document.getElementById('rubToBonus')?.value) || 10;
+    const maxPercent = parseInt(document.getElementById('maxBonusPaymentPercent')?.value) || 25;
+    
+    const previewRubToBonus = document.getElementById('previewRubToBonus');
+    if (previewRubToBonus) {
+        previewRubToBonus.textContent = rubToBonus;
+    }
+    
+    const previewExample = document.getElementById('previewExample');
+    if (previewExample) {
+        const maxRub = Math.floor(1000 * maxPercent / 100);
+        const maxBonuses = maxRub * rubToBonus;
+        previewExample.innerHTML = `Пример: при заказе на 1000₽ можно оплатить бонусами до ${maxRub}₽ 
+            (${maxBonuses} бонусов)`;
+    }
+}
+
+async function saveBonusSettings() {
+    if (!currentBusiness) {
+        alert('❌ Компания не выбрана');
+        return;
+    }
+    
+    const rubToBonus = parseInt(document.getElementById('rubToBonus').value);
+    const maxBonusPaymentPercent = parseInt(document.getElementById('maxBonusPaymentPercent').value);
+    const minPurchaseForBonus = parseInt(document.getElementById('minPurchaseForBonus').value);
+    const bonusRatePerThousand = parseInt(document.getElementById('bonusRatePerThousand').value);
+    
+    // Валидация
+    if (isNaN(rubToBonus) || rubToBonus < 1 || rubToBonus > 1000) {
+        alert('❌ Курс рубль→бонус должен быть от 1 до 1000');
+        return;
+    }
+    
+    if (isNaN(maxBonusPaymentPercent) || maxBonusPaymentPercent < 0 || maxBonusPaymentPercent > 100) {
+        alert('❌ Максимальный процент оплаты бонусами должен быть от 0 до 100');
+        return;
+    }
+    
+    if (isNaN(minPurchaseForBonus) || minPurchaseForBonus < 0) {
+        alert('❌ Минимальная сумма для начисления бонусов должна быть >= 0');
+        return;
+    }
+    
+    if (isNaN(bonusRatePerThousand) || bonusRatePerThousand < 0 || bonusRatePerThousand > 1000) {
+        alert('❌ Количество бонусов за 1000₽ должно быть от 0 до 1000');
+        return;
+    }
+    
+    const saveBtn = event.target;
+    const originalText = saveBtn.textContent;
+    saveBtn.textContent = '💾 Сохранение...';
+    saveBtn.disabled = true;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/bonus-settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                rubToBonus,
+                maxBonusPaymentPercent,
+                minPurchaseForBonus,
+                bonusRatePerThousand
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            bonusSettings = data.settings;
+            showSaveIndicator();
+            alert('✅ Настройки бонусной системы сохранены!');
+            renderBonusSettings();
+        } else {
+            alert('❌ Ошибка сохранения: ' + (data.message || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения:', error);
+        alert('❌ Ошибка подключения к серверу: ' + error.message);
+    } finally {
+        saveBtn.textContent = originalText;
+        saveBtn.disabled = false;
+    }
+}

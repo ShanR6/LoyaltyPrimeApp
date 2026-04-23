@@ -190,6 +190,36 @@ async function initDatabase() {
             )
         `);
 
+        await query(`
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                type VARCHAR(50) DEFAULT 'push',
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                audience VARCHAR(50) DEFAULT 'all', -- all, new, active, regular, dormant
+                status VARCHAR(50) DEFAULT 'pending', -- pending, sent, failed
+                sent_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_at TIMESTAMP
+            )
+        `);
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS notification_campaigns (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                trigger_type VARCHAR(50), -- nullable, not used anymore
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                audience VARCHAR(50) DEFAULT 'all',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         console.log('✅ Таблицы созданы/проверены');
         
         await addMissingColumns();
@@ -203,6 +233,9 @@ async function initDatabase() {
         await ensureAllQuestsExist();
 		await checkAndResetQuests();
 		await addQuestColumns();
+		await addStreakColumns();
+		await addBonusSettingsColumn();
+		await addNotificationCampaignColumns();
         await insertTestData();
 
     } catch (error) {
@@ -225,6 +258,24 @@ async function addDailyBonusSettings() {
     } catch (error) {
         console.error('❌ Ошибка добавления daily_bonus_settings:', error);
     }
+}
+
+async function addStreakColumns() {
+  try {
+    const checkColumn = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'user_progress' AND column_name = 'last_streak_update_date'
+    `);
+    
+    if (checkColumn.rows.length === 0) {
+      console.log('📝 Добавляем колонку last_streak_update_date в таблицу user_progress...');
+      await query(`ALTER TABLE user_progress ADD COLUMN last_streak_update_date TIMESTAMP`);
+      console.log('✅ Колонка last_streak_update_date добавлена');
+    }
+  } catch (error) {
+    console.error('Ошибка добавления колонки стрика:', error);
+  }
 }
 
 // Добавляем недостающие колонки в таблицу transactions
@@ -2448,6 +2499,422 @@ async function migrateGiveawaysTable() {
         console.error('❌ Ошибка миграции giveaways:', error);
     }
 }
+// Добавляем колонку bonus_settings в таблицу companies
+async function addBonusSettingsColumn() {
+    try {
+        const checkColumn = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'companies' AND column_name = 'bonus_settings'
+        `);
+        
+        if (checkColumn.rows.length === 0) {
+            console.log('📝 Добавляем колонку bonus_settings в таблицу companies...');
+            await query(`
+                ALTER TABLE companies 
+                ADD COLUMN bonus_settings JSONB DEFAULT '{
+                    "rubToBonus": 10,
+                    "maxBonusPaymentPercent": 25,
+                    "minPurchaseForBonus": 1000,
+                    "bonusRatePerThousand": 10
+                }'::jsonb
+            `);
+            console.log('✅ Колонка bonus_settings добавлена');
+        } else {
+            // Обновляем существующие записи, если есть null значения
+            await query(`
+                UPDATE companies 
+                SET bonus_settings = '{
+                    "rubToBonus": 10,
+                    "maxBonusPaymentPercent": 25,
+                    "minPurchaseForBonus": 1000,
+                    "bonusRatePerThousand": 10
+                }'::jsonb
+                WHERE bonus_settings IS NULL OR bonus_settings = '{}'::jsonb
+            `);
+        }
+    } catch (error) {
+        console.error('❌ Ошибка добавления bonus_settings:', error);
+    }
+}
+
+// Добавляем новые колонки для notification_campaigns
+async function addNotificationCampaignColumns() {
+    try {
+        // Проверяем и добавляем колонку interval_days
+        const checkInterval = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notification_campaigns' AND column_name = 'interval_days'
+        `);
+        
+        if (checkInterval.rows.length === 0) {
+            console.log('📝 Добавляем колонку interval_days в таблицу notification_campaigns...');
+            await query(`ALTER TABLE notification_campaigns ADD COLUMN interval_days INTEGER DEFAULT 1`);
+            console.log('✅ Колонка interval_days добавлена');
+        }
+        
+        // Проверяем и добавляем колонку image_url
+        const checkImage = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notification_campaigns' AND column_name = 'image_url'
+        `);
+        
+        if (checkImage.rows.length === 0) {
+            console.log('📝 Добавляем колонку image_url в таблицу notification_campaigns...');
+            await query(`ALTER TABLE notification_campaigns ADD COLUMN image_url TEXT`);
+            console.log('✅ Колонка image_url добавлена');
+        }
+        
+        // Проверяем и добавляем колонку is_default
+        const checkDefault = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notification_campaigns' AND column_name = 'is_default'
+        `);
+        
+        if (checkDefault.rows.length === 0) {
+            console.log('📝 Добавляем колонку is_default в таблицу notification_campaigns...');
+            await query(`ALTER TABLE notification_campaigns ADD COLUMN is_default BOOLEAN DEFAULT FALSE`);
+            console.log('✅ Колонка is_default добавлена');
+        }
+        
+        // Проверяем и добавляем колонку last_sent_at
+        const checkLastSent = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notification_campaigns' AND column_name = 'last_sent_at'
+        `);
+        
+        if (checkLastSent.rows.length === 0) {
+            console.log('📝 Добавляем колонку last_sent_at в таблицу notification_campaigns...');
+            await query(`ALTER TABLE notification_campaigns ADD COLUMN last_sent_at TIMESTAMP`);
+            console.log('✅ Колонка last_sent_at добавлена');
+        }
+        
+        // Исправляем колонку trigger_type - делаем nullable (допускает NULL)
+        console.log('📝 Изменяем колонку trigger_type на nullable...');
+        try {
+            await query(`ALTER TABLE notification_campaigns ALTER COLUMN trigger_type DROP NOT NULL`);
+            console.log('✅ Колонка trigger_type теперь допускает NULL');
+        } catch (error) {
+            console.log('⚠️ Колонка trigger_type уже nullable или не существует:', error.message);
+        }
+        
+        // Проверяем и добавляем колонку audience в таблицу notifications (если её нет)
+        const checkNotifAudience = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notifications' AND column_name = 'audience'
+        `);
+        
+        if (checkNotifAudience.rows.length === 0) {
+            console.log('📝 Добавляем колонку audience в таблицу notifications...');
+            await query(`ALTER TABLE notifications ADD COLUMN audience VARCHAR(50) DEFAULT 'all'`);
+            console.log('✅ Колонка audience добавлена в notifications');
+        }
+        
+        // Проверяем и добавляем колонку status в таблицу notifications (если её нет)
+        const checkNotifStatus = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notifications' AND column_name = 'status'
+        `);
+        
+        if (checkNotifStatus.rows.length === 0) {
+            console.log('📝 Добавляем колонку status в таблицу notifications...');
+            await query(`ALTER TABLE notifications ADD COLUMN status VARCHAR(50) DEFAULT 'pending'`);
+            console.log('✅ Колонка status добавлена в notifications');
+        }
+        
+        // Проверяем и добавляем колонку sent_count в таблицу notifications (если её нет)
+        const checkNotifSentCount = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notifications' AND column_name = 'sent_count'
+        `);
+        
+        if (checkNotifSentCount.rows.length === 0) {
+            console.log('📝 Добавляем колонку sent_count в таблицу notifications...');
+            await query(`ALTER TABLE notifications ADD COLUMN sent_count INTEGER DEFAULT 0`);
+            console.log('✅ Колонка sent_count добавлена в notifications');
+        }
+        
+        // Проверяем и добавляем колонку sent_at в таблицу notifications (если её нет)
+        const checkNotifSentAt = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notifications' AND column_name = 'sent_at'
+        `);
+        
+        if (checkNotifSentAt.rows.length === 0) {
+            console.log('📝 Добавляем колонку sent_at в таблицу notifications...');
+            await query(`ALTER TABLE notifications ADD COLUMN sent_at TIMESTAMP`);
+            console.log('✅ Колонка sent_at добавлена в notifications');
+        }
+        
+        console.log('✅ Все колонки notification_campaigns проверены');
+    } catch (error) {
+        console.error('❌ Ошибка добавления колонок notification_campaigns:', error);
+    }
+}
+
+// ========== NOTIFICATIONS ==========
+
+// Отправка рассылки
+async function sendNotification(companyId, audience, title, message) {
+    try {
+        // Получаем пользователей по аудитории
+        const users = await getUsersBySegment(companyId, audience);
+        
+        // Сохраняем в историю рассылок
+        const result = await query(
+            `INSERT INTO notifications (company_id, title, message, audience, status, sent_count, sent_at)
+             VALUES ($1, $2, $3, $4, 'sent', $5, NOW())
+             RETURNING *`,
+            [companyId, title, message, audience, users.length]
+        );
+        
+        console.log(`📨 Рассылка отправлена: ${title} (${users.length} пользователей, аудитория: ${audience})`);
+        
+        return {
+            success: true,
+            notification: result.rows[0],
+            sentCount: users.length,
+            users: users.map(u => ({ vk_id: u.vk_id, name: u.name }))
+        };
+    } catch (error) {
+        console.error('❌ Ошибка отправки рассылки:', error);
+        throw error;
+    }
+}
+
+// Получение истории рассылок
+async function getNotificationHistory(companyId, limit = 50) {
+    try {
+        const result = await query(
+            `SELECT * FROM notifications 
+             WHERE company_id = $1 
+             ORDER BY created_at DESC
+             LIMIT $2`,
+            [companyId, limit]
+        );
+        return result.rows;
+    } catch (error) {
+        console.error('❌ Ошибка получения истории рассылок:', error);
+        throw error;
+    }
+}
+
+// Получение кампаний компании
+async function getNotificationCampaigns(companyId) {
+    try {
+        const result = await query(
+            `SELECT * FROM notification_campaigns 
+             WHERE company_id = $1 
+             ORDER BY created_at DESC`,
+            [companyId]
+        );
+        return result.rows;
+    } catch (error) {
+        console.error('❌ Ошибка получения кампаний:', error);
+        throw error;
+    }
+}
+
+// Добавление кампании
+async function addNotificationCampaign(companyId, name, title, message, audience, isActive = true, intervalDays = 1, imageUrl = null, isDefault = false) {
+    try {
+        const result = await query(
+            `INSERT INTO notification_campaigns (company_id, name, title, message, audience, is_active, interval_days, image_url, is_default)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             RETURNING *`,
+            [companyId, name, title, message, audience, isActive, intervalDays, imageUrl, isDefault]
+        );
+        console.log(`✅ Кампания добавлена: ${name}`);
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Ошибка добавления кампании:', error);
+        throw error;
+    }
+}
+
+// Обновление кампании
+async function updateNotificationCampaign(campaignId, name, title, message, audience, isActive, intervalDays, imageUrl) {
+    try {
+        const result = await query(
+            `UPDATE notification_campaigns 
+             SET name = $2, title = $3, message = $4, audience = $5, is_active = $6, interval_days = $7, image_url = $8, updated_at = NOW()
+             WHERE id = $1
+             RETURNING *`,
+            [campaignId, name, title, message, audience, isActive, intervalDays, imageUrl]
+        );
+        console.log(`✅ Кампания обновлена: ${name}`);
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Ошибка обновления кампании:', error);
+        throw error;
+    }
+}
+
+// Удаление кампании
+async function deleteNotificationCampaign(campaignId) {
+    try {
+        // Проверяем, является ли кампания стандартной
+        const checkResult = await query(
+            `SELECT is_default FROM notification_campaigns WHERE id = $1`,
+            [campaignId]
+        );
+        
+        if (checkResult.rows.length === 0) {
+            throw new Error('Кампания не найдена');
+        }
+        
+        if (checkResult.rows[0].is_default) {
+            throw new Error('Нельзя удалить стандартную кампанию');
+        }
+        
+        await query(`DELETE FROM notification_campaigns WHERE id = $1`, [campaignId]);
+        console.log(`🗑️ Кампания удалена: ${campaignId}`);
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Ошибка удаления кампании:', error);
+        throw error;
+    }
+}
+
+// Переключение активности кампании
+async function toggleNotificationCampaign(campaignId, isActive) {
+    try {
+        const result = await query(
+            `UPDATE notification_campaigns 
+             SET is_active = $2, updated_at = NOW()
+             WHERE id = $1
+             RETURNING *`,
+            [campaignId, isActive]
+        );
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Ошибка переключения кампании:', error);
+        throw error;
+    }
+}
+
+// Получение активных кампаний для автоматического запуска
+async function getActiveCampaigns(companyId) {
+    try {
+        const result = await query(
+            `SELECT * FROM notification_campaigns 
+             WHERE company_id = $1 AND is_active = TRUE
+             AND (last_sent_at IS NULL OR last_sent_at <= NOW() - (interval_days || ' days')::INTERVAL)
+             ORDER BY created_at DESC`,
+            [companyId]
+        );
+        return result.rows;
+    } catch (error) {
+        console.error('❌ Ошибка получения активных кампаний:', error);
+        throw error;
+    }
+}
+
+// Получение пользователей по сегменту
+async function getUsersBySegment(companyId, audience) {
+    try {
+        let userQuery;
+        
+        switch (audience) {
+            case 'new':
+                userQuery = `
+                    SELECT u.vk_id, u.name, u.company_id
+                    FROM users u
+                    JOIN user_classification uc ON u.id = uc.user_id AND u.company_id = uc.company_id
+                    WHERE u.company_id = $1 AND uc.user_type = 'new'
+                `;
+                break;
+            case 'active':
+                userQuery = `
+                    SELECT u.vk_id, u.name, u.company_id
+                    FROM users u
+                    JOIN user_classification uc ON u.id = uc.user_id AND u.company_id = uc.company_id
+                    WHERE u.company_id = $1 AND uc.user_type = 'active'
+                `;
+                break;
+            case 'regular':
+                userQuery = `
+                    SELECT u.vk_id, u.name, u.company_id
+                    FROM users u
+                    JOIN user_classification uc ON u.id = uc.user_id AND u.company_id = uc.company_id
+                    WHERE u.company_id = $1 AND uc.user_type = 'regular'
+                `;
+                break;
+            case 'dormant':
+                userQuery = `
+                    SELECT u.vk_id, u.name, u.company_id
+                    FROM users u
+                    JOIN user_classification uc ON u.id = uc.user_id AND u.company_id = uc.company_id
+                    WHERE u.company_id = $1 AND uc.user_type = 'dormant'
+                `;
+                break;
+            default: // all
+                userQuery = `
+                    SELECT vk_id, name, company_id
+                    FROM users
+                    WHERE company_id = $1
+                `;
+        }
+        
+        const result = await query(userQuery, [companyId]);
+        return result.rows;
+    } catch (error) {
+        console.error('❌ Ошибка получения пользователей по сегменту:', error);
+        throw error;
+    }
+}
+
+// Выполнение кампании (отправка уведомлений через бота)
+async function executeCampaign(campaignId) {
+    try {
+        const campaignResult = await query(
+            `SELECT * FROM notification_campaigns WHERE id = $1`,
+            [campaignId]
+        );
+        
+        if (campaignResult.rows.length === 0) {
+            throw new Error('Кампания не найдена');
+        }
+        
+        const campaign = campaignResult.rows[0];
+        const users = await getUsersBySegment(campaign.company_id, campaign.audience);
+        
+        // Сохраняем в историю рассылок
+        await query(
+            `INSERT INTO notifications (company_id, title, message, audience, status, sent_count, sent_at)
+             VALUES ($1, $2, $3, $4, 'sent', $5, NOW())`,
+            [campaign.company_id, campaign.title, campaign.message, campaign.audience, users.length]
+        );
+        
+        // Обновляем last_sent_at
+        await query(
+            `UPDATE notification_campaigns SET last_sent_at = NOW() WHERE id = $1`,
+            [campaignId]
+        );
+        
+        console.log(`🤖 Кампания выполнена: ${campaign.name} (${users.length} пользователей)`);
+        
+        return {
+            success: true,
+            campaign: campaign,
+            users: users.map(u => ({ vk_id: u.vk_id, name: u.name })),
+            sentCount: users.length,
+            image_url: campaign.image_url
+        };
+    } catch (error) {
+        console.error('❌ Ошибка выполнения кампании:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     pool,
     query,
@@ -2522,5 +2989,18 @@ module.exports = {
 	purchaseGiveaway,
 	migrateGiveawaysTable,
     getRealAnalytics,
-    recalculateAllUsersClassification
+    recalculateAllUsersClassification,
+	addStreakColumns,
+	addBonusSettingsColumn,
+    // Notifications
+    sendNotification,
+    getNotificationHistory,
+    getNotificationCampaigns,
+    addNotificationCampaign,
+    updateNotificationCampaign,
+    deleteNotificationCampaign,
+    toggleNotificationCampaign,
+    getActiveCampaigns,
+    getUsersBySegment,
+    executeCampaign
 };

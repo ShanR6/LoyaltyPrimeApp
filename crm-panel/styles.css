@@ -2743,3 +2743,67 @@ select.form-input {
         transform: translateY(0);
     }
 }
+/* Настройки бонусной системы */
+.bonus-setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid #eee;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.bonus-setting-row:last-child {
+    border-bottom: none;
+}
+
+.setting-info {
+    flex: 2;
+    min-width: 200px;
+}
+
+.setting-info label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+    color: #333;
+}
+
+.setting-description {
+    font-size: 12px;
+    color: #888;
+}
+
+.setting-control {
+    flex: 1;
+    min-width: 180px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.setting-control input {
+    width: 120px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    text-align: center;
+}
+
+.setting-unit {
+    font-size: 12px;
+    color: #666;
+}
+
+.bonus-preview {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 20px;
+}
+
+.bonus-preview h4 {
+    margin-bottom: 12px;
+    color: #333;
+}

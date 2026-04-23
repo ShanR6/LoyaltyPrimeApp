@@ -62,7 +62,18 @@ const {
     getUsersByType,
     getClassificationStats,
     getRealAnalytics,
-    recalculateAllUsersClassification
+    recalculateAllUsersClassification,
+    // Notifications
+    sendNotification,
+    getNotificationHistory,
+    getNotificationCampaigns,
+    addNotificationCampaign,
+    updateNotificationCampaign,
+    deleteNotificationCampaign,
+    toggleNotificationCampaign,
+    getActiveCampaigns,
+    getUsersBySegment,
+    executeCampaign
 } = require('./database-pg');
 
 const app = express();
@@ -75,6 +86,60 @@ app.use((req, res, next) => {
 });
 
 initDatabase();
+
+// Функция для создания стандартных кампаний для новой компании
+async function createDefaultCampaignsForCompany(companyId) {
+    try {
+        const defaultCampaigns = [
+            {
+                name: '😴 Возвращение спящих',
+                title: 'Мы скучаем по вам!',
+                message: 'Вернитесь к нам и получите двойные бонусы на следующую покупку!',
+                audience: 'dormant',
+                is_active: true,
+                interval_days: 3,
+                is_default: true
+            },
+            {
+                name: '🎂 Поздравление с днем рождения',
+                title: 'С днем рождения! 🎉',
+                message: 'Поздравляем! В честь вашего праздника дарим вам специальные бонусы!',
+                audience: 'all',
+                is_active: true,
+                interval_days: 1,
+                is_default: true
+            },
+            {
+                name: '🔥 Достижение стрика',
+                title: 'Отличная серия! 🔥',
+                message: 'Вы с нами уже несколько дней подряд! Продолжайте получать бонусы!',
+                audience: 'active',
+                is_active: true,
+                interval_days: 2,
+                is_default: true
+            }
+        ];
+        
+        for (const campaign of defaultCampaigns) {
+            await addNotificationCampaign(
+                companyId,
+                campaign.name,
+                campaign.title,
+                campaign.message,
+                campaign.audience,
+                campaign.is_active,
+                campaign.interval_days,
+                null, // image_url
+                campaign.is_default
+            );
+        }
+        
+        console.log(`✅ Стандартные кампании созданы для компании ${companyId}`);
+    } catch (error) {
+        console.error('❌ Ошибка создания стандартных кампаний:', error);
+        // Не выбрасываем ошибку, чтобы не прерывать регистрацию
+    }
+}
 
 // ============ HEALTH CHECK ============
 app.get('/api/health', (req, res) => {
@@ -97,6 +162,10 @@ app.post('/api/companies/register', async (req, res) => {
         }
         
         const newCompany = await addCompany({ company, name, email, phone, password, brandColor, description });
+        
+        // Создаем стандартные кампании для новой компании
+        await createDefaultCampaignsForCompany(newCompany.id);
+        
         res.json({ success: true, company: newCompany });
     } catch (error) {
         console.error('❌ Ошибка:', error);
@@ -1413,14 +1482,45 @@ app.post('/api/pos/apply-bonus-v2', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Пользователь не найден' });
         }
         
-        const tier = await getUserTier(user.bonus_balance, userData.companyId);
-        const bonusRate = (tier.multiplier || 1) * 10;
-        const bonusEarned = Math.floor(amount / 1000) * bonusRate;
+        // Получаем настройки бонусной системы компании
+        const companyResult = await query(
+            'SELECT bonus_settings FROM companies WHERE id = $1',
+            [userData.companyId]
+        );
         
-        if (bonusEarned === 0 && amount >= 1000) {
+        let bonusSettings = {
+            rubToBonus: 10,
+            maxBonusPaymentPercent: 25,
+            minPurchaseForBonus: 1000,
+            bonusRatePerThousand: 10
+        };
+        
+        if (companyResult.rows.length > 0 && companyResult.rows[0].bonus_settings) {
+            let settings = companyResult.rows[0].bonus_settings;
+            if (typeof settings === 'string') {
+                settings = JSON.parse(settings);
+            }
+            bonusSettings = { ...bonusSettings, ...settings };
+        }
+        
+        const tier = await getUserTier(user.bonus_balance, userData.companyId);
+        const bonusRate = (tier.multiplier || 1) * (bonusSettings.bonusRatePerThousand || 10);
+        const minPurchase = bonusSettings.minPurchaseForBonus || 1000;
+        
+        // Проверяем минимальную сумму для начисления бонусов
+        if (amount < minPurchase) {
             return res.status(400).json({ 
                 success: false, 
-                message: `Сумма ${amount}₽ слишком мала. Минимальная сумма для начисления бонусов: 1000₽`
+                message: `Минимальная сумма для начисления бонусов: ${minPurchase}₽`
+            });
+        }
+        
+        const bonusEarned = Math.floor(amount / 1000) * bonusRate;
+        
+        if (bonusEarned === 0 && amount >= minPurchase) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Сумма ${amount}₽ слишком мала. Минимальная сумма для начисления бонусов: ${minPurchase}₽`
             });
         }
         
@@ -1431,7 +1531,7 @@ app.post('/api/pos/apply-bonus-v2', async (req, res) => {
             bonusEarned, 
             'earn', 
             `Покупка на ${amount}₽ в ${storeId || 'кассе'}`,
-            { amount, storeId, cashierId, source: 'pos', bonusRate, multiplier: tier.multiplier }
+            { amount, storeId, cashierId, source: 'pos', bonusRate, multiplier: tier.multiplier, bonusSettings }
         );
         
         // Отслеживаем прогресс покупок для заданий
@@ -1447,6 +1547,7 @@ app.post('/api/pos/apply-bonus-v2', async (req, res) => {
             newBalance: newBalance,
             bonusEarned: bonusEarned,
             amount: amount,
+            bonusSettings: bonusSettings,
             transaction: {
                 type: 'earn',
                 amount: amount,
@@ -1950,6 +2051,331 @@ app.post('/api/companies/:companyId/recalculate-classification', async (req, res
     }
 });
 
+// Получение стрика пользователя
+app.get('/api/users/:userId/streak/:companyId', async (req, res) => {
+  try {
+    const { userId, companyId } = req.params;
+    
+    const result = await query(
+      'SELECT streak, last_streak_update_date FROM user_progress WHERE user_id = $1 AND company_id = $2',
+      [userId, companyId]
+    );
+    
+    const streak = result.rows.length > 0 ? result.rows[0].streak : 0;
+    const lastStreakUpdateDate = result.rows.length > 0 ? result.rows[0].last_streak_update_date : null;
+    
+    res.json({ success: true, streak, lastStreakUpdateDate });
+  } catch (error) {
+    console.error('Ошибка получения стрика:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Обновление стрика пользователя
+app.post('/api/users/:userId/streak/update', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { companyId, streak, lastStreakUpdateDate } = req.body;
+    
+    await query(
+      `INSERT INTO user_progress (user_id, company_id, streak, last_streak_update_date, updated_at) 
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (user_id, company_id) 
+       DO UPDATE SET 
+         streak = EXCLUDED.streak,
+         last_streak_update_date = EXCLUDED.last_streak_update_date,
+         updated_at = NOW()`,
+      [userId, companyId, streak, lastStreakUpdateDate || null]
+    );
+    
+    res.json({ success: true, streak });
+  } catch (error) {
+    console.error('Ошибка обновления стрика:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+// ============ API ДЛЯ НАСТРОЕК БОНУСНОЙ СИСТЕМЫ ============
+
+// Получение настроек бонусной системы компании
+app.get('/api/companies/:companyId/bonus-settings', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        
+        const result = await query(
+            'SELECT bonus_settings FROM companies WHERE id = $1',
+            [companyId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Компания не найдена' });
+        }
+        
+        let settings = result.rows[0].bonus_settings;
+        if (typeof settings === 'string') {
+            settings = JSON.parse(settings);
+        }
+        
+        // Устанавливаем значения по умолчанию, если какие-то поля отсутствуют
+        const defaultSettings = {
+            rubToBonus: 10,
+            maxBonusPaymentPercent: 25,
+            minPurchaseForBonus: 1000,
+            bonusRatePerThousand: 10
+        };
+        
+        const mergedSettings = { ...defaultSettings, ...settings };
+        
+        res.json({ success: true, settings: mergedSettings });
+    } catch (error) {
+        console.error('Ошибка получения настроек бонусов:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Обновление настроек бонусной системы компании
+app.put('/api/companies/:companyId/bonus-settings', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const { rubToBonus, maxBonusPaymentPercent, minPurchaseForBonus, bonusRatePerThousand } = req.body;
+        
+        // Валидация
+        if (rubToBonus !== undefined && (rubToBonus < 1 || rubToBonus > 1000)) {
+            return res.status(400).json({ success: false, message: 'Курс рубль→бонус должен быть от 1 до 1000' });
+        }
+        
+        if (maxBonusPaymentPercent !== undefined && (maxBonusPaymentPercent < 0 || maxBonusPaymentPercent > 100)) {
+            return res.status(400).json({ success: false, message: 'Максимальный процент оплаты бонусами должен быть от 0 до 100' });
+        }
+        
+        if (minPurchaseForBonus !== undefined && minPurchaseForBonus < 0) {
+            return res.status(400).json({ success: false, message: 'Минимальная сумма для начисления бонусов должна быть >= 0' });
+        }
+        
+        if (bonusRatePerThousand !== undefined && (bonusRatePerThousand < 0 || bonusRatePerThousand > 1000)) {
+            return res.status(400).json({ success: false, message: 'Количество бонусов за 1000₽ должно быть от 0 до 1000' });
+        }
+        
+        // Получаем текущие настройки
+        const currentResult = await query(
+            'SELECT bonus_settings FROM companies WHERE id = $1',
+            [companyId]
+        );
+        
+        let currentSettings = {};
+        if (currentResult.rows.length > 0 && currentResult.rows[0].bonus_settings) {
+            currentSettings = currentResult.rows[0].bonus_settings;
+            if (typeof currentSettings === 'string') {
+                currentSettings = JSON.parse(currentSettings);
+            }
+        }
+        
+        // Обновляем настройки
+        const newSettings = {
+            ...currentSettings,
+            rubToBonus: rubToBonus !== undefined ? rubToBonus : (currentSettings.rubToBonus || 10),
+            maxBonusPaymentPercent: maxBonusPaymentPercent !== undefined ? maxBonusPaymentPercent : (currentSettings.maxBonusPaymentPercent || 25),
+            minPurchaseForBonus: minPurchaseForBonus !== undefined ? minPurchaseForBonus : (currentSettings.minPurchaseForBonus || 1000),
+            bonusRatePerThousand: bonusRatePerThousand !== undefined ? bonusRatePerThousand : (currentSettings.bonusRatePerThousand || 10)
+        };
+        
+        await query(
+            'UPDATE companies SET bonus_settings = $1::jsonb WHERE id = $2',
+            [JSON.stringify(newSettings), companyId]
+        );
+        
+        res.json({ success: true, settings: newSettings });
+    } catch (error) {
+        console.error('Ошибка обновления настроек бонусов:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============ API ДЛЯ УВЕДОМЛЕНИЙ ============
+
+// Отправка рассылки
+app.post('/api/companies/:companyId/notifications/send', async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const { audience, title, message } = req.body;
+        
+        console.log('📨 Запрос на отправку рассылки:', { companyId, audience, title, message });
+        
+        if (!title || !message) {
+            return res.status(400).json({ success: false, message: 'Заголовок и сообщение обязательны' });
+        }
+        
+        const result = await sendNotification(companyId, audience, title, message);
+        console.log('✅ Рассылка отправлена успешно:', result);
+        res.json({ success: true, ...result });
+    } catch (error) {
+        console.error('❌ Ошибка отправки уведомления:', error);
+        console.error('Stack:', error.stack);
+        res.status(500).json({ success: false, error: error.message, message: error.message });
+    }
+});
+
+// Получение истории рассылок
+app.get('/api/companies/:companyId/notifications/history', async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const limit = parseInt(req.query.limit) || 50;
+        
+        const history = await getNotificationHistory(companyId, limit);
+        res.json({ success: true, history });
+    } catch (error) {
+        console.error('❌ Ошибка получения истории:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение кампаний компании
+app.get('/api/companies/:companyId/campaigns', async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        
+        const campaigns = await getNotificationCampaigns(companyId);
+        res.json({ success: true, campaigns });
+    } catch (error) {
+        console.error('❌ Ошибка получения кампаний:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Добавление кампании
+app.post('/api/companies/:companyId/campaigns', async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const { name, title, message, audience, is_active, interval_days, image_url, is_default } = req.body;
+        
+        console.log('📝 Запрос на создание кампании:', { companyId, name, title, audience, interval_days });
+        
+        if (!name || !title || !message) {
+            return res.status(400).json({ success: false, message: 'Все поля обязательны' });
+        }
+        
+        const campaign = await addNotificationCampaign(
+            companyId, 
+            name, 
+            title, 
+            message, 
+            audience || 'all', 
+            is_active !== undefined ? is_active : true,
+            interval_days || 1,
+            image_url || null,
+            is_default || false
+        );
+        
+        console.log('✅ Кампания создана:', campaign);
+        res.json({ success: true, campaign });
+    } catch (error) {
+        console.error('❌ Ошибка добавления кампании:', error);
+        console.error('Stack:', error.stack);
+        res.status(500).json({ success: false, error: error.message, message: error.message });
+    }
+});
+
+// Обновление кампании
+app.put('/api/campaigns/:campaignId', async (req, res) => {
+    try {
+        const { campaignId } = req.params;
+        const { name, title, message, audience, is_active, interval_days, image_url } = req.body;
+        
+        const campaign = await updateNotificationCampaign(
+            campaignId,
+            name,
+            title,
+            message,
+            audience,
+            is_active,
+            interval_days,
+            image_url
+        );
+        
+        res.json({ success: true, campaign });
+    } catch (error) {
+        console.error('❌ Ошибка обновления кампании:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Удаление кампании
+app.delete('/api/campaigns/:campaignId', async (req, res) => {
+    try {
+        const { campaignId } = req.params;
+        
+        await deleteNotificationCampaign(campaignId);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Ошибка удаления кампании:', error);
+        res.status(500).json({ success: false, error: error.message, message: error.message });
+    }
+});
+
+// Переключение активности кампании
+app.put('/api/campaigns/:campaignId/toggle', async (req, res) => {
+    try {
+        const { campaignId } = req.params;
+        const { is_active } = req.body;
+        
+        const campaign = await toggleNotificationCampaign(campaignId, is_active);
+        res.json({ success: true, campaign });
+    } catch (error) {
+        console.error('❌ Ошибка переключения кампании:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Выполнение кампании (для ручного запуска)
+app.post('/api/campaigns/:campaignId/execute', async (req, res) => {
+    try {
+        const { campaignId } = req.params;
+        
+        console.log('🚀 Выполнение кампании:', campaignId);
+        
+        const result = await executeCampaign(campaignId);
+        
+        // Отправляем уведомления через бота немедленно
+        if (result.success && result.users && result.users.length > 0) {
+            const botUrl = 'http://localhost:5000/send_campaign_messages';
+            const campaignData = {
+                campaign_id: campaignId,
+                title: result.campaign.title,
+                message: result.campaign.message,
+                image_url: result.image_url,
+                users: result.users
+            };
+            
+            // Отправляем запрос боту в фоновом режиме (не ждем ответа)
+            fetch(botUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(campaignData)
+            }).then(response => {
+                console.log('✅ Бот получил задачу на отправку кампании');
+            }).catch(error => {
+                console.error('❌ Ошибка отправки задачи боту:', error);
+            });
+        }
+        
+        res.json({ success: true, ...result });
+    } catch (error) {
+        console.error('❌ Ошибка выполнения кампании:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение пользователей по сегменту (для предпросмотра)
+app.get('/api/companies/:companyId/users/segment/:segment', async (req, res) => {
+    try {
+        const { companyId, segment } = req.params;
+        
+        const users = await getUsersBySegment(companyId, segment);
+        res.json({ success: true, users, count: users.length });
+    } catch (error) {
+        console.error('❌ Ошибка получения пользователей:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 const PORT = 3001;
 app.listen(PORT, () => {

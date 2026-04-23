@@ -6,10 +6,12 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
   const [quests, setQuests] = useState([]);
   const [totalEarned, setTotalEarned] = useState(0);
   const [streak, setStreak] = useState(0);
+  const [lastStreakUpdateDate, setLastStreakUpdateDate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastLoginDate, setLastLoginDate] = useState(null);
   const hasCheckedToday = useRef(false);
   const hasAutoCompleted = useRef(false);
+  const streakCheckPerformed = useRef(false);
 
   // Функция для получения ключа localStorage для задания
   const getQuestStorageKey = (quest) => {
@@ -92,69 +94,285 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   };
 
-  // Функция для обновления прогресса задания
-// Функция для обновления прогресса задания
-const updateQuestProgress = (questType, increment = 1) => {
-  console.log(`📢 updateQuestProgress вызван: тип=${questType}, инкремент=${increment}`);
+  // ============ ФУНКЦИИ ДЛЯ СТРИКА ============
   
-  setQuests(prev => {
-    const updated = prev.map(quest => {
-      // Проверяем соответствие типа задания
-      let matches = false;
-      const questTypeFromTitle = mapQuestType(quest.title);
-      
-      if (questType === questTypeFromTitle && !quest.completed && !quest.claimed) {
-        matches = true;
-      }
-      
-      if (matches) {
-        const targetValue = quest.target;
-        const newProgress = Math.min(quest.progress + increment, targetValue);
-        const completed = newProgress >= targetValue;
-        
-        console.log(`    -> Новый прогресс: ${newProgress}/${targetValue}, completed=${completed}`);
-        
-        // НЕМЕДЛЕННО СОХРАНЯЕМ ПРОГРЕСС В БД
-        if (userId && selectedGroupId) {
-          saveQuestProgressToDB(quest.id, newProgress, completed);
-        }
-        
-        if (completed && !quest.completed) {
-          console.log(`    ✅ Задание "${quest.title}" выполнено!`);
-        }
-        
-        return { ...quest, progress: newProgress, completed };
-      }
-      return quest;
-    });
-    
-    return updated;
-  });
-};
+  // Получить список ежедневных заданий (durationDays = 1)
+  const getDailyQuests = (questsList) => {
+    return questsList.filter(q => q.durationDays === 1);
+  };
 
-// НОВАЯ ФУНКЦИЯ: сохранение прогресса в БД
-const saveQuestProgressToDB = async (questId, progress, completed) => {
-  if (!userId || !selectedGroupId) return;
-  
-  try {
-    const response = await fetch(`${API_URL}/api/users/${userId}/quests/progress/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        companyId: selectedGroupId,
-        questId: questId,
-        progress: progress,
-        completed: completed
-      })
+  // Проверить, выполнены ли все ежедневные задания сегодня
+  const areAllDailyQuestsCompletedToday = (questsList) => {
+    const dailyQuests = getDailyQuests(questsList);
+    if (dailyQuests.length === 0) return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Проверяем, что все ежедневные задания выполнены и получены сегодня
+    const allCompleted = dailyQuests.every(quest => {
+      if (!quest.completed || !quest.claimed) return false;
+      
+      const lastClaimDate = getLastClaimDate(quest);
+      if (!lastClaimDate) return false;
+      
+      const claimDate = new Date(lastClaimDate);
+      claimDate.setHours(0, 0, 0, 0);
+      
+      return claimDate.getTime() === today.getTime();
     });
     
-    if (response.ok) {
-      console.log(`💾 Прогресс задания ${questId} сохранен: ${progress}`);
+    return allCompleted;
+  };
+
+  // Проверить, были ли выполнены все ежедневные задания в указанную дату
+  const wereAllDailyQuestsCompletedOnDate = (questsList, date) => {
+    const dailyQuests = getDailyQuests(questsList);
+    if (dailyQuests.length === 0) return false;
+    
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    const allCompleted = dailyQuests.every(quest => {
+      const lastClaimDate = getLastClaimDate(quest);
+      if (!lastClaimDate) return false;
+      
+      const claimDate = new Date(lastClaimDate);
+      claimDate.setHours(0, 0, 0, 0);
+      
+      return claimDate.getTime() === targetDate.getTime();
+    });
+    
+    return allCompleted;
+  };
+
+  // Получить все даты, когда были выполнены все ежедневные задания
+  const getAllStreakDates = (questsList) => {
+    const dailyQuests = getDailyQuests(questsList);
+    if (dailyQuests.length === 0) return [];
+    
+    // Собираем все даты выполнения для каждого ежедневного задания
+    const allCompletionDates = {};
+    
+    dailyQuests.forEach(quest => {
+      const lastClaimDate = getLastClaimDate(quest);
+      if (lastClaimDate) {
+        const dateKey = lastClaimDate.toDateString();
+        if (!allCompletionDates[dateKey]) {
+          allCompletionDates[dateKey] = [];
+        }
+        allCompletionDates[dateKey].push(quest.id);
+      }
+    });
+    
+    // Фильтруем только те даты, где выполнены ВСЕ ежедневные задания
+    const streakDates = [];
+    const dailyQuestIds = dailyQuests.map(q => q.id);
+    
+    for (const [dateKey, completedQuestIds] of Object.entries(allCompletionDates)) {
+      // Проверяем, что все ежедневные задания выполнены в этот день
+      const allCompleted = dailyQuestIds.every(id => completedQuestIds.includes(id));
+      if (allCompleted) {
+        streakDates.push(new Date(dateKey));
+      }
     }
-  } catch (error) {
-    console.error('Ошибка сохранения прогресса:', error);
-  }
-};
+    
+    // Сортируем по убыванию
+    return streakDates.sort((a, b) => b - a);
+  };
+
+  // Рассчитать текущий стрик на основе выполненных ежедневных заданий
+  const calculateCurrentStreak = (questsList) => {
+    const streakDates = getAllStreakDates(questsList);
+    if (streakDates.length === 0) return 0;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    // Проверяем, выполнены ли задания сегодня
+    const completedToday = areAllDailyQuestsCompletedToday(questsList);
+    
+    // Проверяем, выполнены ли задания вчера
+    const completedYesterday = wereAllDailyQuestsCompletedOnDate(questsList, yesterday);
+    
+    if (!completedToday && !completedYesterday) {
+      return 0; // Стрик потерян
+    }
+    
+    // Считаем непрерывную цепочку
+    let currentStreak = 0;
+    let checkDate = completedToday ? today : yesterday;
+    
+    while (true) {
+      const completed = wereAllDailyQuestsCompletedOnDate(questsList, checkDate);
+      if (!completed) break;
+      
+      currentStreak++;
+      checkDate = new Date(checkDate);
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    
+    return currentStreak;
+  };
+
+  // Сохранение стрика в БД
+  const saveStreakToDB = async (streakValue, lastUpdateDate) => {
+    if (!userId || !selectedGroupId) return;
+    
+    try {
+      await fetch(`${API_URL}/api/users/${userId}/streak/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: selectedGroupId,
+          streak: streakValue,
+          lastStreakUpdateDate: lastUpdateDate || new Date().toISOString()
+        })
+      });
+      console.log(`💾 Стрик сохранен в БД: ${streakValue}`);
+    } catch (error) {
+      console.error('Ошибка сохранения стрика:', error);
+    }
+    
+    // Также сохраняем в localStorage
+    localStorage.setItem(`daily_streak_${userId}_${selectedGroupId}`, streakValue);
+    if (lastUpdateDate) {
+      localStorage.setItem(`daily_streak_last_update_${userId}_${selectedGroupId}`, lastUpdateDate);
+    }
+  };
+
+  // Загрузка стрика из БД
+  const loadStreakFromDB = async () => {
+    if (!userId || !selectedGroupId) return { streak: 0, lastUpdateDate: null };
+    
+    try {
+      const response = await fetch(`${API_URL}/api/users/${userId}/streak/${selectedGroupId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          return { 
+            streak: data.streak || 0, 
+            lastUpdateDate: data.lastStreakUpdateDate 
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки стрика:', error);
+    }
+    
+    // Fallback на localStorage
+    const savedStreak = localStorage.getItem(`daily_streak_${userId}_${selectedGroupId}`);
+    const savedDate = localStorage.getItem(`daily_streak_last_update_${userId}_${selectedGroupId}`);
+    return { 
+      streak: savedStreak ? parseInt(savedStreak) : 0, 
+      lastUpdateDate: savedDate || null 
+    };
+  };
+
+  // Обновление стрика после выполнения заданий
+  const updateStreakAfterCompletion = async (updatedQuests) => {
+    const newStreak = calculateCurrentStreak(updatedQuests);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const completedToday = areAllDailyQuestsCompletedToday(updatedQuests);
+    const lastUpdateDateObj = lastStreakUpdateDate ? new Date(lastStreakUpdateDate) : null;
+    const lastUpdateDay = lastUpdateDateObj ? new Date(lastUpdateDateObj) : null;
+    if (lastUpdateDay) lastUpdateDay.setHours(0, 0, 0, 0);
+    
+    // Если сегодня все задания выполнены и стрик увеличился
+    if (completedToday && newStreak > streak) {
+      const bonusText = newStreak === 1 ? 'начали' : `увеличили до ${newStreak}`;
+      showNotification(`🔥 Отлично! Вы ${bonusText} серию дней! +${newStreak * 5} бонусов за стрик!`);
+      
+      // Начисляем бонус за стрик (например, 5 бонусов за каждый день стрика)
+      if (onBalanceUpdate) {
+        await onBalanceUpdate(newStreak * 5, 'earn');
+      }
+    }
+    
+    // Проверяем потерю стрика
+    if (lastUpdateDay && lastUpdateDay < today && !completedToday) {
+      const wasCompletedYesterday = wereAllDailyQuestsCompletedOnDate(updatedQuests, 
+        new Date(today.setDate(today.getDate() - 1)));
+      
+      if (!wasCompletedYesterday && streak > 0) {
+        showNotification(`⚠️ Серия прервана! Вы пропустили выполнение ежедневных заданий. Начните новую серию!`);
+      }
+    }
+    
+    if (newStreak !== streak) {
+      setStreak(newStreak);
+      setLastStreakUpdateDate(completedToday ? new Date().toISOString() : lastStreakUpdateDate);
+      await saveStreakToDB(newStreak, completedToday ? new Date().toISOString() : lastStreakUpdateDate);
+    }
+  };
+
+  // Функция для обновления прогресса задания
+  const updateQuestProgress = (questType, increment = 1) => {
+    console.log(`📢 updateQuestProgress вызван: тип=${questType}, инкремент=${increment}`);
+    
+    setQuests(prev => {
+      const updated = prev.map(quest => {
+        // Проверяем соответствие типа задания
+        let matches = false;
+        const questTypeFromTitle = mapQuestType(quest.title);
+        
+        if (questType === questTypeFromTitle && !quest.completed && !quest.claimed) {
+          matches = true;
+        }
+        
+        if (matches) {
+          const targetValue = quest.target;
+          const newProgress = Math.min(quest.progress + increment, targetValue);
+          const completed = newProgress >= targetValue;
+          
+          console.log(`    -> Новый прогресс: ${newProgress}/${targetValue}, completed=${completed}`);
+          
+          // НЕМЕДЛЕННО СОХРАНЯЕМ ПРОГРЕСС В БД
+          if (userId && selectedGroupId) {
+            saveQuestProgressToDB(quest.id, newProgress, completed);
+          }
+          
+          if (completed && !quest.completed) {
+            console.log(`    ✅ Задание "${quest.title}" выполнено!`);
+          }
+          
+          return { ...quest, progress: newProgress, completed };
+        }
+        return quest;
+      });
+      
+      return updated;
+    });
+  };
+
+  // НОВАЯ ФУНКЦИЯ: сохранение прогресса в БД
+  const saveQuestProgressToDB = async (questId, progress, completed) => {
+    if (!userId || !selectedGroupId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/users/${userId}/quests/progress/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: selectedGroupId,
+          questId: questId,
+          progress: progress,
+          completed: completed
+        })
+      });
+      
+      if (response.ok) {
+        console.log(`💾 Прогресс задания ${questId} сохранен: ${progress}`);
+      }
+    } catch (error) {
+      console.error('Ошибка сохранения прогресса:', error);
+    }
+  };
 
   const updateQuestProgressRef = useRef(updateQuestProgress);
 
@@ -235,9 +453,14 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
         await onBalanceUpdate(quest.reward, 'earn');
       }
       
-      setQuests(prev => prev.map(q => 
-        q.id === quest.id ? { ...q, claimed: true } : q
-      ));
+      setQuests(prev => {
+        const updated = prev.map(q => 
+          q.id === quest.id ? { ...q, claimed: true } : q
+        );
+        // Обновляем стрик после изменения статуса задания
+        setTimeout(() => updateStreakAfterCompletion(updated), 0);
+        return updated;
+      });
       
       saveClaimedDate(quest);
       
@@ -312,73 +535,91 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
   };
 
   const loadQuestsFromDB = async () => {
-  if (!selectedGroupId) return [];
-  try {
-    const response = await fetch(`${API_URL}/api/quests/${selectedGroupId}`);
-    if (response.ok) {
-      const questsData = await response.json();
-      const userProgress = await loadUserProgress();
-      const userQuestProgress = userProgress?.quests || [];
-      
-      console.log('📥 Загруженный прогресс из БД:', userQuestProgress);
-      
-      const transformed = questsData
-        .filter(q => q.active)
-        .map(q => {
-          const userProgressForQuest = userQuestProgress.find(p => p.id === q.id);
-          
-          // Используем прогресс из БД, если он есть
-          let progress = userProgressForQuest?.progress || 0;
-          let isCompleted = userProgressForQuest?.completed || false;
-          let isClaimed = userProgressForQuest?.claimed || false;
-          
-          // Проверяем в localStorage для заданий с периодом
-          const key = getQuestStorageKey(q);
-          const saved = localStorage.getItem(key);
-          if (saved && !isClaimed) {
-            try {
-              const data = JSON.parse(saved);
-              const lastClaimDate = new Date(data.date);
-              const today = new Date();
-              const durationDays = q.duration_days || 1;
-              const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
-              
-              if (daysDiff < durationDays) {
-                isClaimed = true;
-                isCompleted = true;
-              }
-            } catch(e) {}
-          }
-          
-          return {
-            id: q.id,
-            title: q.title,
-            description: q.description || '',
-            reward: q.reward,
-            type: mapQuestType(q.title),
-            target: getTargetByType(q.title),
-            progress: progress,
-            completed: isCompleted,
-            claimed: isClaimed,
-            emoji: q.emoji || '✅',
-            durationDays: q.duration_days || 1,
-            status: q.active ? 'active' : 'inactive',
-            lastCompletedAt: null
-          };
+    if (!selectedGroupId) return [];
+    try {
+      const response = await fetch(`${API_URL}/api/quests/${selectedGroupId}`);
+      if (response.ok) {
+        const questsData = await response.json();
+        const userProgress = await loadUserProgress();
+        const userQuestProgress = userProgress?.quests || [];
+        
+        console.log('📥 Загруженный прогресс из БД:', userQuestProgress);
+        
+        const transformed = questsData
+          .filter(q => q.active)
+          .map(q => {
+            const userProgressForQuest = userQuestProgress.find(p => p.id === q.id);
+            
+            // Используем прогресс из БД, если он есть
+            let progress = userProgressForQuest?.progress || 0;
+            let isCompleted = userProgressForQuest?.completed || false;
+            let isClaimed = userProgressForQuest?.claimed || false;
+            
+            // Проверяем в localStorage для заданий с периодом
+            const key = getQuestStorageKey(q);
+            const saved = localStorage.getItem(key);
+            if (saved && !isClaimed) {
+              try {
+                const data = JSON.parse(saved);
+                const lastClaimDate = new Date(data.date);
+                const today = new Date();
+                const durationDays = q.duration_days || 1;
+                const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
+                
+                if (daysDiff < durationDays) {
+                  isClaimed = true;
+                  isCompleted = true;
+                }
+              } catch(e) {}
+            }
+            
+            return {
+              id: q.id,
+              title: q.title,
+              description: q.description || '',
+              reward: q.reward,
+              type: mapQuestType(q.title),
+              target: getTargetByType(q.title),
+              progress: progress,
+              completed: isCompleted,
+              claimed: isClaimed,
+              emoji: q.emoji || '✅',
+              durationDays: q.duration_days || 1,
+              status: q.active ? 'active' : 'inactive',
+              lastCompletedAt: null
+            };
+          });
+        
+        console.log('📋 ЗАГРУЖЕННЫЕ ЗАДАНИЯ С ПРОГРЕССОМ:');
+        transformed.forEach(q => {
+          console.log(`  - ${q.title}: прогресс ${q.progress}/${q.target}, completed=${q.completed}, durationDays=${q.durationDays}`);
         });
-      
-      console.log('📋 ЗАГРУЖЕННЫЕ ЗАДАНИЯ С ПРОГРЕССОМ:');
-      transformed.forEach(q => {
-        console.log(`  - ${q.title}: прогресс ${q.progress}/${q.target}, completed=${q.completed}`);
-      });
-      
-      return transformed;
+        
+        // Загружаем сохраненный стрик
+        const { streak: savedStreak, lastUpdateDate: savedLastUpdate } = await loadStreakFromDB();
+        
+        // Рассчитываем актуальный стрик на основе выполненных заданий
+        const calculatedStreak = calculateCurrentStreak(transformed);
+        
+        // Используем максимальный из сохраненного и рассчитанного
+        // (на случай, если в БД старые данные)
+        const finalStreak = Math.max(savedStreak, calculatedStreak);
+        setStreak(finalStreak);
+        setLastStreakUpdateDate(savedLastUpdate);
+        
+        // Если стрик потерян, обновляем БД
+        if (calculatedStreak === 0 && savedStreak > 0) {
+          await saveStreakToDB(0, null);
+          showNotification(`⚠️ Ваша серия из ${savedStreak} дней прервана! Выполняйте ежедневные задания каждый день, чтобы не терять серию.`);
+        }
+        
+        return transformed;
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки заданий из БД:', error);
     }
-  } catch (error) {
-    console.error('Ошибка загрузки заданий из БД:', error);
-  }
-  return [];
-};
+    return [];
+  };
 
   const saveProgressToDB = async (questsData, totalEarnedData, streakData, lastLoginData) => {
     if (!userId || !selectedGroupId) return;
@@ -472,6 +713,28 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
     }
   }, [loading, quests]);
 
+  // Проверка стрика при загрузке (проверяем, не пропустил ли пользователь день)
+  useEffect(() => {
+    if (!loading && quests.length > 0 && !streakCheckPerformed.current) {
+      streakCheckPerformed.current = true;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const completedToday = areAllDailyQuestsCompletedToday(quests);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const completedYesterday = wereAllDailyQuestsCompletedOnDate(quests, yesterday);
+      
+      // Если сегодня не выполнено и вчера не выполнено, но стрик > 0 - сбрасываем
+      if (!completedToday && !completedYesterday && streak > 0) {
+        setStreak(0);
+        saveStreakToDB(0, null);
+        showNotification(`⚠️ Серия прервана! Вы не выполнили ежедневные задания вовремя.`);
+      }
+    }
+  }, [loading, quests, streak]);
+
   // Сохранение прогресса
   useEffect(() => {
     if (!loading && quests.length > 0 && userId && selectedGroupId) {
@@ -500,7 +763,7 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
     
     console.log(`⚠️ Тип не определен для "${title}", возвращаю daily_login`);
     return 'daily_login';
-}
+  }
   
   function getTargetByType(title) {
     const lowerTitle = title.toLowerCase();
@@ -518,6 +781,23 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
   const getCompletedCount = () => quests.filter(q => q.completed).length;
   const totalAvailable = quests.reduce((sum, q) => sum + (q.completed && !q.claimed ? q.reward : 0), 0);
 
+  // Вспомогательная функция для склонения слова "день"
+  const getStreakWord = (days) => {
+    if (days === 1) return 'день';
+    if (days >= 2 && days <= 4) return 'дня';
+    return 'дней';
+  };
+
+  // Получаем количество выполненных ежедневных заданий сегодня
+  const getCompletedDailyCount = () => {
+    const dailyQuests = getDailyQuests(quests);
+    const completed = dailyQuests.filter(q => q.completed && q.claimed).length;
+    return { completed, total: dailyQuests.length };
+  };
+
+  const dailyStats = getCompletedDailyCount();
+  const allDailyCompleted = dailyStats.total > 0 && dailyStats.completed === dailyStats.total;
+
   if (loading) {
     return (
       <div style={styles.container}>
@@ -531,7 +811,22 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
       <div style={styles.header}>
         <div>
           <h3 style={styles.title}>📋 Задания</h3>
-          <div style={styles.streak}>🔥 Серия: {streak} дней</div>
+          <div style={styles.streak}>
+            🔥 Серия: {streak} {getStreakWord(streak)}
+            {streak > 0 && (
+              <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 5 }}>
+                (ежедневные задания)
+              </span>
+            )}
+          </div>
+          {dailyStats.total > 0 && (
+            <div style={{ fontSize: 11, color: allDailyCompleted ? '#2ecc71' : '#f39c12', marginTop: 4 }}>
+              📅 Ежедневные задания: {dailyStats.completed}/{dailyStats.total}
+              {allDailyCompleted && (
+                <span style={{ marginLeft: 8 }}>✅ Серия увеличится завтра!</span>
+              )}
+            </div>
+          )}
         </div>
         <div style={styles.rewardInfo}>🎁 Доступно: {totalAvailable} бонусов</div>
       </div>
@@ -572,12 +867,20 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
             statusColor = '#888';
           }
           
+          // Показываем индикатор ежедневного задания
+          const isDailyQuest = quest.durationDays === 1;
+          
           return (
             <div key={quest.id} style={{...styles.questItem, background: quest.completed ? 'rgba(46,204,113,0.15)' : 'rgba(0,0,0,0.3)', borderLeft: quest.completed ? '3px solid #2ecc71' : '3px solid transparent', opacity: quest.claimed && !timeRemaining ? 0.6 : 1}}>
               <div style={styles.questInfo}>
                 <div style={styles.questTitle}>
                   <span style={{ fontSize: 24, marginRight: 8 }}>{quest.emoji}</span>
                   {quest.title}
+                  {isDailyQuest && (
+                    <span style={{ fontSize: 10, marginLeft: 8, background: quest.completed && quest.claimed ? '#2ecc71' : '#f39c12', padding: '2px 6px', borderRadius: 12, color: '#333' }}>
+                      {quest.completed && quest.claimed ? '✅ Выполнено' : '📅 Ежедневное'}
+                    </span>
+                  )}
                 </div>
                 <div style={styles.questDescription}>{quest.description}</div>
                 {quest.durationDays > 1 && (quest.type === 'spin_wheel' || quest.type === 'scratch_card' || quest.type === 'play_dice') && (
@@ -611,18 +914,18 @@ const saveQuestProgressToDB = async (questId, progress, completed) => {
                 <div style={{ ...styles.questStatus, color: statusColor }}>{statusDisplay}</div>
               </div>
               <div style={styles.questReward}>
-  <div style={styles.rewardValue}>+{quest.reward}</div>
-  <div style={styles.rewardLabel}>бонусов</div>
-  {!quest.completed ? (
-    <div style={{ ...styles.statusPending, color: quest.status === 'active' ? '#aaa' : '#888' }}>
-      {quest.status === 'active' ? '⏳ Не выполнено' : '🔒 Неактивно'}
-    </div>
-  ) : quest.claimed ? (
-    <div style={styles.statusClaimed}>✅ Получено</div>
-  ) : (
-    <button onClick={() => claimReward(quest)} style={styles.claimButton}>Забрать</button>
-  )}
-</div>
+                <div style={styles.rewardValue}>+{quest.reward}</div>
+                <div style={styles.rewardLabel}>бонусов</div>
+                {!quest.completed ? (
+                  <div style={{ ...styles.statusPending, color: quest.status === 'active' ? '#aaa' : '#888' }}>
+                    {quest.status === 'active' ? '⏳ Не выполнено' : '🔒 Неактивно'}
+                  </div>
+                ) : quest.claimed ? (
+                  <div style={styles.statusClaimed}>✅ Получено</div>
+                ) : (
+                  <button onClick={() => claimReward(quest)} style={styles.claimButton}>Забрать</button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -661,7 +964,7 @@ const styles = {
   questsList: { display: 'flex', flexDirection: 'column', gap: 10 },
   questItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderRadius: 20, flexWrap: 'wrap', gap: 12 },
   questInfo: { flex: 1 },
-  questTitle: { fontWeight: 700, marginBottom: 4, color: 'white', display: 'flex', alignItems: 'center' },
+  questTitle: { fontWeight: 700, marginBottom: 4, color: 'white', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   questDescription: { fontSize: 12, opacity: 0.7, marginBottom: 4, color: 'white' },
   questStatus: { fontSize: 11, marginBottom: 8, fontWeight: 500 },
   questProgress: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 },
