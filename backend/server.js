@@ -210,7 +210,7 @@ app.get('/api/promotions/:companyId', async (req, res) => {
 
 app.post('/api/promotions', async (req, res) => {
     try {
-        const { companyId, name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = req.body;
+        const { companyId, name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, is_free, price } = req.body;
         
         if (!companyId || !name) {
             return res.status(400).json({ success: false, message: 'companyId и name обязательны' });
@@ -226,7 +226,8 @@ app.post('/api/promotions', async (req, res) => {
             reward_type,
             reward_value,
             products,
-            requires_purchase
+            is_free,
+            price
         });
         res.json({ success: true, promotion });
     } catch (error) {
@@ -237,7 +238,7 @@ app.post('/api/promotions', async (req, res) => {
 
 app.put('/api/promotions/:id', async (req, res) => {
     try {
-        const { name, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = req.body;
+        const { name, description, startDate, endDate, active, reward_type, reward_value, products, is_free, price } = req.body;
         
         const updates = [];
         const values = [];
@@ -275,9 +276,13 @@ app.put('/api/promotions/:id', async (req, res) => {
             updates.push(`products = $${paramIndex++}`);
             values.push(products);
         }
-        if (requires_purchase !== undefined) {
-            updates.push(`requires_purchase = $${paramIndex++}`);
-            values.push(requires_purchase);
+        if (is_free !== undefined) {
+            updates.push(`is_free = $${paramIndex++}`);
+            values.push(is_free);
+        }
+        if (price !== undefined) {
+            updates.push(`price = $${paramIndex++}`);
+            values.push(price);
         }
         
         if (updates.length === 0) {
@@ -745,6 +750,9 @@ app.post('/api/users/:userId/promotions/:promotionId/purchase', async (req, res)
         
         const promotion = promoResult.rows[0];
         
+        // Проверяем, бесплатная ли акция
+        const isFree = promotion.is_free === true;
+        
         // Проверяем цикл акции (дата начала + active статус)
         const cycleStart = promotion.start_date;
         if (!cycleStart) {
@@ -757,11 +765,11 @@ app.post('/api/users/:userId/promotions/:promotionId/purchase', async (req, res)
             return res.status(400).json({ success: false, message: 'Вы уже купили эту акцию. Повторная покупка возможна только после перезапуска акции.' });
         }
         
-        // Цена покупки = reward_value * 10 (например, скидка 20% = 200 баллов)
-        const bonusCost = promotion.reward_value * 10;
+        // Цена покупки: для бесплатных акций = 0, для платных = price из БД (или fallback на reward_value * 10)
+        const bonusCost = isFree ? 0 : (promotion.price || promotion.reward_value * 10);
         
-        // Покупаем акцию
-        const purchase = await purchasePromotion(userId, promotionId, companyId, cycleStart, bonusCost);
+        // Покупаем акцию (передаем isFree и promotion.name)
+        const purchase = await purchasePromotion(userId, promotionId, companyId, cycleStart, bonusCost, isFree, promotion.name);
         
         res.json({ 
             success: true, 

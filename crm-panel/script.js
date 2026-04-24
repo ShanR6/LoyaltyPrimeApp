@@ -401,8 +401,7 @@ async function loadCRMPanel() {
     await loadWheelSettings();
     await loadScratchSettings();
     await loadDiceSettings();  
-    await loadNotificationsHistory();
-    await loadCampaigns();
+    loadNotificationsHistory();
     await loadBonusSettings();  
 }
 
@@ -871,16 +870,8 @@ function saveLoyaltySettings() {
 }
 
 // ========== МОДУЛЬ 3: УВЕДОМЛЕНИЯ ==========
-let notificationCampaigns = [];
-let currentEditingCampaignId = null;
-
-// Отправка рассылки через backend API
-async function sendNotification() {
-    if (!currentBusiness) {
-        alert('❌ Компания не выбрана');
-        return;
-    }
-    
+function sendNotification() {
+    const type = document.getElementById('notifType')?.value || 'Push';
     const segment = document.getElementById('notifSegment')?.value || 'all';
     const title = document.getElementById('notifTitle')?.value || '';
     const message = document.getElementById('notifMessage')?.value || '';
@@ -890,414 +881,46 @@ async function sendNotification() {
         return;
     }
     
-    try {
-        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/notifications/send`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                audience: segment,
-                title: title,
-                message: message
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Очищаем поля
-            document.getElementById('notifTitle').value = '';
-            document.getElementById('notifMessage').value = '';
-            
-            // Обновляем историю
-            await loadNotificationsHistory();
-            
-            alert(`✅ Рассылка отправлена!\nАудитория: ${getSegmentName(segment)}\nПолучателей: ${data.sentCount || 0}`);
-        } else {
-            console.error('Ошибка отправки:', data);
-            alert('❌ Ошибка отправки: ' + (data.message || data.error || 'Неизвестная ошибка'));
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        alert('❌ Ошибка подключения к серверу');
-    }
+    const notification = { 
+        id: Date.now(), 
+        type, 
+        segment, 
+        title, 
+        message, 
+        date: new Date().toLocaleString(), 
+        status: 'sent' 
+    };
+    notificationsHistory.unshift(notification);
+    if (notificationsHistory.length > 20) notificationsHistory.pop();
+    loadNotificationsHistory();
+    
+    document.getElementById('notifTitle').value = '';
+    document.getElementById('notifMessage').value = '';
+    alert(`✅ Уведомление отправлено!\nАудитория: ${getSegmentName(segment)}`);
 }
 
 function getSegmentName(segment) {
-    const segments = { 
-        'all': 'Все', 
-        'new': '🌱 Новички', 
-        'active': '🔥 Активные', 
-        'regular': '⭐ Постоянные', 
-        'dormant': '😴 Спящие' 
-    };
+    const segments = { 'all':'Все', 'active':'Активные', 'sleeping':'Спящие', 'vip':'VIP', 'new':'Новые' };
     return segments[segment] || segment;
 }
 
-// Загрузка истории рассылок из БД
-async function loadNotificationsHistory() {
-    if (!currentBusiness) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/notifications/history?limit=50`);
-        const data = await response.json();
-        
-        if (data.success && data.history) {
-            renderNotificationsHistory(data.history);
-        } else {
-            renderNotificationsHistory([]);
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки истории:', error);
-        renderNotificationsHistory([]);
-    }
-}
-
-function renderNotificationsHistory(history) {
+function loadNotificationsHistory() {
     const container = document.getElementById('notificationsHistory');
     if (!container) return;
-    
-    if (history.length === 0) {
+    if (notificationsHistory.length === 0) {
         container.innerHTML = '<div class="empty-state">Нет отправленных уведомлений</div>';
         return;
     }
-    
-    container.innerHTML = history.map(n => {
-        const sentDate = n.sent_at ? new Date(n.sent_at).toLocaleString('ru-RU') : new Date(n.created_at).toLocaleString('ru-RU');
-        return `
-            <div class="history-item">
-                <div class="history-info">
-                    <div class="history-title">${escapeHtml(n.title)}</div>
-                    <div class="history-message">${escapeHtml(n.message)}</div>
-                    <div class="history-meta">
-                        Аудитория: ${getSegmentName(n.audience)} • 
-                        Отправлено: ${sentDate} • 
-                        Получателей: ${n.sent_count || 0}
-                    </div>
-                </div>
-                <div class="history-status ${n.status === 'sent' ? 'sent' : 'failed'}">
-                    ${n.status === 'sent' ? '✅ Отправлено' : '❌ Ошибка'}
-                </div>
+    container.innerHTML = notificationsHistory.map(n => `
+        <div class="history-item">
+            <div class="history-info">
+                <div class="history-title">${escapeHtml(n.title)}</div>
+                <div class="history-message">${escapeHtml(n.message)}</div>
+                <div class="history-meta">Аудитория: ${getSegmentName(n.segment)} • ${n.date}</div>
             </div>
-        `;
-    }).join('');
-}
-
-// Загрузка кампаний при загрузке CRM
-async function loadCampaigns() {
-    if (!currentBusiness) return;
-    
-    try {
-        console.log('📥 Загрузка кампаний для компании:', currentBusiness.id);
-        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`);
-        const data = await response.json();
-        
-        console.log('📦 Получены кампании:', data);
-        
-        if (data.success && data.campaigns) {
-            notificationCampaigns = data.campaigns;
-            console.log('✅ Загружено кампаний:', notificationCampaigns.length);
-            renderAutoCampaigns();
-        } else {
-            console.log('⚠️ Кампаний нет, создаем стандартные...');
-            // Если кампаний нет, создаем стандартные
-            await createDefaultCampaigns();
-        }
-    } catch (error) {
-        console.error('❌ Ошибка загрузки кампаний:', error);
-    }
-}
-
-// Создание стандартных автоматических кампаний
-async function createDefaultCampaigns() {
-    if (!currentBusiness) return;
-    
-    console.log('🏗️ Создание стандартных кампаний для компании:', currentBusiness.id);
-    
-    const defaultCampaigns = [
-        {
-            name: '😴 Возвращение спящих',
-            title: 'Мы скучаем по вам!',
-            message: 'Вернитесь к нам и получите двойные бонусы на следующую покупку!',
-            audience: 'dormant',
-            is_active: true,
-            interval_days: 3,
-            is_default: true
-        },
-        {
-            name: '🎂 Поздравление с днем рождения',
-            title: 'С днем рождения! 🎉',
-            message: 'Поздравляем! В честь вашего праздника дарим вам специальные бонусы!',
-            audience: 'all',
-            is_active: true,
-            interval_days: 1,
-            is_default: true
-        },
-        {
-            name: '🔥 Достижение стрика',
-            title: 'Отличная серия! 🔥',
-            message: 'Вы с нами уже несколько дней подряд! Продолжайте получать бонусы!',
-            audience: 'active',
-            is_active: true,
-            interval_days: 2,
-            is_default: true
-        }
-    ];
-    
-    for (const campaign of defaultCampaigns) {
-        try {
-            console.log('📝 Создание кампании:', campaign.name);
-            const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(campaign)
-            });
-            const result = await response.json();
-            console.log('✅ Кампания создана:', result);
-        } catch (error) {
-            console.error('❌ Ошибка создания кампании:', error);
-        }
-    }
-    
-    // Перезагружаем кампании
-    console.log('🔄 Перезагрузка кампаний...');
-    await loadCampaigns();
-}
-
-// Отрисовка автоматических кампаний
-function renderAutoCampaigns() {
-    const container = document.getElementById('autoCampaignsList');
-    if (!container) return;
-    
-    if (notificationCampaigns.length === 0) {
-        container.innerHTML = '<div class="empty-state">Нет автоматических кампаний</div>';
-        return;
-    }
-    
-    container.innerHTML = notificationCampaigns.map(campaign => {
-        return `
-            <div class="campaign-item" style="border-left: 4px solid ${campaign.is_active ? '#2ecc71' : '#95a5a6'}; padding: 12px; margin-bottom: 12px; background: white; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                    <div style="flex: 1;">
-                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${escapeHtml(campaign.name)} ${campaign.is_default ? '<span style="font-size: 11px; color: #999; margin-left: 8px;">(Стандартная)</span>' : ''}</div>
-                        <div style="font-size: 11px; color: #999; margin-bottom: 4px;">Аудитория: ${getSegmentName(campaign.audience)} • Интервал: ${campaign.interval_days || 1} дн.</div>
-                        ${campaign.image_url ? `<div style="margin-top: 8px;"><img src="${escapeHtml(campaign.image_url)}" style="max-width: 200px; max-height: 100px; border-radius: 6px; object-fit: cover;"></div>` : ''}
-                    </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                            <input type="checkbox" ${campaign.is_active ? 'checked' : ''} onchange="toggleCampaign(${campaign.id}, this.checked)">
-                            ${campaign.is_active ? 'Активна' : 'Отключена'}
-                        </label>
-                        <button class="btn-edit" onclick="editCampaign(${campaign.id})" style="background:#17a2b8; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size: 12px;">✏️ Редактировать</button>
-                    </div>
-                </div>
-                <div style="font-size: 12px; color: #555; background: #f8f9fa; padding: 8px; border-radius: 6px;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(campaign.title)}</div>
-                    <div>${escapeHtml(campaign.message)}</div>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-// Показать модальное окно добавления кампании
-function showAddCampaignModal() {
-    currentEditingCampaignId = null;
-    
-    document.getElementById('campaignModalTitle').textContent = '➕ Добавить автоматическую кампанию';
-    document.getElementById('campaignName').value = '';
-    document.getElementById('campaignAudience').value = 'all';
-    document.getElementById('campaignTitle').value = '';
-    document.getElementById('campaignMessage').value = '';
-    document.getElementById('campaignInterval').value = '1';
-    document.getElementById('campaignImage').value = '';
-    document.getElementById('campaignActive').checked = true;
-    document.getElementById('deleteCampaignBtn').style.display = 'none';
-    
-    openModal('campaign');
-}
-
-// Редактирование кампании
-function editCampaign(campaignId) {
-    const campaign = notificationCampaigns.find(c => c.id === campaignId);
-    if (!campaign) return;
-    
-    currentEditingCampaignId = campaignId;
-    
-    document.getElementById('campaignModalTitle').textContent = '✏️ Редактировать кампанию';
-    document.getElementById('campaignName').value = campaign.name;
-    document.getElementById('campaignAudience').value = campaign.audience;
-    document.getElementById('campaignTitle').value = campaign.title;
-    document.getElementById('campaignMessage').value = campaign.message;
-    document.getElementById('campaignInterval').value = campaign.interval_days || 1;
-    document.getElementById('campaignImage').value = campaign.image_url || '';
-    document.getElementById('campaignActive').checked = campaign.is_active;
-    // Скрываем кнопку удаления для всех кампаний (можно только отключить)
-    document.getElementById('deleteCampaignBtn').style.display = 'none';
-    
-    openModal('campaign');
-}
-
-// Сохранение кампании
-async function saveCampaign() {
-    if (!currentBusiness) {
-        alert('❌ Компания не выбрана');
-        return;
-    }
-    
-    const name = document.getElementById('campaignName').value.trim();
-    const audience = document.getElementById('campaignAudience').value;
-    const title = document.getElementById('campaignTitle').value.trim();
-    const message = document.getElementById('campaignMessage').value.trim();
-    const interval_days = parseInt(document.getElementById('campaignInterval').value) || 1;
-    const image_url = document.getElementById('campaignImage').value.trim() || null;
-    const is_active = document.getElementById('campaignActive').checked;
-    const errorElement = document.getElementById('campaignError');
-    
-    if (!name || !title || !message) {
-        errorElement.textContent = '❌ Заполните все обязательные поля';
-        errorElement.style.display = 'block';
-        setTimeout(() => errorElement.style.display = 'none', 3000);
-        return;
-    }
-    
-    // Validate interval (minimum 1 day)
-    if (interval_days < 1) {
-        errorElement.textContent = '❌ Интервал должен быть минимум 1 день';
-        errorElement.style.display = 'block';
-        setTimeout(() => errorElement.style.display = 'none', 3000);
-        return;
-    }
-    
-    try {
-        let response;
-        
-        if (currentEditingCampaignId) {
-            // Обновляем существующую кампанию
-            response = await fetch(`${API_URL}/api/campaigns/${currentEditingCampaignId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name,
-                    title,
-                    message,
-                    audience,
-                    is_active,
-                    interval_days,
-                    image_url
-                })
-            });
-        } else {
-            // Создаем новую кампанию
-            response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name,
-                    title,
-                    message,
-                    audience,
-                    is_active,
-                    interval_days,
-                    image_url
-                })
-            });
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            closeModal('campaign');
-            await loadCampaigns();
-            alert(`✅ Кампания ${currentEditingCampaignId ? 'обновлена' : 'создана'}!`);
-        } else {
-            console.error('Ошибка сохранения кампании:', data);
-            errorElement.textContent = data.message || data.error || 'Ошибка сохранения';
-            errorElement.style.display = 'block';
-            setTimeout(() => errorElement.style.display = 'none', 3000);
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        errorElement.textContent = '❌ Ошибка подключения к серверу';
-        errorElement.style.display = 'block';
-        setTimeout(() => errorElement.style.display = 'none', 3000);
-    }
-}
-
-// Удаление кампании
-async function deleteCampaign(campaignId) {
-    if (!confirm('Вы уверены, что хотите удалить эту кампанию?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_URL}/api/campaigns/${campaignId}`, {
-            method: 'DELETE'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            await loadCampaigns();
-            alert('✅ Кампания удалена');
-        } else {
-            alert('❌ Ошибка удаления');
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        alert('❌ Ошибка подключения к серверу');
-    }
-}
-
-// Переключение активности кампании
-async function toggleCampaign(campaignId, isActive) {
-    try {
-        // Сначала обновляем статус кампании
-        const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/toggle`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_active: isActive })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Если кампания активирована, выполняем её немедленно
-            if (isActive) {
-                console.log('🚀 Кампания активирована, выполняем:', campaignId);
-                
-                const execResponse = await fetch(`${API_URL}/api/campaigns/${campaignId}/execute`, {
-                    method: 'POST'
-                });
-                
-                const execData = await execResponse.json();
-                
-                if (execData.success) {
-                    console.log('✅ Кампания выполнена, отправлено:', execData.sentCount, 'сообщений');
-                    alert(`✅ Кампания активирована и отправлена!\nПолучателей: ${execData.sentCount || 0}`);
-                } else {
-                    console.error('❌ Ошибка выполнения кампании:', execData);
-                    alert('⚠️ Кампания активирована, но произошла ошибка при отправке: ' + (execData.message || execData.error || 'Неизвестная ошибка'));
-                }
-            } else {
-                alert('✅ Кампания отключена');
-            }
-            
-            await loadCampaigns();
-        } else {
-            alert('❌ Ошибка переключения кампании');
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        alert('❌ Ошибка подключения к серверу');
-    }
-}
-
-// Удаление текущей кампании из модального окна
-async function deleteCurrentCampaign() {
-    if (currentEditingCampaignId) {
-        await deleteCampaign(currentEditingCampaignId);
-        closeModal('campaign');
-    }
+            <div class="history-status sent">✅ Отправлено</div>
+        </div>
+    `).join('');
 }
 
 // ========== МОДУЛЬ 4: МАРКЕТИНГ ==========
@@ -1465,6 +1088,11 @@ function renderPromotionsList() {
         const rewardValue = promo.reward_value || 0;
         const rewardText = rewardType === 'bonus' ? `+${rewardValue} бонусов` : `${rewardValue}% скидка`;
         
+        // Показываем цену или бесплатную отметку
+        const priceDisplay = promo.is_free 
+            ? '<span style="background:#3498db; color:white; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700;">🎁 Бесплатная</span>'
+            : `<span style="background:#9b59b6; color:white; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700;">💎 ${promo.price || 100} баллов</span>`;
+        
         let displayDescription = promo.description || '';
         
         const formatDateTime = (date) => {
@@ -1478,6 +1106,7 @@ function renderPromotionsList() {
                     <div class="promotion-emojis">${promo.emoji || '🎯'}</div>
                     <div class="promotion-name">${escapeHtml(promo.name)}</div>
                     <div class="promotion-reward" style="background:#ffd966; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700;">${rewardText}</div>
+                    ${priceDisplay}
                     <div class="promotion-status ${status}">${statusText}</div>
                     <button class="btn-edit" onclick="editPromotion(${promo.id})" style="background:#17a2b8; color:white; border:none; padding:6px 12px; border-radius:8px; cursor:pointer;">✏️</button>
                 </div>
@@ -1515,16 +1144,36 @@ function showAddPromotionModal() {
     document.getElementById('promoDescription').value = '';
     document.getElementById('promoProducts').value = '';
     document.getElementById('promoDiscountValue').value = 10;
-    document.getElementById('promoRequiresPurchase').checked = false;
+    document.getElementById('promoIsFree').checked = false;
+    document.getElementById('promoPrice').value = 100;
     document.getElementById('promoStartDate').value = '';
     document.getElementById('promoEndDate').value = '';
     document.getElementById('promoActive').checked = true;
+    
+    // Показываем поле цены
+    document.getElementById('promoPriceField').style.display = 'block';
+    document.getElementById('promoFreeNote').style.display = 'none';
     
     document.getElementById('promotionModalTitle').textContent = '➕ Создать новую акцию';
     document.getElementById('savePromotionBtn').textContent = '💾 Создать акцию';
     document.getElementById('deletePromotionBtn').style.display = 'none';
     
     openModal('promotion');
+}
+
+// Переключение поля цены при изменении "Бесплатная акция"
+function togglePromoPriceField() {
+    const isFree = document.getElementById('promoIsFree').checked;
+    const priceField = document.getElementById('promoPriceField');
+    const freeNote = document.getElementById('promoFreeNote');
+    
+    if (isFree) {
+        priceField.style.display = 'none';
+        freeNote.style.display = 'block';
+    } else {
+        priceField.style.display = 'block';
+        freeNote.style.display = 'none';
+    }
 }
 
 async function editPromotion(promotionId) {
@@ -1550,8 +1199,18 @@ async function editPromotion(promotionId) {
     // Загружаем значение скидки
     document.getElementById('promoDiscountValue').value = promo.reward_value || 0;
     
-    // Требуется покупка
-    document.getElementById('promoRequiresPurchase').checked = promo.requires_purchase || false;
+    // Бесплатная акция и цена (обратная логика: is_free вместо requires_purchase)
+    document.getElementById('promoIsFree').checked = promo.is_free || false;
+    document.getElementById('promoPrice').value = promo.price || 100;
+    
+    // Показываем/скрываем поле цены
+    if (promo.is_free) {
+        document.getElementById('promoPriceField').style.display = 'none';
+        document.getElementById('promoFreeNote').style.display = 'block';
+    } else {
+        document.getElementById('promoPriceField').style.display = 'block';
+        document.getElementById('promoFreeNote').style.display = 'none';
+    }
     
     // Даты
     if (promo.start_date) {
@@ -1590,7 +1249,8 @@ async function savePromotion() {
     const name = document.getElementById('promoName').value.trim();
     const description = document.getElementById('promoDescription').value.trim();
     const products = document.getElementById('promoProducts').value.trim();
-    const requiresPurchase = document.getElementById('promoRequiresPurchase').checked;
+    const isFree = document.getElementById('promoIsFree').checked;
+    const price = isFree ? 0 : (parseInt(document.getElementById('promoPrice').value) || 100);
     const errorElement = document.getElementById('promotionError');
     
     // Validate name
@@ -1683,7 +1343,8 @@ async function savePromotion() {
             active,
             reward_type: 'discount',
             reward_value: rewardValue,
-            requires_purchase: requiresPurchase
+            is_free: isFree,
+            price: price
         };
         
         let response;

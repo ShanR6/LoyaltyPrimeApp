@@ -41,8 +41,11 @@ async function initDatabase() {
                 name VARCHAR(255) NOT NULL,
                 emoji VARCHAR(10) DEFAULT '🎯',
                 description TEXT,
+                products TEXT,
                 reward_type VARCHAR(20) DEFAULT 'discount',
                 reward_value INTEGER DEFAULT 0,
+                is_free BOOLEAN DEFAULT FALSE,
+                price INTEGER DEFAULT 100,
                 start_date TIMESTAMP,
                 end_date TIMESTAMP,
                 active BOOLEAN DEFAULT TRUE,
@@ -938,24 +941,24 @@ async function getPromotions(companyId) {
 }
 
 async function addPromotion(companyId, promotionData) {
-    const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = promotionData;
+    const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, is_free, price } = promotionData;
     const result = await query(
-        `INSERT INTO promotions (company_id, name, emoji, description, start_date, end_date, active, reward_type, reward_value, products, requires_purchase, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()) 
+        `INSERT INTO promotions (company_id, name, emoji, description, start_date, end_date, active, reward_type, reward_value, products, is_free, price, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) 
          RETURNING *`,
-        [companyId, name, emoji || '🎯', description || '', startDate || null, endDate || null, active !== undefined ? active : true, reward_type || 'discount', reward_value || 0, products || '', requires_purchase || false]
+        [companyId, name, emoji || '🎯', description || '', startDate || null, endDate || null, active !== undefined ? active : true, reward_type || 'discount', reward_value || 0, products || '', is_free || false, price || 100]
     );
     return result.rows[0];
 }
 
 async function updatePromotion(promotionId, promotionData) {
-    const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, requires_purchase } = promotionData;
+    const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, is_free, price } = promotionData;
     const result = await query(
         `UPDATE promotions 
-         SET name = $1, emoji = $2, description = $3, start_date = $4, end_date = $5, active = $6, reward_type = $7, reward_value = $8, products = $9, requires_purchase = $10, updated_at = NOW()
-         WHERE id = $11
+         SET name = $1, emoji = $2, description = $3, start_date = $4, end_date = $5, active = $6, reward_type = $7, reward_value = $8, products = $9, is_free = $10, price = $11, updated_at = NOW()
+         WHERE id = $12
          RETURNING *`,
-        [name, emoji, description, startDate || null, endDate || null, active, reward_type || 'discount', reward_value || 0, products || '', requires_purchase || false, promotionId]
+        [name, emoji, description, startDate || null, endDate || null, active, reward_type || 'discount', reward_value || 0, products || '', is_free || false, price || 100, promotionId]
     );
     return result.rows[0];
 }
@@ -1574,6 +1577,45 @@ async function addPromotionRewardColumns() {
             await query(`ALTER TABLE promotions ADD COLUMN reward_value INTEGER DEFAULT 0`);
             console.log('✅ Колонка reward_value добавлена');
         }
+        
+        // Добавляем колонку products если её нет
+        const checkProducts = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'products'
+        `);
+        
+        if (checkProducts.rows.length === 0) {
+            console.log('📝 Добавляем колонку products в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN products TEXT`);
+            console.log('✅ Колонка products добавлена');
+        }
+        
+        // Добавляем колонку is_free если её нет
+        const checkIsFree = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'is_free'
+        `);
+        
+        if (checkIsFree.rows.length === 0) {
+            console.log('📝 Добавляем колонку is_free в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN is_free BOOLEAN DEFAULT FALSE`);
+            console.log('✅ Колонка is_free добавлена');
+        }
+        
+        // Добавляем колонку price если её нет
+        const checkPrice = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'promotions' AND column_name = 'price'
+        `);
+        
+        if (checkPrice.rows.length === 0) {
+            console.log('📝 Добавляем колонку price в таблицу promotions...');
+            await query(`ALTER TABLE promotions ADD COLUMN price INTEGER DEFAULT 100`);
+            console.log('✅ Колонка price добавлена');
+        }
     } catch (error) {
         console.error('❌ Ошибка добавления колонок:', error);
     }
@@ -1764,22 +1806,25 @@ async function getUserBirthday(userId) {
 }
 
 // ============ Функции для купленных акций ============
-async function purchasePromotion(userId, promotionId, companyId, promotionCycleStart, bonusCost) {
+async function purchasePromotion(userId, promotionId, companyId, promotionCycleStart, bonusCost, isFree, promotionName) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         
-        // Проверяем баланс
-        const user = await client.query('SELECT bonus_balance FROM users WHERE id = $1', [userId]);
-        if (user.rows[0].bonus_balance < bonusCost) {
-            throw new Error('Недостаточно бонусов');
+        // Для бесплатных акций не списываем бонусы
+        if (!isFree && bonusCost > 0) {
+            // Проверяем баланс
+            const user = await client.query('SELECT bonus_balance FROM users WHERE id = $1', [userId]);
+            if (user.rows[0].bonus_balance < bonusCost) {
+                throw new Error('Недостаточно бонусов');
+            }
+            
+            // Списываем бонусы
+            await client.query(
+                'UPDATE users SET bonus_balance = bonus_balance - $1, total_spent = total_spent + $1 WHERE id = $2',
+                [bonusCost, userId]
+            );
         }
-        
-        // Списываем бонусы
-        await client.query(
-            'UPDATE users SET bonus_balance = bonus_balance - $1, total_spent = total_spent + $1 WHERE id = $2',
-            [bonusCost, userId]
-        );
         
         // Записываем покупку
         const result = await client.query(
@@ -1789,11 +1834,14 @@ async function purchasePromotion(userId, promotionId, companyId, promotionCycleS
             [userId, promotionId, companyId, promotionCycleStart]
         );
         
-        // Добавляем транзакцию
+        // Добавляем транзакцию (только одну!) с названием акции
+        const description = isFree ? `Бесплатная акция: ${promotionName}` : `Покупка акции: ${promotionName}`;
+        const transactionBonusSpent = isFree ? 0 : bonusCost;
+        
         await client.query(
             `INSERT INTO transactions (user_id, company_id, bonus_spent, description, source, created_at, metadata) 
              VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
-            [userId, companyId, bonusCost, `Покупка акции #${promotionId}`, 'app', JSON.stringify({ promotion_id: promotionId })]
+            [userId, companyId, transactionBonusSpent, description, 'app', JSON.stringify({ promotion_id: promotionId, promotion_name: promotionName, is_free: isFree })]
         );
         
         await client.query('COMMIT');

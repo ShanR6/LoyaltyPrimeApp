@@ -467,15 +467,22 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       return;
     }
     
-    const bonusCost = promotion.reward_value * 10;
+    const isFree = promotion.is_free === true;
+    const bonusCost = isFree ? 0 : (promotion.price || promotion.reward_value * 10);
     const cur = getCurrentGroupData();
     
-    if (cur.bonusBalance < bonusCost) {
+    // Для платных акций проверяем баланс
+    if (!isFree && cur.bonusBalance < bonusCost) {
       showModal('Недостаточно бонусов', `Для покупки акции "${promotion.name}" нужно ${bonusCost} баллов. У вас: ${cur.bonusBalance} баллов`);
       return;
     }
     
-    if (!confirm(`Купить акцию "${promotion.name}" за ${bonusCost} баллов?`)) {
+    // Подтверждение покупки (только для платных)
+    const confirmMessage = isFree 
+      ? `Получить бесплатную акцию "${promotion.name}"?`
+      : `Купить акцию "${promotion.name}" за ${bonusCost} баллов?`;
+    
+    if (!confirm(confirmMessage)) {
       return;
     }
     
@@ -489,8 +496,20 @@ const loadUserData = async (companyId, vkUserId, userName) => {
       const data = await response.json();
       
       if (response.ok && data.success) {
-        // Списываем бонусы
-        await updateBalanceAndStats(-bonusCost, 'spend');
+        // Для платных акций обновляем баланс локально (без создания транзакции, т.к. бэкенд уже создал)
+        if (!isFree && bonusCost > 0) {
+          const cur = getCurrentGroupData();
+          const newBalance = cur.bonusBalance - bonusCost;
+          const newData = { 
+            ...cur, 
+            bonusBalance: newBalance,
+            totalSpent: cur.totalSpent + bonusCost
+          };
+          // Не вызываем addHistory - история уже создана на бэкенде
+          saveCurrentGroupData(newData);
+        } else if (isFree) {
+          // Для бесплатных акций не нужно обновлять баланс, только историю купленных акций
+        }
         
         // Обновляем список купленных акций
         const purchasedResponse = await fetch(`${API_URL}/api/users/${userId}/promotions/purchased/${selectedGroup.id}`);
@@ -927,7 +946,8 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                   {isCurrentlyActive && (
                     <div style={{ marginTop:12 }}>
                       {(() => {
-                        const bonusCost = offer.reward_value * 10;
+                        const isFree = offer.is_free === true;
+                        const bonusCost = isFree ? 0 : (offer.price || offer.reward_value * 10);
                         const alreadyPurchased = purchasedPromotions.some(
                           p => p.promotion_id === offer.id && 
                                new Date(p.promotion_cycle_start).getTime() === new Date(offer.start_date).getTime()
@@ -945,7 +965,7 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                               fontWeight:600,
                               textAlign:'center'
                             }}>
-                              ✅ Куплена за {bonusCost} баллов
+                              {isFree ? '✅ Получена бесплатно' : `✅ Куплена за ${bonusCost} баллов`}
                             </div>
                           );
                         }
@@ -955,17 +975,17 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                             onClick={() => purchasePromotion(offer)}
                             style={{ 
                               padding:'8px 16px', 
-                              background: currentBalance >= bonusCost ? brandColor : '#666',
+                              background: isFree ? '#2ecc71' : (currentBalance >= bonusCost ? brandColor : '#666'),
                               border:'none',
                               borderRadius:12, 
                               fontSize:12, 
                               color:'white',
                               fontWeight:600,
-                              cursor: currentBalance >= bonusCost ? 'pointer' : 'not-allowed',
+                              cursor: isFree || currentBalance >= bonusCost ? 'pointer' : 'not-allowed',
                               width:'100%'
                             }}
                           >
-                            🛒 Купить за {bonusCost} баллов
+                            {isFree ? '🎁 Получить бесплатно' : `🛣р Купить за ${bonusCost} баллов`}
                           </button>
                         );
                       })()}
@@ -1106,7 +1126,7 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                     <div style={{ fontWeight:500, color:'white' }}>{item.desc}</div>
                     <div style={{ fontSize:11, opacity:0.5, marginTop:4, color:'white' }}>{item.date}</div>
                   </div>
-                  <div style={{ fontSize:16, fontWeight:700, color:item.type==='earn' ? '#b5e4a0' : '#ff9f8f' }}>{item.points} баллов</div>
+                  <div style={{ fontSize:16, fontWeight:700, color:item.points.startsWith('+') ? '#b5e4a0' : '#ff9f8f' }}>{item.points} баллов</div>
                 </div>
               </div>
             );
@@ -1135,6 +1155,15 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                   
                   let icon = '';
                   let itemColor = '';
+                  let displayDesc = t.description || '';
+                  
+                  // Проверяем, является ли транзакцией покупки акции (через metadata)
+                  let metadata = {};
+                  try {
+                    metadata = t.metadata ? (typeof t.metadata === 'string' ? JSON.parse(t.metadata) : t.metadata) : {};
+                  } catch (e) {}
+                  
+                  const isPromotionPurchase = metadata.promotion_id || displayDesc.includes('Покупка акции') || displayDesc.includes('Бесплатная акция');
                   
                   if (t.type === 'earn') {
                     if (t.description.includes('Покупка') || t.source === 'pos') {
@@ -1151,12 +1180,15 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                       itemColor = '#b5e4a0';
                     }
                   } else {
-                    if (t.description.includes('Списание')) {
-                      icon = '💸';
-                      itemColor = '#e74c3c';
-                    } else if (t.description.includes('Покупка акции') || t.description.includes('promotion')) {
+                    if (isPromotionPurchase) {
+                      // Покупка акции - показываем название из описания или метаданных
                       icon = '🎯';
                       itemColor = '#9b59b6';
+                      // Описание уже содержит название акции с бэкенда
+                      displayDesc = t.description;
+                    } else if (t.description.includes('Списание')) {
+                      icon = '💸';
+                      itemColor = '#e74c3c';
                     } else {
                       icon = '➖';
                       itemColor = '#ff9f8f';
@@ -1165,14 +1197,17 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                   
                   return {
                     id: t.id,
-                    desc: t.description || (t.type === 'earn' ? 'Начисление бонусов' : 'Списание бонусов'),
+                    desc: displayDesc,
                     points: t.bonusChange > 0 ? `+${t.bonusChange}` : `${t.bonusChange}`,
+                    displayPoints: t.bonusChange > 0 ? `+${t.bonusChange}` : `${t.bonusChange}`,
                     date: formattedDate,
                     type: t.type,
                     icon: icon,
                     color: itemColor,
                     amount: t.amount,
-                    source: t.source
+                    source: t.source,
+                    bonusChange: t.bonusChange,
+                    metadata: metadata
                   };
                 });
                 
@@ -1194,7 +1229,7 @@ const loadUserData = async (companyId, vkUserId, userName) => {
                           ${item.amount > 0 ? `<div style="font-size:11px; opacity:0.7; color:#ffd966; margin-top:2px;">💰 Сумма: ${item.amount}₽</div>` : ''}
                           ${item.source === 'pos' ? '<div style="font-size:10px; opacity:0.5; color:#aaa; margin-top:2px;">🏪 POS Терминал</div>' : ''}
                         </div>
-                        <div style="font-size:16px; font-weight:700; color:${item.type === 'earn' ? '#b5e4a0' : '#ff9f8f'}">${item.points} баллов</div>
+                        <div style="font-size:16px; font-weight:700; color:${item.bonusChange > 0 ? '#b5e4a0' : '#ff9f8f'}">${item.displayPoints} баллов</div>
                       </div>
                     </div>
                   `).join('');

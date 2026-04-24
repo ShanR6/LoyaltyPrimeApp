@@ -77,11 +77,18 @@
             <input type="number" id="promoDiscountValue" class="form-input" value="10" min="0" max="100">
         </div>
         
-        <div class="form-group">
-            <label>Требуется покупка за баллы</label>
-            <input type="checkbox" id="promoRequiresPurchase">
-            <small style="display: block; margin-top: 4px;">Если отмечено, пользователи должны купить акцию за баллы в mini-app</small>
+        <div class="form-group" style="display: flex; align-items: center; gap: 20px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="promoIsFree" onchange="togglePromoPriceField()">
+                <strong>🎁 Бесплатная акция</strong>
+            </label>
+            <div id="promoPriceField" style="flex: 1;">
+                <label style="display: block; margin-bottom: 4px;">Цена в баллах</label>
+                <input type="number" id="promoPrice" class="form-input" value="100" min="0" placeholder="100">
+                <small style="display: block; margin-top: 4px; color: #666;">Стоимость акции в баллах для пользователей</small>
+            </div>
         </div>
+        <small id="promoFreeNote" style="display: none; color: #3498db; font-weight: 600;">✅ Акция бесплатная - пользователи получат её без оплаты</small>
         <div class="form-group">
             <label>Дата начала <span style="color: #ff4d4d;">*</span></label>
             <input type="datetime-local" id="promoStartDate" class="form-input" required>
@@ -270,107 +277,24 @@
 
                 <!-- Модуль 3: Уведомления -->
                 <div id="notificationsModule" class="crm-module">
-                    <div class="module-header">
-                        <h2>📨 Уведомления и рассылки</h2>
-                        <button class="btn-save" onclick="showAddCampaignModal()">➕ Добавить кампанию</button>
-                    </div>
-                    
+                    <div class="module-header"><h2>📨 Умные уведомления</h2></div>
                     <div class="notifications-grid">
-                        <!-- Рассылка -->
                         <div class="notification-card">
                             <h3>📱 Создать рассылку</h3>
-                            <div class="form-group">
-                                <label>Аудитория</label>
-                                <select id="notifSegment">
-                                    <option value="all">👥 Все пользователи</option>
-                                    <option value="new">🌱 Новички (1 покупка, ≤14 дней)</option>
-                                    <option value="active">🔥 Активные (2+ покупок, ≤7 дней между)</option>
-                                    <option value="regular">⭐ Постоянные (2+ покупок, ≤3 дней между)</option>
-                                    <option value="dormant">😴 Спящие (≥20 дней с последней покупки)</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Заголовок</label>
-                                <input type="text" id="notifTitle" placeholder="Специальное предложение!">
-                            </div>
-                            <div class="form-group">
-                                <label>Сообщение</label>
-                                <textarea id="notifMessage" rows="3" placeholder="Текст уведомления..."></textarea>
-                            </div>
-                            <button class="btn-send" onclick="sendNotification()">📤 Отправить рассылку</button>
+                            <div class="form-group"><label>Тип</label><select id="notifType"><option>Push</option><option>SMS</option></select></div>
+                            <div class="form-group"><label>Аудитория</label><select id="notifSegment"><option value="all">Все</option><option value="sleeping">Спящие</option><option value="active">Активные</option><option value="vip">VIP</option></select></div>
+                            <div class="form-group"><label>Заголовок</label><input type="text" id="notifTitle" placeholder="Специальное предложение!"></div>
+                            <div class="form-group"><label>Сообщение</label><textarea id="notifMessage" rows="3" placeholder="Текст..."></textarea></div>
+                            <button class="btn-send" onclick="sendNotification()">📤 Отправить</button>
                         </div>
-                        
-                        <!-- Автоматические кампании -->
                         <div class="notification-card">
                             <h3>⚙️ Автоматические кампании</h3>
-                            <div id="autoCampaignsList">
-                                <!-- Кампании будут загружаться динамически -->
-                            </div>
+                            <div class="auto-campaign"><div class="campaign-item"><div><div class="campaign-title">🔄 Возвращение спящих</div><div class="campaign-desc">При неактивности 30 дней</div></div><div class="toggle-switch"><input type="checkbox" id="autoReactivate" checked><span>Активна</span></div></div>
+                            <div class="campaign-item"><div><div class="campaign-title">🎂 День рождения</div><div class="campaign-desc">Поздравление с бонусом</div></div><div class="toggle-switch"><input type="checkbox" id="autoBirthday" checked><span>Активна</span></div></div>
+                            <div class="campaign-item"><div><div class="campaign-title">📍 Geo-уведомления</div><div class="campaign-desc">При входе в радиусе 500м</div></div><div class="toggle-switch"><input type="checkbox" id="autoGeo" checked><span>Активна</span></div></div></div>
                         </div>
                     </div>
-                    
-                    <!-- История рассылок -->
-                    <div class="notification-history">
-                        <h3>📋 История рассылок</h3>
-                        <div id="notificationsHistory"></div>
-                    </div>
-                </div>
-
-                <!-- Модальное окно добавления/редактирования кампании -->
-                <div id="campaignModal" class="modal">
-                    <div class="modal-content">
-                        <span class="modal-close" onclick="closeModal('campaign')">&times;</span>
-                        <div class="modal-title" id="campaignModalTitle">➕ Добавить автоматическую кампанию</div>
-                        
-                        <div class="form-group">
-                            <label>Название кампании</label>
-                            <input type="text" id="campaignName" class="form-input" placeholder="Например: Возвращение спящих">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Аудитория</label>
-                            <select id="campaignAudience" class="form-input">
-                                <option value="all">👥 Все пользователи</option>
-                                <option value="new">🌱 Новички</option>
-                                <option value="active">🔥 Активные</option>
-                                <option value="regular">⭐ Постоянные</option>
-                                <option value="dormant">😴 Спящие</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Интервал рассылки (дней)</label>
-                            <input type="number" id="campaignInterval" class="form-input" value="1" min="1" placeholder="Минимум 1 день">
-                            <small style="display: block; margin-top: 4px; color: #666;">Как часто отправлять уведомление (минимум раз в 1 день)</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Заголовок уведомления</label>
-                            <input type="text" id="campaignTitle" class="form-input" placeholder="Заголовок...">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Сообщение</label>
-                            <textarea id="campaignMessage" class="form-input" rows="3" placeholder="Текст уведомления..."></textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>URL картинки (необязательно)</label>
-                            <input type="url" id="campaignImage" class="form-input" placeholder="https://example.com/image.jpg">
-                            <small style="display: block; margin-top: 4px; color: #666;">Ссылка на изображение, которое будет отправлено с уведомлением</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="campaignActive" checked>
-                                Активна
-                            </label>
-                        </div>
-                        
-                        <div class="error-message" id="campaignError"></div>
-                        <button class="modal-btn" onclick="saveCampaign()">💾 Сохранить</button>
-                        <button class="modal-btn" id="deleteCampaignBtn" onclick="deleteCurrentCampaign()" style="background:#e74c3c; margin-top:10px; display:none;">🗑️ Удалить кампанию</button>
-                    </div>
+                    <div class="notification-history"><h3>📋 История рассылок</h3><div id="notificationsHistory"></div></div>
                 </div>
 
                 <!-- Модуль 4: Маркетинг (Акции и Задания) -->

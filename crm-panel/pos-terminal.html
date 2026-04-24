@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Терминал - Касса лояльности</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -24,21 +22,6 @@
             padding: 24px;
             margin-bottom: 20px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
-        }
-        
-        .scanner-area {
-            background: linear-gradient(135deg, #f5f5f5, #e8e8e8);
-            border: 2px dashed #ccc;
-            padding: 25px;
-            text-align: center;
-            border-radius: 20px;
-            margin-bottom: 20px;
         }
         
         input, button, textarea, select {
@@ -47,13 +30,6 @@
             border-radius: 12px;
             border: 1px solid #ddd;
             font-size: 14px;
-            transition: all 0.2s;
-        }
-        
-        input:focus, textarea:focus, select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
         }
         
         button {
@@ -64,203 +40,112 @@
             font-weight: 600;
         }
         
-        button:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
-        }
+        button:hover:not(:disabled) { transform: translateY(-1px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        button:active {
-            transform: translateY(0);
-        }
+        .error { color: #e74c3c; background: #fdf0ed; padding: 12px; border-radius: 12px; margin-top: 12px; }
+        .success { color: #27ae60; background: #e8f5e9; padding: 12px; border-radius: 12px; margin-top: 12px; }
+        .info { background: #e3f2fd; padding: 12px; border-radius: 12px; margin-top: 12px; color: #1976d2; }
+        .warning { background: #fff3e0; padding: 12px; border-radius: 12px; margin-top: 12px; color: #e67e22; }
         
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+        .user-info { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); padding: 16px; border-radius: 16px; margin-top: 15px; }
+        .balance { font-size: 28px; font-weight: bold; color: #2c3e50; }
         
-        .error { 
-            color: #e74c3c; 
-            background: #fdf0ed;
-            padding: 12px;
-            border-radius: 12px;
-            margin-top: 12px;
-        }
+        .test-buttons { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .test-btn { background: #3498db; flex: 1; font-size: 12px; }
         
-        .success { 
-            color: #27ae60; 
-            background: #e8f5e9;
-            padding: 12px;
-            border-radius: 12px;
-            margin-top: 12px;
-        }
+        .transaction-item { padding: 12px; border-bottom: 1px solid #eee; }
         
-        .info {
-            background: #e3f2fd;
-            padding: 12px;
-            border-radius: 12px;
-            margin-top: 12px;
-            color: #1976d2;
-        }
-        
-        .warning {
-            background: #fff3e0;
-            padding: 12px;
-            border-radius: 12px;
-            margin-top: 12px;
-            color: #e67e22;
-        }
-        
-        .user-info { 
-            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
-            padding: 16px;
-            border-radius: 16px;
-            margin-top: 15px;
-        }
-        
-        .balance { 
-            font-size: 28px; 
-            font-weight: bold; 
-            color: #2c3e50;
-        }
-        
-        .total-amount {
-            font-size: 24px;
-            font-weight: bold;
-            color: #27ae60;
-        }
-        
-        .test-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .test-btn {
-            background: #3498db;
-            flex: 1;
-            font-size: 12px;
-        }
-        
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        
-        .badge-earn { background: #27ae60; color: white; }
-        .badge-spend { background: #e74c3c; color: white; }
-        
-        .transaction-item {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-            transition: background 0.2s;
-            cursor: pointer;
-        }
-        
-        .transaction-item:hover {
-            background: #f8f9fa;
-        }
-        
-        .loading {
-            text-align: center;
+        .final-order-card {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: white;
+            border-radius: 20px;
             padding: 20px;
-            color: #666;
-        }
-        
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .amount-display {
-            font-size: 32px;
-            font-weight: bold;
-            color: #667eea;
+            margin-top: 20px;
             text-align: center;
-            margin: 10px 0;
+        }
+        .final-order-card .amount { font-size: 36px; font-weight: bold; margin: 10px 0; }
+        .confirm-btn {
+            background: white;
+            color: #27ae60;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 15px;
+            margin-top: 15px;
+            width: 100%;
         }
         
-        .qr-preview {
-            background: #f0f0f0;
-            padding: 8px;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 11px;
-            word-break: break-all;
-            margin-top: 10px;
-        }
-        
-        .bonus-rate-info {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 12px;
-            margin-top: 10px;
-            font-size: 13px;
-        }
-        
-        .progress-bar {
-            height: 4px;
-            background: #e0e0e0;
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: #27ae60;
-            transition: width 0.3s ease;
-        }
-        
-        .order-summary {
-            background: linear-gradient(135deg, #f8f9fa, #fff);
+        .bonus-spend-section {
+            background: #fff3e0;
+            border: 2px solid #e74c3c;
             border-radius: 16px;
             padding: 16px;
-            margin: 15px 0;
-            border: 1px solid #e0e0e0;
+            margin-top: 20px;
         }
         
-        .summary-row {
+        .promotion-section {
+            background: #e8f5e9;
+            border: 2px solid #27ae60;
+            border-radius: 16px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+        
+        .radio-group {
             display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 12px;
         }
-        
-        .summary-row:last-child {
-            border-bottom: none;
+        .radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 20px;
         }
+        .radio-group input[type="radio"] { width: 18px; height: 18px; margin: 0; cursor: pointer; }
         
-        .summary-row.total {
-            font-weight: bold;
-            font-size: 18px;
-            padding-top: 12px;
-            margin-top: 8px;
-            border-top: 2px solid #ddd;
-            border-bottom: none;
-        }
-        
-        .discount-badge {
+        .disabled-section { opacity: 0.5; pointer-events: none; }
+        .promotion-badge {
             display: inline-block;
             background: #27ae60;
             color: white;
-            padding: 4px 8px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .selected-promotion {
+            background: #c8e6c9;
+            border: 2px solid #27ae60;
             border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
+            padding: 12px;
+            margin-top: 10px;
+        }
+        .promotion-option {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+        }
+        .promotion-option.selected {
+            border: 2px solid #27ae60;
+            background: #f0fff4;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateX(-50%) translateY(100px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        @keyframes slideDown {
+            from { transform: translateX(-50%) translateY(0); opacity: 1; }
+            to { transform: translateX(-50%) translateY(100px); opacity: 0; }
         }
     </style>
 </head>
@@ -270,24 +155,26 @@
     <div class="card">
         <h3>📷 Шаг 1: Сканирование QR-кода</h3>
         <div class="scanner-area">
-            <p style="color: #666;">Вставьте данные из QR-кода (скопируйте из приложения)</p>
-            <textarea id="qrData" rows="3" cols="50" placeholder='{"vkId":"123456","userName":"Тест","companyId":1,"timestamp":...}' style="width: 100%;"></textarea>
+            <p style="color: #666;">Вставьте данные из QR-кода</p>
+            <textarea id="qrData" rows="3" cols="50" placeholder='{"vkId":"1","companyId":1,"timestamp":...}' style="width: 100%;"></textarea>
             <br>
-            <button onclick="verifyQR()">🔍 Проверить QR-код</button>
-            <div class="test-buttons">
-                <button onclick="loadTestQR(1)" class="test-btn">🍕 Пиццерия</button>
-                <button onclick="loadTestQR(2)" class="test-btn">☕ Кофейня</button>
-            </div>
+            <button id="verifyQrBtn" onclick="verifyQR()">🔍 Проверить QR-код</button>
         </div>
         <div id="verifyResult"></div>
     </div>
 
+    <div class="card" id="userInfoCard" style="display:none;">
+        <h3>📊 Информация о пользователе</h3>
+        <div id="userInfo"></div>
+    </div>
+
     <div class="card" id="orderSection" style="display:none;">
         <h3>🛒 Шаг 2: Оформление заказа</h3>
+        
         <div>
             <label>💰 Сумма заказа (₽):</label>
-            <input type="number" id="orderAmount" placeholder="1000" style="width: calc(100% - 120px);">
-            <button onclick="calculateBonus()">Рассчитать</button>
+            <input type="number" id="orderAmount" placeholder="1000" style="width: calc(100% - 120px);" oninput="onOrderAmountChange()">
+            <button onclick="calculateBonus()">Рассчитать бонусы</button>
         </div>
         <div class="test-buttons">
             <button onclick="setTestAmount(500)" class="test-btn">500₽</button>
@@ -298,253 +185,362 @@
         </div>
         <div id="bonusResult"></div>
         <div id="bonusRateInfo" class="bonus-rate-info" style="display: none;"></div>
-    </div>
-
-    <div class="card" id="bonusSection" style="display:none;">
-        <h3>🎁 Шаг 3: Подтверждение покупки</h3>
-        <div id="purchaseSummary" style="margin-bottom: 15px;"></div>
-        <button onclick="applyBonus()" style="width: 100%; padding: 15px;" id="applyBtn">✅ Подтвердить покупку и начислить бонусы</button>
+        
+        <!-- ВЫБОР ТИПА СКИДКИ -->
+        <div class="radio-group">
+            <label style="background:#fff3e0; border:1px solid #e74c3c;">
+                <input type="radio" name="discountType" value="spend" checked onchange="onDiscountTypeChange()">
+                💸 Списать бонусы
+            </label>
+            <label style="background:#e8f5e9; border:1px solid #27ae60;">
+                <input type="radio" name="discountType" value="promotion" onchange="onDiscountTypeChange()">
+                🎁 Использовать акцию
+            </label>
+        </div>
+        
+        <!-- СЕКЦИЯ СПИСАНИЯ БОНУСОВ -->
+        <div class="bonus-spend-section" id="spendSection">
+            <h4>💸 Списание бонусов</h4>
+            <div id="spendInfo">
+                <div>📌 1 ₽ = <span id="rubToBonusValue">10</span> бонусов</div>
+                <div>📌 Макс. процент: <span id="maxPercentValue">25</span>%</div>
+                <div>📌 Доступно: <strong id="availableBonuses">0</strong> бонусов</div>
+            </div>
+            <div>
+                <label>Списать бонусов:</label>
+                <input type="number" id="spendAmount" placeholder="0" oninput="onSpendAmountChange()">
+                <button onclick="setMaxSpend()">Максимум</button>
+            </div>
+            <div id="maxSpendInfo" style="font-size: 12px; margin-top: 8px;"></div>
+        </div>
+        
+        <!-- СЕКЦИЯ КУПЛЕННЫХ АКЦИЙ -->
+        <div class="promotion-section" id="promotionSection" style="display: none;">
+            <h4>🎁 Доступные акции</h4>
+            <div id="availablePromotionsList"></div>
+            <div id="selectedPromotionInfo" class="selected-promotion" style="display: none;"></div>
+        </div>
+        
+        <!-- ИТОГОВАЯ СУММА -->
+        <div class="final-order-card" id="finalOrderCard" style="display: none;">
+            <div style="font-size: 14px; opacity: 0.9;">💳 ИТОГОВАЯ СУММА К ОПЛАТЕ</div>
+            <div class="amount" id="finalAmountToPay">0 ₽</div>
+            <div style="font-size: 12px;" id="discountInfo"></div>
+            <div style="font-size: 12px;" id="bonusToEarnInfo"></div>
+            <button class="confirm-btn" onclick="confirmOrder()" id="confirmBtn">
+                ✅ ПОДТВЕРДИТЬ ЗАКАЗ
+            </button>
+        </div>
+        
         <div id="applyResult"></div>
-    </div>
-
-    <div class="card" id="spendSection" style="display: none;">
-        <h3>💸 Списание бонусов</h3>
-        <div id="spendInfo" style="background: #e8f5e9; padding: 12px; border-radius: 12px; margin-bottom: 15px; display: none;">
-            <div id="exchangeRateInfo" style="font-size: 13px; margin-bottom: 8px;">📌 1 ₽ = <span id="rubToBonusValue">10</span> бонусов</div>
-            <div id="maxPaymentInfo" style="font-size: 13px;">📌 Максимальный процент оплаты бонусами: <span id="maxPercentValue">25</span>%</div>
-            <div id="minPurchaseInfo" style="font-size: 13px; margin-top: 8px;">📌 Минимальная сумма для начисления бонусов: <span id="minPurchaseValue">1000</span> ₽</div>
-        </div>
-        
-        <!-- Сводка по заказу -->
-        <div class="order-summary" id="orderSummary" style="display: none;">
-            <h4 style="margin: 0 0 10px 0;">🧾 Сводка заказа</h4>
-            <div class="summary-row">
-                <span>💰 Исходная сумма:</span>
-                <span id="originalAmountDisplay">0 ₽</span>
-            </div>
-            <div class="summary-row" id="bonusDiscountRow" style="display: none;">
-                <span>🎁 Скидка бонусами:</span>
-                <span id="bonusDiscountAmount">0 ₽</span>
-            </div>
-            <div class="summary-row total">
-                <span>💳 Итоговая сумма к оплате:</span>
-                <span id="finalAmountDisplay" class="total-amount">0 ₽</span>
-            </div>
-        </div>
-        
-        <div>
-            <label>Сумма заказа (₽):</label>
-            <input type="number" id="orderAmountForSpend" placeholder="1000" style="width: calc(100% - 120px);" oninput="updateOrderSummary()">
-            <button onclick="calculateMaxSpend()">Рассчитать максимум</button>
-        </div>
-        
-        <div id="maxSpendInfo" style="background: #f0f0f0; padding: 12px; border-radius: 12px; margin: 10px 0; display: none;">
-            <div>💰 Максимум можно списать: <strong id="maxSpendRub">0</strong> ₽ (<span id="maxSpendBonuses">0</span> бонусов)</div>
-            <div style="font-size: 12px; color: #666; margin-top: 5px;" id="spendLimitExplanation"></div>
-        </div>
-        
-        <div>
-            <label>Списать бонусов:</label>
-            <input type="number" id="spendAmount" placeholder="50" style="width: calc(100% - 120px);" oninput="updateOrderSummary()">
-            <button onclick="spendBonus()">Списать</button>
-        </div>
-        <div class="test-buttons">
-            <button onclick="setTestSpend(50)" class="test-btn">50</button>
-            <button onclick="setTestSpend(100)" class="test-btn">100</button>
-            <button onclick="setTestSpend(200)" class="test-btn">200</button>
-            <button onclick="setTestSpend(500)" class="test-btn">500</button>
-        </div>
-        <div id="spendResult"></div>
-    </div>
-
-    <div class="card" id="userInfoCard" style="display:none;">
-        <h3>📊 Информация о пользователе</h3>
-        <div id="userInfo"></div>
-    </div>
-    
-    <div class="card" id="purchasedPromosCard" style="display:none;">
-        <h3>🎁 Купленные акции</h3>
-        <div id="purchasedPromosInfo" style="margin-bottom: 15px;"></div>
-        <div style="background: #f8f9fa; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
-            <label style="font-weight: 600; display: block; margin-bottom: 8px;">Проверить использование акции:</label>
-            <select id="promotionSelect" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px;">
-                <option value="">-- Выберите акцию --</option>
-            </select>
-            <div id="promotionProducts" style="background: #fff; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: none;">
-                <strong style="font-size: 12px; color: #666;">📦 Продукты со скидкой:</strong>
-                <div id="productsList" style="margin-top: 5px; font-size: 13px;"></div>
-            </div>
-            <button onclick="checkPurchasedPromotion()" style="width: 100%; padding: 12px;">🔍 Проверить скидку</button>
-        </div>
-        <div id="purchasedPromosResult"></div>
     </div>
     
     <div class="card" id="historySection" style="display:none;">
-        <h3>📜 История операций пользователя</h3>
-        <div id="historyStats" style="background: #f8f9fa; padding: 10px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-around;">
-            <div><strong>Всего заработано:</strong> <span id="totalEarned">0</span></div>
-            <div><strong>Всего потрачено:</strong> <span id="totalSpent">0</span></div>
+        <h3>📜 История операций</h3>
+        <div id="historyStats" style="display: flex; justify-content: space-around; padding: 10px; background: #f8f9fa; border-radius: 12px; margin-bottom: 15px;">
+            <div><strong>Заработано:</strong> <span id="totalEarned">0</span></div>
+            <div><strong>Потрачено:</strong> <span id="totalSpent">0</span></div>
         </div>
-        <div id="historyList" style="max-height: 400px; overflow-y: auto;">
-            <div class="loading">Нет операций</div>
-        </div>
-        <button onclick="refreshHistory()" style="margin-top: 15px; width: 100%;">🔄 Обновить историю</button>
+        <div id="historyList" style="max-height: 400px; overflow-y: auto;"></div>
+        <button onclick="refreshHistory()" style="margin-top: 15px; width: 100%;">🔄 Обновить</button>
     </div>
 
     <script>
         const API_URL = 'http://localhost:3001';
         let currentUser = null;
         let currentQrData = null;
-        let currentBonusEarned = 0;
         let currentCompanyId = null;
         let currentMultiplier = 1;
-        let purchasedPromotions = [];
         let currentBonusSettings = {
             rubToBonus: 10,
             maxBonusPaymentPercent: 25,
             minPurchaseForBonus: 1000,
             bonusRatePerThousand: 10
         };
-        let currentSpendAmount = 0;
+        
         let currentOrderAmount = 0;
+        let currentSpendBonuses = 0;
+        let currentBonusToEarn = 0;
+        let currentDiscountType = 'spend';
+        let selectedPromotion = null;
+        let availablePromotions = [];
 
-        // ============ ОБНОВЛЕНИЕ СВОДКИ ЗАКАЗА ============
-        function updateOrderSummary() {
-            const orderAmount = parseInt(document.getElementById('orderAmountForSpend').value);
-            const spendBonuses = parseInt(document.getElementById('spendAmount').value);
+        // ============ ОБРАБОТЧИКИ ИЗМЕНЕНИЙ ============
+        function onDiscountTypeChange() {
+            const radios = document.getElementsByName('discountType');
+            for (let radio of radios) {
+                if (radio.checked) {
+                    currentDiscountType = radio.value;
+                    break;
+                }
+            }
             
+            if (currentDiscountType === 'spend') {
+                document.getElementById('spendSection').classList.remove('disabled-section');
+                document.getElementById('promotionSection').classList.add('disabled-section');
+                document.getElementById('spendAmount').disabled = false;
+                // Сбрасываем выбранную акцию
+                selectedPromotion = null;
+                document.getElementById('selectedPromotionInfo').style.display = 'none';
+            } else {
+                document.getElementById('spendSection').classList.add('disabled-section');
+                document.getElementById('promotionSection').classList.remove('disabled-section');
+                document.getElementById('spendAmount').disabled = true;
+                currentSpendBonuses = 0;
+                document.getElementById('spendAmount').value = '';
+            }
+            
+            updateFinalOrderSummary();
+        }
+        
+        function onOrderAmountChange() {
+            const amount = parseInt(document.getElementById('orderAmount').value) || 0;
+            currentOrderAmount = amount;
+            calculateBonus();
+            updateFinalOrderSummary();
+            
+            if (currentDiscountType === 'spend') {
+                updateMaxSpendInfo();
+            }
+        }
+        
+        function onSpendAmountChange() {
+            currentSpendBonuses = parseInt(document.getElementById('spendAmount').value) || 0;
+            updateFinalOrderSummary();
+        }
+        
+        function updateMaxSpendInfo() {
+            const orderAmount = currentOrderAmount;
             if (!orderAmount || orderAmount <= 0) {
-                document.getElementById('orderSummary').style.display = 'none';
+                document.getElementById('maxSpendInfo').innerHTML = '';
                 return;
             }
             
-            currentOrderAmount = orderAmount;
-            currentSpendAmount = spendBonuses || 0;
+            const maxRub = Math.floor(orderAmount * currentBonusSettings.maxBonusPaymentPercent / 100);
+            const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
+            const userBonuses = currentUser?.balance || 0;
+            const finalMaxBonuses = Math.min(maxBonuses, userBonuses);
+            const finalMaxRub = Math.floor(finalMaxBonuses / currentBonusSettings.rubToBonus);
             
-            // Рассчитываем скидку в рублях
-            const discountRub = Math.floor(currentSpendAmount / currentBonusSettings.rubToBonus);
+            document.getElementById('maxSpendInfo').innerHTML = `
+                💰 Максимум: ${finalMaxRub} ₽ (${finalMaxBonuses} бонусов)
+                <br><span style="font-size: 11px;">⚡ Лимит: ${currentBonusSettings.maxBonusPaymentPercent}% от суммы</span>
+            `;
+            
+            const spendInput = document.getElementById('spendAmount');
+            spendInput.max = finalMaxBonuses;
+            spendInput.placeholder = `до ${finalMaxBonuses}`;
+        }
+        
+        function setMaxSpend() {
+            const orderAmount = currentOrderAmount;
+            if (!orderAmount || orderAmount <= 0) {
+                alert('Сначала введите сумму заказа');
+                return;
+            }
+            
+            const maxRub = Math.floor(orderAmount * currentBonusSettings.maxBonusPaymentPercent / 100);
+            const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
+            const userBonuses = currentUser?.balance || 0;
+            const finalMaxBonuses = Math.min(maxBonuses, userBonuses);
+            
+            document.getElementById('spendAmount').value = finalMaxBonuses;
+            currentSpendBonuses = finalMaxBonuses;
+            updateFinalOrderSummary();
+        }
+        
+        // ============ ОБНОВЛЕНИЕ ИТОГОВОЙ СУММЫ ============
+        function updateFinalOrderSummary() {
+            const orderAmount = currentOrderAmount;
+            
+            if (!orderAmount || orderAmount <= 0) {
+                document.getElementById('finalOrderCard').style.display = 'none';
+                return;
+            }
+            
+            let discountRub = 0;
+            let discountText = '';
+            
+            if (currentDiscountType === 'spend') {
+                discountRub = Math.floor(currentSpendBonuses / currentBonusSettings.rubToBonus);
+                if (currentSpendBonuses > 0) {
+                    discountText = `🎁 Скидка бонусами: -${discountRub} ₽ (${currentSpendBonuses} бонусов)`;
+                } else {
+                    discountText = `💸 Без списания бонусов`;
+                }
+            } else if (currentDiscountType === 'promotion' && selectedPromotion) {
+                discountRub = Math.floor(orderAmount * selectedPromotion.discount / 100);
+                discountText = `🎁 Скидка по акции "${selectedPromotion.name}": -${discountRub} ₽ (${selectedPromotion.discount}%)`;
+            }
+            
             const finalAmount = Math.max(0, orderAmount - discountRub);
             
-            // Обновляем отображение
-            document.getElementById('originalAmountDisplay').innerHTML = `${orderAmount.toLocaleString()} ₽`;
+            // Рассчитываем бонусы к начислению
+            const minPurchase = currentBonusSettings.minPurchaseForBonus;
+            let bonusToEarn = 0;
             
-            if (currentSpendAmount > 0) {
-                document.getElementById('bonusDiscountRow').style.display = 'flex';
-                document.getElementById('bonusDiscountAmount').innerHTML = `- ${discountRub.toLocaleString()} ₽ <span class="discount-badge">(${currentSpendAmount} бонусов)</span>`;
+            if (orderAmount >= minPurchase) {
+                const bonusRate = currentMultiplier * (currentBonusSettings.bonusRatePerThousand || 10);
+                bonusToEarn = Math.floor(orderAmount / 1000) * bonusRate;
+            }
+            currentBonusToEarn = bonusToEarn;
+            
+            document.getElementById('finalAmountToPay').innerHTML = `${finalAmount.toLocaleString()} ₽`;
+            document.getElementById('discountInfo').innerHTML = discountText;
+            
+            if (bonusToEarn > 0) {
+                document.getElementById('bonusToEarnInfo').innerHTML = `⭐ Будет начислено: +${bonusToEarn} бонусов (x${currentMultiplier})`;
+                document.getElementById('bonusToEarnInfo').style.color = '#ffd966';
             } else {
-                document.getElementById('bonusDiscountRow').style.display = 'none';
+                document.getElementById('bonusToEarnInfo').innerHTML = `⚠️ Минимальная сумма для начисления: ${minPurchase}₽`;
+                document.getElementById('bonusToEarnInfo').style.color = '#ffaa66';
             }
             
-            document.getElementById('finalAmountDisplay').innerHTML = `${finalAmount.toLocaleString()} ₽`;
-            document.getElementById('orderSummary').style.display = 'block';
+            document.getElementById('finalOrderCard').style.display = 'block';
             
-            // Проверяем, не превышает ли списание лимит
-            const maxRub = Math.floor(orderAmount * currentBonusSettings.maxBonusPaymentPercent / 100);
-            const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
-            
-            const spendInput = document.getElementById('spendAmount');
-            if (currentSpendAmount > maxBonuses) {
-                spendInput.style.borderColor = '#e74c3c';
-                spendInput.style.backgroundColor = '#fdf0ed';
-                document.getElementById('spendLimitExplanation').innerHTML = 
-                    `<span style="color: #e74c3c;">⚠️ Превышен лимит! Максимум: ${maxBonuses} бонусов (${currentBonusSettings.maxBonusPaymentPercent}% от суммы)</span>`;
+            // Проверка валидности
+            const confirmBtn = document.getElementById('confirmBtn');
+            if (finalAmount < 0) {
+                confirmBtn.disabled = true;
+                confirmBtn.style.opacity = '0.5';
             } else {
-                spendInput.style.borderColor = '#27ae60';
-                spendInput.style.backgroundColor = '#e8f5e9';
-                document.getElementById('spendLimitExplanation').innerHTML = 
-                    `Вы можете оплатить бонусами не более ${currentBonusSettings.maxBonusPaymentPercent}% от суммы заказа.<br>
-                     Максимум: ${maxRub}₽ = ${maxBonuses} бонусов`;
+                confirmBtn.disabled = false;
+                confirmBtn.style.opacity = '1';
             }
         }
+        
 
-        // ============ ЗАГРУЗКА НАСТРОЕК БОНУСОВ ИЗ CRM ============
-        async function loadBonusSettings() {
-            if (!currentCompanyId) return;
-            
-            try {
-                const response = await fetch(`${API_URL}/api/companies/${currentCompanyId}/bonus-settings`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentBonusSettings = result.settings;
-                    
-                    // Обновляем отображение информации о списании
-                    const spendInfo = document.getElementById('spendInfo');
-                    if (spendInfo) {
-                        spendInfo.style.display = 'block';
-                        document.getElementById('rubToBonusValue').textContent = currentBonusSettings.rubToBonus;
-                        document.getElementById('maxPercentValue').textContent = currentBonusSettings.maxBonusPaymentPercent;
-                        document.getElementById('minPurchaseValue').textContent = currentBonusSettings.minPurchaseForBonus;
-                    }
-                    
-                    // Обновляем информацию о начислении
-                    const bonusRateInfo = document.getElementById('bonusRateInfo');
-                    if (bonusRateInfo) {
-                        bonusRateInfo.style.display = 'block';
-                        bonusRateInfo.innerHTML = `
-                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                                <span>⭐ Базовое начисление: <strong>${currentBonusSettings.bonusRatePerThousand}</strong> бонусов за 1000₽</span>
-                                <span>📈 Минимальная сумма: <strong>${currentBonusSettings.minPurchaseForBonus}</strong> ₽</span>
-                                <span>💱 Курс: 1 ₽ = <strong>${currentBonusSettings.rubToBonus}</strong> бонусов</span>
-                            </div>
-                            <div class="progress-bar" style="margin-top: 10px;">
-                                <div class="progress-fill" style="width: 0%;"></div>
-                            </div>
-                        `;
-                    }
-                    
-                    // Если есть сумма заказа, обновляем сводку
-                    const orderAmount = document.getElementById('orderAmountForSpend').value;
-                    if (orderAmount && parseInt(orderAmount) > 0) {
-                        updateOrderSummary();
-                        calculateMaxSpend();
-                    }
-                    
-                    // Если есть сумма заказа для начисления, пересчитываем бонусы
-                    const earnAmount = document.getElementById('orderAmount').value;
-                    if (earnAmount && parseInt(earnAmount) > 0) {
-                        calculateBonus();
-                    }
-                    
-                    console.log('✅ Настройки бонусов загружены:', currentBonusSettings);
-                }
-            } catch (error) {
-                console.error('Ошибка загрузки настроек бонусов:', error);
-            }
+        // ============ ЗАГРУЗКА ДОСТУПНЫХ АКЦИЙ (ПЛАТНЫХ И БЕСПЛАТНЫХ) ============
+async function loadAvailablePromotions() {
+    if (!currentUser || !currentCompanyId) return;
+    
+    try {
+        // Загружаем АКТИВНЫЕ акции компании
+        const promotionsResponse = await fetch(`${API_URL}/api/promotions/${currentCompanyId}`);
+        const allPromotions = await promotionsResponse.json();
+        
+        const now = new Date();
+        
+        // Фильтруем активные акции (и бесплатные, и платные)
+        const activePromotions = allPromotions.filter(promo => {
+            if (!promo.active) return false;
+            if (!promo.start_date || !promo.end_date) return false;
+            const startDate = new Date(promo.start_date);
+            const endDate = new Date(promo.end_date);
+            return now >= startDate && now <= endDate;
+        });
+        
+        // Загружаем КУПЛЕННЫЕ акции пользователя (платные)
+        const purchasedResponse = await fetch(`${API_URL}/api/users/${currentUser.id}/promotions/purchased/${currentCompanyId}`);
+        const purchasedResult = await purchasedResponse.json();
+        
+        // Формируем список доступных акций: бесплатные + купленные платные
+        availablePromotions = [];
+        
+        // Бесплатные акции (is_free = true)
+        const freePromos = activePromotions.filter(p => p.is_free === true);
+        availablePromotions.push(...freePromos.map(p => ({
+            id: p.id,
+            name: p.name,
+            discount: p.reward_value,
+            products: p.products || '',
+            type: 'free',
+            is_purchased: false,
+            is_free: true,
+            price: p.price || 0
+        })));
+        
+        // Купленные платные акции (неиспользованные)
+        if (purchasedResult.success && purchasedResult.purchased) {
+            const purchasedPromos = purchasedResult.purchased.filter(p => !p.used);
+            availablePromotions.push(...purchasedPromos.map(p => ({
+                id: p.promotion_id,
+                name: p.name,
+                discount: p.reward_value,
+                products: p.products || '',
+                type: 'paid',
+                is_purchased: true,
+                is_free: false,
+                promotion_cycle_start: p.promotion_cycle_start
+            })));
         }
-
-        // ============ РАСЧЁТ МАКСИМУМА ДЛЯ СПИСАНИЯ ============
-        function calculateMaxSpend() {
-            if (!currentBonusSettings) {
-                alert('Загрузка настроек... Подождите');
-                return;
+        
+        const container = document.getElementById('availablePromotionsList');
+        
+        if (availablePromotions.length === 0) {
+            container.innerHTML = '<div class="warning">⚠️ Нет доступных акций</div>';
+            const promoRadio = document.querySelector('input[value="promotion"]');
+            if (promoRadio) {
+                promoRadio.disabled = true;
+                promoRadio.parentElement.style.opacity = '0.5';
+            }
+        } else {
+            const promoRadio = document.querySelector('input[value="promotion"]');
+            if (promoRadio) {
+                promoRadio.disabled = false;
+                promoRadio.parentElement.style.opacity = '1';
             }
             
-            const orderAmount = parseInt(document.getElementById('orderAmountForSpend').value);
-            if (!orderAmount || orderAmount <= 0) {
-                document.getElementById('maxSpendInfo').style.display = 'none';
-                return;
-            }
-            
-            const maxRub = Math.floor(orderAmount * currentBonusSettings.maxBonusPaymentPercent / 100);
-            const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
-            
-            document.getElementById('maxSpendRub').textContent = maxRub;
-            document.getElementById('maxSpendBonuses').textContent = maxBonuses;
-            document.getElementById('spendLimitExplanation').innerHTML = 
-                `Вы можете оплатить бонусами не более ${currentBonusSettings.maxBonusPaymentPercent}% от суммы заказа.<br>
-                 Максимум: ${maxRub}₽ = ${maxBonuses} бонусов`;
-            document.getElementById('maxSpendInfo').style.display = 'block';
-            
-            // Обновляем placeholder для списания
-            const spendInput = document.getElementById('spendAmount');
-            spendInput.placeholder = `до ${maxBonuses}`;
-            spendInput.max = maxBonuses;
-            
-            // Обновляем сводку
-            updateOrderSummary();
+            container.innerHTML = availablePromotions.map(promo => `
+                <div class="promotion-option ${selectedPromotion?.id === promo.id && selectedPromotion?.type === promo.type ? 'selected' : ''}" 
+                     onclick="selectPromotion(${promo.id}, '${promo.name.replace(/'/g, "\\'")}', ${promo.discount}, '${(promo.products || '').replace(/'/g, "\\'")}', '${promo.type}', ${promo.is_purchased || false}, '${promo.promotion_cycle_start || ''}', ${promo.is_free || false})">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>${promo.name}</strong>
+                            <span class="promotion-badge" style="background: ${promo.is_free ? '#3498db' : '#27ae60'}">
+                                ${promo.is_free ? '🎁 Бесплатная' : '💎 Куплена'} -${promo.discount}%
+                            </span>
+                        </div>
+                        <span style="font-size: 20px;">${selectedPromotion?.id === promo.id && selectedPromotion?.type === promo.type ? '✅' : '○'}</span>
+                    </div>
+                    ${promo.products ? `<div style="font-size: 11px; color: #666; margin-top: 5px;">📦 ${promo.products.substring(0, 50)}</div>` : ''}
+                </div>
+            `).join('');
         }
-
+    } catch (error) {
+        console.error('Ошибка загрузки акций:', error);
+        document.getElementById('availablePromotionsList').innerHTML = '<div class="error">❌ Ошибка загрузки акций</div>';
+    }
+}
+        
+        function selectPromotion(id, name, discount, products, type, isPurchased, promotionCycleStart, isFree) {
+    selectedPromotion = { 
+        id, 
+        name, 
+        discount, 
+        products, 
+        type,
+        is_purchased: isPurchased,
+        is_free: isFree,
+        promotion_cycle_start: promotionCycleStart
+    };
+    
+    document.querySelectorAll('.promotion-option').forEach(el => {
+        el.classList.remove('selected');
+    });
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('selected');
+    }
+    
+    const typeText = isFree ? '🎁 Бесплатная акция' : '💎 Купленная акция';
+    
+    document.getElementById('selectedPromotionInfo').innerHTML = `
+        <strong>✅ Выбрана акция:</strong> ${name}<br>
+        🎁 Скидка: ${discount}%<br>
+        ${typeText}
+        ${products ? `<div style="margin-top: 5px;">📦 Продукты: ${products}</div>` : ''}
+    `;
+    
+    // Показываем информацию только если есть выбранная акция
+    if (name && discount) {
+        document.getElementById('selectedPromotionInfo').style.display = 'block';
+    } else {
+        document.getElementById('selectedPromotionInfo').style.display = 'none';
+    }
+    
+    updateFinalOrderSummary();
+}
+        
         // ============ ПРОВЕРКА QR-КОДА ============
         async function verifyQR() {
             const qrData = document.getElementById('qrData').value;
@@ -553,31 +549,21 @@
                 return;
             }
             
-            const verifyBtn = event ? event.target : document.querySelector('#verifyQRBtn');
-            const originalText = verifyBtn ? verifyBtn.innerText : 'Проверить';
-            if (verifyBtn) {
-                verifyBtn.innerText = '⏳ Проверка...';
-                verifyBtn.disabled = true;
-            }
+            const verifyBtn = document.getElementById('verifyQrBtn');
+            const originalText = verifyBtn.innerText;
+            verifyBtn.innerText = '⏳ Проверка...';
+            verifyBtn.disabled = true;
             
             try {
-                try {
-                    currentQrData = JSON.parse(qrData);
-                    currentCompanyId = currentQrData.companyId;
-                } catch(e) {
-                    currentQrData = qrData;
-                    const match = qrData.match(/companyId["']?\s*:\s*(\d+)/);
-                    if (match) currentCompanyId = parseInt(match[1]);
-                }
+                currentQrData = JSON.parse(qrData);
+                currentCompanyId = currentQrData.companyId;
                 
                 await loadBonusSettings();
                 
                 const response = await fetch(`${API_URL}/api/pos/get-user-balance`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData)
-                    })
+                    body: JSON.stringify({ qrData: JSON.stringify(currentQrData) })
                 });
                 
                 const result = await response.json();
@@ -588,8 +574,7 @@
                     
                     document.getElementById('verifyResult').innerHTML = `
                         <div class="success">
-                            ✅ QR-код действителен!<br>
-                            👤 Пользователь: ${result.user.name}<br>
+                            ✅ Пользователь: ${result.user.name}<br>
                             💰 Баланс: ${result.user.balance} бонусов<br>
                             🏆 Уровень: ${result.tier} (x${result.multiplier})
                         </div>
@@ -598,510 +583,344 @@
                     document.getElementById('userInfo').innerHTML = `
                         <div class="user-info">
                             <strong>👤 ${result.user.name}</strong><br>
-                            🆔 VK ID: ${result.user.vkId}<br>
                             💰 Баланс: <span class="balance">${result.user.balance}</span> бонусов<br>
-                            📈 Всего заработано: ${result.user.totalEarned || 0} бонусов<br>
-                            💸 Всего потрачено: ${result.user.totalSpent || 0} бонусов<br>
                             🏆 Уровень: ${result.tier} (x${result.multiplier})
                         </div>
                     `;
                     
+                    document.getElementById('availableBonuses').innerText = result.user.balance;
                     document.getElementById('userInfoCard').style.display = 'block';
                     document.getElementById('orderSection').style.display = 'block';
-                    document.getElementById('spendSection').style.display = 'block';
+                    document.getElementById('promotionSection').style.display = 'block';
                     
+                    await loadAvailablePromotions();
                     await loadUserHistory();
-                    await loadPurchasedPromotions();
+                    
+                    // Если нет доступных акций, блокируем переключатель
+                    if (availablePromotions.length === 0) {
+                        const promoRadio = document.querySelector('input[value="promotion"]');
+                        if (promoRadio) {
+                            promoRadio.disabled = true;
+                            promoRadio.parentElement.style.opacity = '0.5';
+                        }
+                    } else {
+                        const promoRadio = document.querySelector('input[value="promotion"]');
+                        if (promoRadio) promoRadio.disabled = false;
+                    }
                 } else {
                     document.getElementById('verifyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
                 }
             } catch (error) {
+                console.error('❌ Ошибка проверки QR:', error);
                 document.getElementById('verifyResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
             } finally {
-                if (verifyBtn) {
-                    verifyBtn.innerText = originalText;
-                    verifyBtn.disabled = false;
-                }
-            }
-        }
-
-        // ============ ЗАГРУЗКА ИСТОРИИ ПОЛЬЗОВАТЕЛЯ ============
-        async function loadUserHistory() {
-            if (!currentUser || !currentCompanyId) return;
-            
-            try {
-                const response = await fetch(`${API_URL}/api/users/${currentUser.id}/transactions/${currentCompanyId}?limit=50`);
-                const result = await response.json();
-                
-                if (result.success && result.transactions.length > 0) {
-                    let totalEarned = 0;
-                    let totalSpent = 0;
-                    
-                    const historyHtml = result.transactions.map(t => {
-                        if (t.bonusChange > 0) totalEarned += t.bonusChange;
-                        if (t.bonusChange < 0) totalSpent += Math.abs(t.bonusChange);
-                        
-                        const date = new Date(t.createdAt);
-                        const formattedDate = date.toLocaleString('ru-RU');
-                        const isEarn = t.type === 'earn';
-                        const bonusText = isEarn ? `+${t.bonusChange}` : `${t.bonusChange}`;
-                        const bonusClass = isEarn ? 'badge-earn' : 'badge-spend';
-                        const icon = isEarn ? '🛒' : '💸';
-                        
-                        let amountText = '';
-                        if (t.amount > 0) {
-                            amountText = `<div style="font-size: 12px; color: #666; margin-top: 5px;">💰 Сумма покупки: ${t.amount}₽</div>`;
-                        }
-                        
-                        return `
-                            <div class="transaction-item">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div>
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 20px;">${icon}</span>
-                                            <strong>${t.description || (isEarn ? 'Начисление бонусов' : 'Списание бонусов')}</strong>
-                                        </div>
-                                        <div style="font-size: 11px; color: #888; margin-top: 4px;">${formattedDate}</div>
-                                        ${amountText}
-                                        ${t.storeId ? `<div style="font-size: 11px; color: #888; margin-top: 3px;">🏪 Касса: ${t.storeId}</div>` : ''}
-                                    </div>
-                                    <span class="badge ${bonusClass}" style="font-size: 14px; padding: 6px 12px;">${bonusText} бонусов</span>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-                    
-                    document.getElementById('historyList').innerHTML = historyHtml;
-                    document.getElementById('totalEarned').innerText = totalEarned;
-                    document.getElementById('totalSpent').innerText = totalSpent;
-                    document.getElementById('historySection').style.display = 'block';
-                } else {
-                    document.getElementById('historyList').innerHTML = '<div class="loading">📭 История операций пуста</div>';
-                    document.getElementById('historySection').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Ошибка загрузки истории:', error);
-                document.getElementById('historyList').innerHTML = '<div class="error">❌ Ошибка загрузки истории</div>';
+                verifyBtn.innerText = originalText;
+                verifyBtn.disabled = false;
             }
         }
         
-        async function refreshHistory() {
-            document.getElementById('historyList').innerHTML = '<div class="loading"><div class="spinner"></div> Загрузка...</div>';
-            await loadUserHistory();
-        }
-
-        // ============ ЗАГРУЗКА КУПЛЕННЫХ АКЦИЙ ============
-        async function loadPurchasedPromotions() {
-            if (!currentUser || !currentCompanyId) return;
+        // ============ ЗАГРУЗКА НАСТРОЕК ============
+        async function loadBonusSettings() {
+            if (!currentCompanyId) return;
             
             try {
-                const response = await fetch(`${API_URL}/api/users/${currentUser.id}/promotions/purchased/${currentCompanyId}`);
-                const result = await response.json();
-                
-                if (result.success && result.purchased && result.purchased.length > 0) {
-                    purchasedPromotions = result.purchased;
-                    const unusedPromos = purchasedPromotions.filter(p => !p.used);
-                    
-                    document.getElementById('purchasedPromosInfo').innerHTML = `
-                        <div class="info">
-                            <strong>📊 Всего куплено акций:</strong> ${purchasedPromotions.length}<br>
-                            <strong>✅ Доступно к использованию:</strong> ${unusedPromos.length}
-                        </div>
-                    `;
-                    
-                    const select = document.getElementById('promotionSelect');
-                    select.innerHTML = '<option value="">-- Выберите акцию --</option>';
-                    
-                    unusedPromos.forEach(promo => {
-                        const option = document.createElement('option');
-                        option.value = promo.promotion_id;
-                        option.dataset.products = promo.products || '';
-                        option.dataset.name = promo.name;
-                        option.textContent = `${promo.name} - ${promo.reward_value}% скидка`;
-                        select.appendChild(option);
-                    });
-                    
-                    select.addEventListener('change', function() {
-                        const selectedOption = this.options[this.selectedIndex];
-                        const products = selectedOption.dataset.products;
-                        const productsDiv = document.getElementById('promotionProducts');
-                        const productsList = document.getElementById('productsList');
-                        
-                        if (products && products !== 'null' && products !== 'undefined') {
-                            productsDiv.style.display = 'block';
-                            productsList.innerHTML = products.split(',').map(p => 
-                                `<div style="padding: 4px 0; border-bottom: 1px solid #eee;">✓ ${p.trim()}</div>`
-                            ).join('');
-                        } else {
-                            productsDiv.style.display = 'none';
-                        }
-                    });
-                    
-                    document.getElementById('purchasedPromosCard').style.display = 'block';
-                } else {
-                    purchasedPromotions = [];
-                    document.getElementById('purchasedPromosInfo').innerHTML = `
-                        <div style="text-align: center; padding: 20px; color: #666;">
-                            <div style="font-size: 48px; margin-bottom: 12px;">📭</div>
-                            <div>У пользователя нет купленных акций</div>
-                        </div>
-                    `;
-                    document.getElementById('promotionSelect').innerHTML = '<option value="">-- Нет доступных акций --</option>';
-                    document.getElementById('purchasedPromosCard').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Ошибка загрузки купленных акций:', error);
-                document.getElementById('purchasedPromosInfo').innerHTML = '<div class="error">❌ Ошибка загрузки</div>';
-            }
-        }
-
-        // ============ ПРОВЕРКА КУПЛЕННОЙ АКЦИИ ============
-        async function checkPurchasedPromotion() {
-            const promotionId = document.getElementById('promotionSelect').value;
-            
-            if (!promotionId) {
-                alert('Выберите акцию из списка');
-                return;
-            }
-            
-            if (!currentQrData) {
-                alert('Сначала отсканируйте QR-код');
-                return;
-            }
-            
-            const checkBtn = event.target;
-            const originalText = checkBtn.innerText;
-            checkBtn.innerText = '⏳ Проверка...';
-            checkBtn.disabled = true;
-            
-            try {
-                const response = await fetch(`${API_URL}/api/pos/check-purchased-promotion`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                        promotionId: parseInt(promotionId)
-                    })
-                });
-                
+                const response = await fetch(`${API_URL}/api/companies/${currentCompanyId}/bonus-settings`);
                 const result = await response.json();
                 
                 if (result.success) {
-                    if (result.hasPromotion) {
-                        const productsText = result.products && result.products !== 'null' ? 
-                            `<div style="margin-top: 8px; font-size: 12px; color: #666;">📦 Продукты: ${result.products}</div>` : '';
-                        
-                        document.getElementById('purchasedPromosResult').innerHTML = `
-                            <div class="success">
-                                ✅ Акция найдена!<br>
-                                🎁 Скидка: <strong style="font-size: 24px;">${result.discount}%</strong>
-                                ${productsText}
-                                <div style="margin-top: 12px;">
-                                    <button onclick="usePurchasedPromotion(${promotionId}, ${result.discount})" style="width: 100%; padding: 12px; background: #27ae60;">
-                                        💰 Применить скидку к заказу
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        document.getElementById('purchasedPromosResult').innerHTML = `
-                            <div class="error">
-                                ❌ Акция не найдена или уже использована
+                    currentBonusSettings = result.settings;
+                    document.getElementById('rubToBonusValue').textContent = currentBonusSettings.rubToBonus;
+                    document.getElementById('maxPercentValue').textContent = currentBonusSettings.maxBonusPaymentPercent;
+                    
+                    const bonusRateInfo = document.getElementById('bonusRateInfo');
+                    if (bonusRateInfo) {
+                        bonusRateInfo.style.display = 'block';
+                        bonusRateInfo.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                                <span>⭐ Базовое начисление: <strong>${currentBonusSettings.bonusRatePerThousand}</strong> бонусов/1000₽</span>
+                                <span>📈 Минимум: <strong>${currentBonusSettings.minPurchaseForBonus}</strong> ₽</span>
+                                <span>💱 Курс: 1 ₽ = <strong>${currentBonusSettings.rubToBonus}</strong> бонусов</span>
                             </div>
                         `;
                     }
-                } else {
-                    document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
                 }
             } catch (error) {
-                document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
-            } finally {
-                checkBtn.innerText = originalText;
-                checkBtn.disabled = false;
+                console.error('Ошибка загрузки настроек:', error);
             }
         }
-
-        // ============ ИСПОЛЬЗОВАНИЕ КУПЛЕННОЙ АКЦИИ ============
-        async function usePurchasedPromotion(promotionId, discount) {
-            if (!currentQrData) {
-                alert('Сначала отсканируйте QR-код');
-                return;
-            }
+        
+        function calculateBonus() {
+            const amount = currentOrderAmount;
+            if (!amount || amount <= 0) return;
             
-            if (!confirm(`Применить скидку ${discount}% к текущему заказу?`)) {
-                return;
-            }
+            const minPurchase = currentBonusSettings.minPurchaseForBonus;
             
-            try {
-                const response = await fetch(`${API_URL}/api/pos/use-purchased-promotion`, {
+            if (amount < minPurchase) {
+                document.getElementById('bonusResult').innerHTML = `
+                    <div class="warning">⚠️ Минимальная сумма для начисления бонусов: ${minPurchase}₽</div>
+                `;
+            } else {
+                const bonusRate = currentMultiplier * (currentBonusSettings.bonusRatePerThousand || 10);
+                const bonusEarned = Math.floor(amount / 1000) * bonusRate;
+                document.getElementById('bonusResult').innerHTML = `
+                    <div class="success">🎉 За заказ на сумму ${amount}₽ клиент получит ${bonusEarned} бонусов! (x${currentMultiplier})</div>
+                `;
+            }
+        }
+        
+        // ============ ПОДТВЕРЖДЕНИЕ ЗАКАЗА ============
+        async function confirmOrder() {
+    if (!currentOrderAmount || currentOrderAmount <= 0) {
+        alert('Введите сумму заказа');
+        return;
+    }
+    
+    const confirmBtn = document.getElementById('confirmBtn');
+    const originalText = confirmBtn.innerText;
+    confirmBtn.innerText = '⏳ Оформление...';
+    confirmBtn.disabled = true;
+    
+    try {
+        let discountRub = 0;
+        
+        // 1. Применяем скидку (либо списание бонусов, либо акцию)
+        if (currentDiscountType === 'spend' && currentSpendBonuses > 0) {
+            discountRub = Math.floor(currentSpendBonuses / currentBonusSettings.rubToBonus);
+            
+            const spendResponse = await fetch(`${API_URL}/api/pos/spend-bonus-v2`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    qrData: JSON.stringify(currentQrData),
+                    bonusToSpend: currentSpendBonuses,
+                    storeId: 'POS_Terminal_001',
+                    cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
+                })
+            });
+            
+            const spendResult = await spendResponse.json();
+            if (!spendResult.success) throw new Error(spendResult.message);
+            
+            if (currentUser) currentUser.balance = spendResult.newBalance;
+            
+        } else if (currentDiscountType === 'promotion' && selectedPromotion) {
+            discountRub = Math.floor(currentOrderAmount * selectedPromotion.discount / 100);
+            
+            // Для ПЛАТНЫХ акций - отмечаем как использованную в БД
+            if (selectedPromotion.type === 'paid') {
+                const promoResponse = await fetch(`${API_URL}/api/pos/use-purchased-promotion`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                        promotionId: parseInt(promotionId)
+                        qrData: JSON.stringify(currentQrData),
+                        promotionId: selectedPromotion.id
                     })
                 });
                 
-                const result = await response.json();
-                
-                if (result.success) {
-                    document.getElementById('purchasedPromosResult').innerHTML = `
-                        <div class="success">
-                            ✅ ${result.message}<br>
-                            🎁 Скидка ${discount}% успешно применена!
-                        </div>
-                    `;
-                    
-                    await loadPurchasedPromotions();
-                    showNotification(`Скидка ${discount}% применена`, 'success');
-                } else {
-                    document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
-                    showNotification(result.message, 'error');
-                }
-            } catch (error) {
-                document.getElementById('purchasedPromosResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
-                showNotification('Ошибка при применении скидки', 'error');
+                const promoResult = await promoResponse.json();
+                if (!promoResult.success) throw new Error(promoResult.message);
             }
+            
+            // ❌ НЕ создаём транзакцию для акции здесь!
+            // Транзакция уже была создана при покупке акции в приложении
+            // Просто применяем скидку к заказу
         }
-
-        // ============ РАСЧЁТ БОНУСОВ ЗА ПОКУПКУ ============
-        async function calculateBonus() {
-            const amount = document.getElementById('orderAmount').value;
-            if (!amount || amount <= 0) {
-                alert('Введите сумму заказа больше 0');
-                return;
+        
+        // 2. Начисляем бонусы за покупку
+        const earnResponse = await fetch(`${API_URL}/api/pos/apply-bonus-v2`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                qrData: JSON.stringify(currentQrData),
+                amount: currentOrderAmount,
+                storeId: 'POS_Terminal_001',
+                cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
+            })
+        });
+        
+        const earnResult = await earnResponse.json();
+        
+        if (earnResult.success) {
+            const finalAmount = currentOrderAmount - discountRub;
+            
+            let discountText = '';
+            if (currentDiscountType === 'spend') {
+                discountText = `Скидка бонусами: -${discountRub} ₽ (${currentSpendBonuses} бонусов)`;
+            } else if (currentDiscountType === 'promotion' && selectedPromotion) {
+                const promoTypeText = selectedPromotion.type === 'free' ? 'Бесплатная акция' : 'Купленная акция';
+                discountText = `${promoTypeText} "${selectedPromotion.name}": -${discountRub} ₽ (${selectedPromotion.discount}%)`;
             }
             
-            const amountNum = parseInt(amount);
-            const minPurchase = currentBonusSettings.minPurchaseForBonus || 1000;
+            document.getElementById('applyResult').innerHTML = `
+                <div class="success">
+                    ✅ ЗАКАЗ ОФОРМЛЕН!<br>
+                    ━━━━━━━━━━━━━━━━━━━━━<br>
+                    💰 Сумма: ${currentOrderAmount.toLocaleString()} ₽<br>
+                    🎁 ${discountText}<br>
+                    💳 К оплате: ${finalAmount.toLocaleString()} ₽<br>
+                    ⭐ Начислено: +${earnResult.bonusEarned} бонусов
+                </div>
+            `;
             
-            if (amountNum < minPurchase) {
-                document.getElementById('bonusResult').innerHTML = `
-                    <div class="warning">
-                        ⚠️ Минимальная сумма для начисления бонусов: ${minPurchase}₽<br>
-                        Текущая сумма: ${amountNum}₽. Бонусы не будут начислены.
+            if (currentUser) {
+                currentUser.balance = earnResult.newBalance;
+                document.getElementById('availableBonuses').innerText = earnResult.newBalance;
+                const balanceSpan = document.querySelector('#userInfo .balance');
+                if (balanceSpan) balanceSpan.innerText = earnResult.newBalance;
+            }
+            
+            // Очищаем поля
+            document.getElementById('orderAmount').value = '';
+            document.getElementById('spendAmount').value = '';
+            document.getElementById('finalOrderCard').style.display = 'none';
+            currentOrderAmount = 0;
+            currentSpendBonuses = 0;
+            selectedPromotion = null;
+            
+            // Обновляем данные
+            await loadAvailablePromotions();
+            await loadUserHistory();
+            
+            showNotification('Заказ оформлен!', 'success');
+        } else {
+            throw new Error(earnResult.message);
+        }
+    } catch (error) {
+        document.getElementById('applyResult').innerHTML = `<div class="error">❌ ${error.message}</div>`;
+        showNotification(error.message, 'error');
+    } finally {
+        confirmBtn.innerText = originalText;
+        confirmBtn.disabled = false;
+    }
+}
+        
+        // ============ ИСТОРИЯ ============
+       async function loadUserHistory() {
+    if (!currentUser || !currentCompanyId) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/users/${currentUser.id}/transactions/${currentCompanyId}?limit=50`);
+        const result = await response.json();
+        
+        if (result.success) {
+            let totalEarned = 0, totalSpent = 0;
+            
+            // Фильтруем транзакции (убираем дубли)
+            const filteredTransactions = result.transactions.filter(t => {
+                // Скрываем дублирующиеся "Списание баллов" с плюсом
+                if (t.description === 'Списание баллов' && t.bonusChange > 0) {
+                    return false;
+                }
+                // Скрываем обычные "Списание бонусов", если есть связанная покупка акции
+                // (т.к. теперь покупка акции создает одну транзакцию с названием акции)
+                return true;
+            });
+            
+            const historyHtml = filteredTransactions.map(t => {
+                // Определяем тип транзакции через metadata или описание
+                let metadata = {};
+                try {
+                    metadata = t.metadata ? (typeof t.metadata === 'string' ? JSON.parse(t.metadata) : t.metadata) : {};
+                } catch (e) {}
+                
+                const isPromotionPurchase = metadata.promotion_id || 
+                                           t.description.includes('Покупка акции') || 
+                                           t.description.includes('Бесплатная акция');
+                const isEarn = t.bonusChange > 0 && !isPromotionPurchase;
+                const isSpend = t.bonusChange < 0 || isPromotionPurchase;
+                
+                let actualBonusChange = t.bonusChange;
+                
+                // Для покупки акции: если пришло положительное значение, делаем его отрицательным для отображения
+                if (isPromotionPurchase && t.bonusChange > 0) {
+                    actualBonusChange = -t.bonusChange;
+                }
+                
+                if (actualBonusChange > 0) totalEarned += actualBonusChange;
+                if (actualBonusChange < 0) totalSpent += Math.abs(actualBonusChange);
+                
+                const date = new Date(t.createdAt).toLocaleString('ru-RU');
+                
+                let icon = '💸';
+                let title = t.description || 'Списание бонусов';
+                let borderColor = '#e74c3c';
+                let amountText = '';
+                let bonusText = '';
+                
+                if (isPromotionPurchase) {
+                    icon = '🎁';
+                    // Используем описание с бэкенда (уже содержит название акции)
+                    title = t.description || 'Покупка акции';
+                    borderColor = '#9b59b6';
+                    const spentAmount = Math.abs(actualBonusChange);
+                    if (spentAmount > 0) {
+                        amountText = `<div style="font-size: 12px; color: #9b59b6;">💎 Потрачено: ${spentAmount} бонусов</div>`;
+                    } else {
+                        amountText = `<div style="font-size: 12px; color: #3498db;">🎁 Бесплатная акция</div>`;
+                    }
+                    bonusText = `<span style="color: ${metadata.is_free ? '#3498db' : '#e74c3c'}; font-weight: bold;">${metadata.is_free ? 'Бесплатно' : `-${spentAmount} бонусов`}</span>`;
+                } else if (isEarn) {
+                    icon = '🛒';
+                    title = t.description || 'Начисление бонусов';
+                    borderColor = '#27ae60';
+                    amountText = t.amount > 0 ? `<div style="font-size: 12px; color: #27ae60;">💰 ${t.amount} ₽</div>` : '';
+                    bonusText = `<span style="color: #27ae60; font-weight: bold;">+${actualBonusChange} бонусов</span>`;
+                } else {
+                    // Обычное списание
+                    const spentAmount = Math.abs(actualBonusChange);
+                    bonusText = `<span style="color: #e74c3c; font-weight: bold;">-${spentAmount} бонусов</span>`;
+                }
+                
+                return `
+                    <div class="transaction-item" style="border-left: 4px solid ${borderColor}; margin-bottom: 8px; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <strong>${icon} ${title}</strong>
+                                <div style="font-size: 11px; color: #888;">${date}</div>
+                                ${amountText}
+                            </div>
+                            ${bonusText}
+                        </div>
                     </div>
                 `;
-                currentBonusEarned = 0;
-                return;
-            }
+            }).join('');
             
-            const bonusRate = currentMultiplier * (currentBonusSettings.bonusRatePerThousand || 10);
-            const bonusEarned = Math.floor(amountNum / 1000) * bonusRate;
-            currentBonusEarned = bonusEarned;
-            
-            const progressFill = document.querySelector('#bonusRateInfo .progress-fill');
-            if (progressFill) {
-                const progressPercent = Math.min(100, (amountNum / minPurchase) * 100);
-                progressFill.style.width = `${progressPercent}%`;
-            }
-            
-            document.getElementById('bonusResult').innerHTML = `
-                <div class="success">
-                    🎉 За заказ на сумму ${amountNum}₽ клиент получит ${bonusEarned} бонусов!<br>
-                    📈 Множитель: x${currentMultiplier} (${bonusRate} бонусов за 1000₽)<br>
-                    ⭐ Базовое начисление: ${currentBonusSettings.bonusRatePerThousand} бонусов за 1000₽
-                </div>
-            `;
-            
-            document.getElementById('purchaseSummary').innerHTML = `
-                <div class="info">
-                    <strong>Сводка заказа:</strong><br>
-                    💰 Сумма: ${amountNum}₽<br>
-                    ⭐ Бонусов к начислению: ${bonusEarned}<br>
-                    👤 Пользователь: ${currentUser?.name}<br>
-                    🏆 Уровень: x${currentMultiplier}
-                </div>
-            `;
-            
-            document.getElementById('bonusSection').style.display = 'block';
+            document.getElementById('historyList').innerHTML = historyHtml || '<div class="loading">Нет операций</div>';
+            document.getElementById('totalEarned').innerText = totalEarned;
+            document.getElementById('totalSpent').innerText = totalSpent;
+            document.getElementById('historySection').style.display = 'block';
         }
-
-        // ============ ПРИМЕНЕНИЕ БОНУСОВ (НАЧИСЛЕНИЕ) ============
-        async function applyBonus() {
-            const amount = document.getElementById('orderAmount').value;
-            
-            if (!amount || amount <= 0) {
-                alert('Введите сумму заказа');
-                return;
-            }
-            
-            const applyBtn = document.getElementById('applyBtn');
-            const originalText = applyBtn.innerText;
-            applyBtn.innerText = '⏳ Обработка...';
-            applyBtn.disabled = true;
-            
-            try {
-                const response = await fetch(`${API_URL}/api/pos/apply-bonus-v2`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                        amount: parseInt(amount),
-                        storeId: 'POS_Terminal_001',
-                        cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    document.getElementById('applyResult').innerHTML = `
-                        <div class="success">
-                            ✅ ${result.message}<br>
-                            💰 Новый баланс: ${result.newBalance} бонусов<br>
-                            📝 Покупка на сумму ${amount}₽ добавлена в историю
-                        </div>
-                    `;
-                    
-                    if (currentUser) {
-                        currentUser.balance = result.newBalance;
-                        const balanceSpan = document.querySelector('#userInfo .balance');
-                        if (balanceSpan) balanceSpan.innerText = result.newBalance;
-                    }
-                    
-                    await loadUserHistory();
-                    
-                    document.getElementById('orderAmount').value = '';
-                    document.getElementById('bonusResult').innerHTML = '';
-                    document.getElementById('purchaseSummary').innerHTML = '';
-                    document.getElementById('bonusSection').style.display = 'none';
-                    
-                    showNotification('Покупка оформлена!', 'success');
-                } else {
-                    document.getElementById('applyResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
-                    showNotification(result.message, 'error');
-                }
-            } catch (error) {
-                document.getElementById('applyResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
-                showNotification('Ошибка при оформлении покупки', 'error');
-            } finally {
-                applyBtn.innerText = originalText;
-                applyBtn.disabled = false;
-            }
-        }
-
-        // ============ СПИСАНИЕ БОНУСОВ ============
-        async function spendBonus() {
-            const spendAmount = document.getElementById('spendAmount').value;
-            const orderAmount = document.getElementById('orderAmountForSpend').value;
-            
-            if (!orderAmount || parseInt(orderAmount) <= 0) {
-                alert('Сначала введите сумму заказа');
-                return;
-            }
-            
-            if (!spendAmount || parseInt(spendAmount) <= 0) {
-                alert('Введите сумму списания больше 0');
-                return;
-            }
-            
-            if (currentBonusSettings) {
-                const maxRub = Math.floor(parseInt(orderAmount) * currentBonusSettings.maxBonusPaymentPercent / 100);
-                const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
-                
-                if (parseInt(spendAmount) > maxBonuses) {
-                    alert(`❌ Нельзя списать больше ${maxBonuses} бонусов (${currentBonusSettings.maxBonusPaymentPercent}% от суммы заказа)`);
-                    return;
-                }
-            }
-            
-            if (!currentQrData) {
-                alert('Сначала отсканируйте QR-код');
-                return;
-            }
-            
-            const spendBtn = event.target;
-            const originalText = spendBtn.innerText;
-            spendBtn.innerText = '⏳ Обработка...';
-            spendBtn.disabled = true;
-            
-            try {
-                const response = await fetch(`${API_URL}/api/pos/spend-bonus-v2`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        qrData: typeof currentQrData === 'string' ? currentQrData : JSON.stringify(currentQrData),
-                        bonusToSpend: parseInt(spendAmount),
-                        storeId: 'POS_Terminal_001',
-                        cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    const discountRub = Math.floor(parseInt(spendAmount) / currentBonusSettings.rubToBonus);
-                    
-                    document.getElementById('spendResult').innerHTML = `
-                        <div class="success">
-                            ✅ ${result.message}<br>
-                            💰 Новый баланс: ${result.newBalance} бонусов<br>
-                            🎁 Скидка составила: ${discountRub} ₽
-                        </div>
-                    `;
-                    
-                    if (currentUser) {
-                        currentUser.balance = result.newBalance;
-                        const balanceSpan = document.querySelector('#userInfo .balance');
-                        if (balanceSpan) balanceSpan.innerText = result.newBalance;
-                    }
-                    
-                    await loadUserHistory();
-                    document.getElementById('spendAmount').value = '';
-                    document.getElementById('orderAmountForSpend').value = '';
-                    document.getElementById('maxSpendInfo').style.display = 'none';
-                    document.getElementById('orderSummary').style.display = 'none';
-                    
-                    showNotification(`Списано ${spendAmount} бонусов (скидка ${discountRub}₽)`, 'success');
-                } else {
-                    document.getElementById('spendResult').innerHTML = `<div class="error">❌ ${result.message}</div>`;
-                    showNotification(result.message, 'error');
-                }
-            } catch (error) {
-                document.getElementById('spendResult').innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
-                showNotification('Ошибка при списании бонусов', 'error');
-            } finally {
-                spendBtn.innerText = originalText;
-                spendBtn.disabled = false;
-            }
-        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+        document.getElementById('historyList').innerHTML = '<div class="error">❌ Ошибка загрузки истории</div>';
+    }
+}
         
-        // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
-        function showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.style.cssText = `
+        function refreshHistory() { loadUserHistory(); }
+        
+        // ============ ВСПОМОГАТЕЛЬНЫЕ ============
+        function showNotification(message, type) {
+            const notif = document.createElement('div');
+            notif.style.cssText = `
                 position: fixed;
                 bottom: 20px;
                 left: 50%;
                 transform: translateX(-50%);
-                background: ${type === 'success' ? '#27ae60' : (type === 'error' ? '#e74c3c' : '#3498db')};
+                background: ${type === 'success' ? '#27ae60' : '#e74c3c'};
                 color: white;
                 padding: 12px 24px;
                 border-radius: 40px;
-                font-size: 14px;
-                font-weight: 600;
                 z-index: 1000;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                 animation: slideUp 0.3s ease;
             `;
-            notification.innerText = message;
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.style.animation = 'slideDown 0.3s ease';
-                setTimeout(() => notification.remove(), 300);
-            }, 3000);
+            notif.innerText = message;
+            document.body.appendChild(notif);
+            setTimeout(() => notif.remove(), 3000);
         }
         
         function setTestAmount(amount) {
             document.getElementById('orderAmount').value = amount;
-            calculateBonus();
-        }
-        
-        function setTestSpend(amount) {
-            document.getElementById('spendAmount').value = amount;
-            updateOrderSummary();
+            onOrderAmountChange();
         }
         
         function loadTestQR(companyId) {
@@ -1109,39 +928,42 @@
                 vkId: "1",
                 userName: "Тестовый Пользователь",
                 companyId: companyId,
-                companyName: companyId === 1 ? "Пиццерия \"Маргарита\"" : "Кофейня \"Кофеин\"",
                 timestamp: Date.now(),
-                expiresIn: 300000,
-                version: "1.0"
+                expiresIn: 300000
             };
-            document.getElementById('qrData').value = JSON.stringify(testQR, null, 2);
+            document.getElementById('qrData').value = JSON.stringify(testQR);
             verifyQR();
         }
         
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideUp {
-                from {
-                    transform: translateX(-50%) translateY(100px);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateX(-50%) translateY(0);
-                    opacity: 1;
-                }
-            }
-            @keyframes slideDown {
-                from {
-                    transform: translateX(-50%) translateY(0);
-                    opacity: 1;
-                }
-                to {
-                    transform: translateX(-50%) translateY(100px);
-                    opacity: 0;
-                }
-            }
-        `;
-        document.head.appendChild(style);
+        // ============ КЕШБЕК И УРОВНИ ============
+        function getCashbackForRank(rankName) {
+            // Кешбек для каждого ранга (в процентах)
+            const cashbackMap = {
+                'Новичок': 1,
+                'Бронзовый': 2,
+                'Серебряный': 3,
+                'Золотой': 5,
+                'Платиновый': 7,
+                'VIP': 10
+            };
+            return cashbackMap[rankName] || 1;
+        }
+        
+        function applyCashbackAndMultiplier(orderAmount, rankName, currentMultiplier) {
+            const cashbackPercent = getCashbackForRank(rankName);
+            const cashbackAmount = Math.floor(orderAmount * cashbackPercent / 100);
+            
+            // Уровень влияет на множитель бонусов
+            const bonusRate = currentMultiplier * (currentBonusSettings.bonusRatePerThousand || 10);
+            const bonusEarned = Math.floor(orderAmount / 1000) * bonusRate;
+            
+            return {
+                cashbackAmount,
+                cashbackPercent,
+                bonusEarned,
+                finalAmount: orderAmount
+            };
+        }
     </script>
 </body>
 </html>
