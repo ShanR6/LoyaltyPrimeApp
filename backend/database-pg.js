@@ -2270,7 +2270,8 @@ async function getRealAnalytics(companyId, period = 'month') {
             startDate.setMonth(startDate.getMonth() - 1);
     }
     
-    // Получаем реальную выручку (сумма всех покупок)
+    // Получаем реальную выручку (только POS-транзакции с amount > 0)
+    // ИСКЛЮЧАЕМ транзакции из игр (у них amount = 0)
     const revenueResult = await query(
         `SELECT 
             COUNT(*) as total_transactions,
@@ -2280,6 +2281,7 @@ async function getRealAnalytics(companyId, period = 'month') {
          FROM transactions
          WHERE company_id = $1
          AND source = 'pos'
+         AND amount > 0
          AND created_at >= $2`,
         [companyId, startDate]
     );
@@ -2290,6 +2292,7 @@ async function getRealAnalytics(companyId, period = 'month') {
          FROM transactions
          WHERE company_id = $1
          AND source = 'pos'
+         AND amount > 0
          AND created_at >= $2`,
         [companyId, startDate]
     );
@@ -2315,6 +2318,7 @@ async function getRealAnalytics(companyId, period = 'month') {
          FROM transactions
          WHERE company_id = $1
          AND source = 'pos'
+         AND amount > 0
          AND items != '[]'
          AND created_at >= $2
          GROUP BY items
@@ -2333,6 +2337,7 @@ async function getRealAnalytics(companyId, period = 'month') {
          FROM transactions
          WHERE company_id = $1
          AND source = 'pos'
+         AND amount > 0
          AND created_at >= $2
          GROUP BY DATE(created_at)
          ORDER BY date ASC`,
@@ -2702,6 +2707,45 @@ async function addNotificationCampaignColumns() {
             console.log('✅ Колонка sent_at добавлена в notifications');
         }
         
+        // Проверяем и добавляем колонку button_link в таблицу notification_campaigns
+        const checkButtonLink = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notification_campaigns' AND column_name = 'button_link'
+        `);
+        
+        if (checkButtonLink.rows.length === 0) {
+            console.log('📝 Добавляем колонку button_link в таблицу notification_campaigns...');
+            await query(`ALTER TABLE notification_campaigns ADD COLUMN button_link TEXT`);
+            console.log('✅ Колонка button_link добавлена');
+        }
+        
+        // Проверяем и добавляем колонку button_text в таблицу notification_campaigns
+        const checkButtonText = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notification_campaigns' AND column_name = 'button_text'
+        `);
+        
+        if (checkButtonText.rows.length === 0) {
+            console.log('📝 Добавляем колонку button_text в таблицу notification_campaigns...');
+            await query(`ALTER TABLE notification_campaigns ADD COLUMN button_text VARCHAR(50) DEFAULT 'Перейти'`);
+            console.log('✅ Колонка button_text добавлена');
+        }
+        
+        // Проверяем и добавляем колонку image_url в таблицу notifications
+        const checkNotifImage = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'notifications' AND column_name = 'image_url'
+        `);
+        
+        if (checkNotifImage.rows.length === 0) {
+            console.log('📝 Добавляем колонку image_url в таблицу notifications...');
+            await query(`ALTER TABLE notifications ADD COLUMN image_url TEXT`);
+            console.log('✅ Колонка image_url добавлена в notifications');
+        }
+        
         console.log('✅ Все колонки notification_campaigns проверены');
     } catch (error) {
         console.error('❌ Ошибка добавления колонок notification_campaigns:', error);
@@ -2772,13 +2816,13 @@ async function getNotificationCampaigns(companyId) {
 }
 
 // Добавление кампании
-async function addNotificationCampaign(companyId, name, title, message, audience, isActive = true, intervalDays = 1, imageUrl = null, isDefault = false) {
+async function addNotificationCampaign(companyId, name, title, message, audience, isActive = true, intervalDays = 1, imageUrl = null, isDefault = false, buttonLink = null, buttonText = 'Перейти') {
     try {
         const result = await query(
-            `INSERT INTO notification_campaigns (company_id, name, title, message, audience, is_active, interval_days, image_url, is_default)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `INSERT INTO notification_campaigns (company_id, name, title, message, audience, is_active, interval_days, image_url, is_default, button_link, button_text)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
-            [companyId, name, title, message, audience, isActive, intervalDays, imageUrl, isDefault]
+            [companyId, name, title, message, audience, isActive, intervalDays, imageUrl, isDefault, buttonLink, buttonText]
         );
         console.log(`✅ Кампания добавлена: ${name}`);
         return result.rows[0];
@@ -2789,14 +2833,14 @@ async function addNotificationCampaign(companyId, name, title, message, audience
 }
 
 // Обновление кампании
-async function updateNotificationCampaign(campaignId, name, title, message, audience, isActive, intervalDays, imageUrl) {
+async function updateNotificationCampaign(campaignId, name, title, message, audience, isActive, intervalDays, imageUrl, buttonLink, buttonText) {
     try {
         const result = await query(
             `UPDATE notification_campaigns 
-             SET name = $2, title = $3, message = $4, audience = $5, is_active = $6, interval_days = $7, image_url = $8, updated_at = NOW()
+             SET name = $2, title = $3, message = $4, audience = $5, is_active = $6, interval_days = $7, image_url = $8, updated_at = NOW(), button_link = $9, button_text = $10
              WHERE id = $1
              RETURNING *`,
-            [campaignId, name, title, message, audience, isActive, intervalDays, imageUrl]
+            [campaignId, name, title, message, audience, isActive, intervalDays, imageUrl, buttonLink, buttonText]
         );
         console.log(`✅ Кампания обновлена: ${name}`);
         return result.rows[0];
@@ -2904,6 +2948,16 @@ async function getUsersBySegment(companyId, audience) {
                     WHERE u.company_id = $1 AND uc.user_type = 'dormant'
                 `;
                 break;
+            case 'birthday':
+                // Получаем пользователей с днем рождения в текущем месяце из mini-app
+                const currentMonth = new Date().getMonth() + 1; // PostgreSQL months are 1-12
+                userQuery = `
+                    SELECT u.vk_id, u.name, u.company_id
+                    FROM users u
+                    WHERE u.company_id = $1 
+                    AND EXTRACT(MONTH FROM u.birthday) = $2
+                `;
+                break;
             default: // all
                 userQuery = `
                     SELECT vk_id, name, company_id
@@ -2912,7 +2966,9 @@ async function getUsersBySegment(companyId, audience) {
                 `;
         }
         
-        const result = await query(userQuery, [companyId]);
+        // Для birthday передаем дополнительный параметр - месяц
+        const queryParams = audience === 'birthday' ? [companyId, currentMonth] : [companyId];
+        const result = await query(userQuery, queryParams);
         return result.rows;
     } catch (error) {
         console.error('❌ Ошибка получения пользователей по сегменту:', error);
@@ -2937,9 +2993,9 @@ async function executeCampaign(campaignId) {
         
         // Сохраняем в историю рассылок
         await query(
-            `INSERT INTO notifications (company_id, title, message, audience, status, sent_count, sent_at)
-             VALUES ($1, $2, $3, $4, 'sent', $5, NOW())`,
-            [campaign.company_id, campaign.title, campaign.message, campaign.audience, users.length]
+            `INSERT INTO notifications (company_id, title, message, audience, status, sent_count, sent_at, image_url)
+             VALUES ($1, $2, $3, $4, 'sent', $5, NOW(), $6)`,
+            [campaign.company_id, campaign.title, campaign.message, campaign.audience, users.length, campaign.image_url]
         );
         
         // Обновляем last_sent_at
@@ -2955,11 +3011,30 @@ async function executeCampaign(campaignId) {
             campaign: campaign,
             users: users.map(u => ({ vk_id: u.vk_id, name: u.name })),
             sentCount: users.length,
-            image_url: campaign.image_url
+            image_url: campaign.image_url,
+            button_link: campaign.button_link,
+            button_text: campaign.button_text || 'Перейти'
         };
     } catch (error) {
         console.error('❌ Ошибка выполнения кампании:', error);
         throw error;
+    }
+}
+
+
+// Сохранение отправленного уведомления в историю
+async function saveNotificationToHistory(companyId, title, message, audience, sentCount, imageUrl = null) {
+    try {
+        const result = await query(
+            `INSERT INTO notifications (company_id, title, message, audience, status, sent_count, sent_at, image_url)
+             VALUES ($1, $2, $3, $4, 'sent', $5, NOW(), $6)
+             RETURNING *`,
+            [companyId, title, message, audience, sentCount, imageUrl]
+        );
+        return result.rows[0];
+    } catch (error) {
+        console.error('Ошибка сохранения истории:', error);
+        return null;
     }
 }
 
@@ -3050,5 +3125,6 @@ module.exports = {
     toggleNotificationCampaign,
     getActiveCampaigns,
     getUsersBySegment,
-    executeCampaign
+    executeCampaign,
+	saveNotificationToHistory
 };

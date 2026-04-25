@@ -402,6 +402,7 @@ async function loadCRMPanel() {
     await loadScratchSettings();
     await loadDiceSettings();  
     loadNotificationsHistory();
+    await loadCampaigns();
     await loadBonusSettings();  
 }
 
@@ -904,21 +905,466 @@ function getSegmentName(segment) {
     return segments[segment] || segment;
 }
 
-function loadNotificationsHistory() {
-    const container = document.getElementById('notificationsHistory');
-    if (!container) return;
-    if (notificationsHistory.length === 0) {
-        container.innerHTML = '<div class="empty-state">Нет отправленных уведомлений</div>';
+async function sendDirectMessage() {
+    if (!currentBusiness) {
+        alert('❌ Ошибка: компания не выбрана');
         return;
     }
-    container.innerHTML = notificationsHistory.map(n => `
-        <div class="history-item">
-            <div class="history-info">
-                <div class="history-title">${escapeHtml(n.title)}</div>
-                <div class="history-message">${escapeHtml(n.message)}</div>
-                <div class="history-meta">Аудитория: ${getSegmentName(n.segment)} • ${n.date}</div>
+    
+    const segment = document.getElementById('notifSegment')?.value || 'all';
+    const title = document.getElementById('notifTitle')?.value || '';
+    const message = document.getElementById('notifMessage')?.value || '';
+    const imageUrl = document.getElementById('notifImageUrl')?.value || null;
+    const buttonLink = document.getElementById('notifButtonLink')?.value || null;
+    const buttonText = document.getElementById('notifButtonText')?.value || 'Перейти';
+    
+    if (!title || !message) {
+        alert('❌ Заполните заголовок и текст сообщения');
+        return;
+    }
+    
+    const segmentNames = {
+        'all': '📊 Все пользователи',
+        'new': '🌱 Новичок',
+        'active': '🔥 Активный',
+        'regular': '⭐ Постоянный',
+        'dormant': '😴 Спящий'
+    };
+    
+    const segmentName = segmentNames[segment] || segment;
+    
+    // Предпросмотр
+    let previewMessage = `📨 Рассылка сообщения\n\n`;
+    previewMessage += `👥 Аудитория: ${segmentName}\n`;
+    previewMessage += `📝 Заголовок: ${title}\n\n`;
+    previewMessage += `💬 Текст:\n${message.substring(0, 200)}${message.length > 200 ? '...' : ''}\n\n`;
+    if (buttonLink) previewMessage += `🔗 Кнопка: ${buttonText} → ${buttonLink}\n`;
+    previewMessage += `\nОтправить?`;
+    
+    if (!confirm(previewMessage)) {
+        return;
+    }
+    
+    const sendBtn = event.target;
+    const originalText = sendBtn.textContent;
+    sendBtn.textContent = '⏳ Отправка...';
+    sendBtn.disabled = true;
+    
+    try {
+        // Получаем пользователей выбранного сегмента
+        const usersResponse = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/users/segment/${segment}`);
+        const usersData = await usersResponse.json();
+        
+        if (!usersData.success) {
+            throw new Error('Не удалось получить пользователей');
+        }
+        
+        const users = usersData.users || [];
+        
+        if (users.length === 0) {
+            alert(`❌ В выбранном сегменте нет пользователей`);
+            sendBtn.textContent = originalText;
+            sendBtn.disabled = false;
+            return;
+        }
+        
+        // Отправляем запрос на backend для рассылки
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                audience: segment, 
+                title, 
+                message,
+                image_url: imageUrl,
+                button_link: buttonLink,
+                button_text: buttonText
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Рассылка отправлена!\n\n📨 Получателей: ${data.sentCount || users.length} пользователей\n👥 Аудитория: ${segmentName}`);
+            
+            // Очищаем поля
+            document.getElementById('notifTitle').value = '';
+            document.getElementById('notifMessage').value = '';
+            document.getElementById('notifImageUrl').value = '';
+            document.getElementById('notifButtonLink').value = '';
+            document.getElementById('notifButtonText').value = '';
+            
+            // Обновляем историю
+            await loadNotificationsHistory();
+        } else {
+            alert('❌ Ошибка отправки: ' + (data.message || data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка отправки:', error);
+        alert('❌ Ошибка подключения к серверу: ' + error.message);
+    } finally {
+        sendBtn.textContent = originalText;
+        sendBtn.disabled = false;
+    }
+}
+
+// ========== УПРАВЛЕНИЕ КАМПАНИЯМИ ==========
+
+let currentEditingCampaignId = null;
+
+async function loadCampaigns() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderCampaignsList(data.campaigns);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки кампаний:', error);
+    }
+}
+
+function renderCampaignsList(campaigns) {
+    const container = document.getElementById('campaignsList');
+    if (!container) return;
+    
+    if (!campaigns || campaigns.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">📭 Нет кампаний. Создайте первую!</div>';
+        return;
+    }
+    
+    const audienceNames = {
+        'all': 'Все',
+        'new': 'Новичок',
+        'active': 'Активный',
+        'regular': 'Постоянный',
+        'dormant': 'Спящий',
+        'birthday': 'День рождения'
+    };
+    
+    container.innerHTML = campaigns.map(campaign => {
+        const lastSent = campaign.last_sent_at ? new Date(campaign.last_sent_at).toLocaleString('ru-RU') : 'Не отправлялась';
+        const isActive = campaign.is_active;
+        
+        return `
+            <div style="margin-bottom: 16px; padding: 16px; background: ${isActive ? '#f0fff4' : '#f8f9fa'}; border-radius: 12px; border-left: 4px solid ${isActive ? '#2ecc71' : '#95a5a6'};">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">
+                            ${campaign.is_default ? '📦 ' : ''}${escapeHtml(campaign.name)}
+                            ${campaign.is_default ? '<span style="font-size: 11px; background: #3498db; color: white; padding: 2px 8px; border-radius: 12px; margin-left: 8px;">Шаблон</span>' : ''}
+                        </div>
+                        <div style="font-size: 13px; color: #555; margin-bottom: 4px;">📨 ${escapeHtml(campaign.title)}</div>
+                        <div style="font-size: 12px; color: #888;">
+                            👥 ${audienceNames[campaign.audience] || campaign.audience} • 
+                            ⏰ Раз в ${campaign.interval_days || 1} ${getDaysWord(campaign.interval_days || 1)}
+                            ${campaign.image_url ? ' • 🖼️ С картинкой' : ''}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span style="font-size: 12px; padding: 4px 12px; border-radius: 20px; background: ${isActive ? '#2ecc71' : '#95a5a6'}; color: white; font-weight: 600;">
+                            ${isActive ? '✅ Включена' : '❌ Выключена'}
+                        </span>
+                    </div>
+                </div>
+                <div style="font-size: 11px; color: #888; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">
+                    🕐 Последняя отправка: ${lastSent}
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 12px;">
+                    <button onclick="editCampaign(${campaign.id})" style="padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px;">✏️ Редактировать</button>
+                    <button onclick="toggleCampaign(${campaign.id}, ${!isActive})" style="padding: 8px 16px; background: ${isActive ? '#e74c3c' : '#2ecc71'}; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px;">
+                        ${isActive ? '⏸️ Выключить' : '▶️ Включить'}
+                    </button>
+                    ${!campaign.is_default ? `<button onclick="deleteCampaign(${campaign.id})" style="padding: 8px 16px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px;">🗑️ Удалить</button>` : ''}
+                    <button onclick="sendCampaignNow(${campaign.id})" style="padding: 8px 16px; background: #9b59b6; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px;">🚀 Отправить сейчас</button>
+                </div>
             </div>
-            <div class="history-status sent">✅ Отправлено</div>
+        `;
+    }).join('');
+}
+
+function getDaysWord(days) {
+    if (days === 1) return 'день';
+    if (days >= 2 && days <= 4) return 'дня';
+    return 'дней';
+}
+
+function showAddCampaignModal() {
+    currentEditingCampaignId = null;
+    document.getElementById('campaignModalTitle').textContent = '➕ Создать кампанию';
+    document.getElementById('campaignName').value = '';
+    document.getElementById('campaignAudience').value = 'all';
+    document.getElementById('campaignTitle').value = '';
+    document.getElementById('campaignMessage').value = '';
+    document.getElementById('campaignImageUrl').value = '';
+    document.getElementById('campaignButtonLink').value = '';
+    document.getElementById('campaignButtonText').value = '';
+    document.getElementById('campaignInterval').value = '7';
+    document.getElementById('campaignActive').checked = false;
+    document.getElementById('campaignSendNow').checked = false;
+    document.getElementById('campaignError').style.display = 'none';
+    
+    // Show interval field by default
+    document.getElementById('campaignIntervalGroup').style.display = 'block';
+    
+    document.getElementById('campaignModal').style.display = 'flex';
+    
+    // Add event listener for audience change
+    document.getElementById('campaignAudience').onchange = function() {
+        const audience = this.value;
+        const intervalGroup = document.getElementById('campaignIntervalGroup');
+        
+        if (audience === 'birthday') {
+            // Hide interval for birthday campaigns
+            intervalGroup.style.display = 'none';
+        } else {
+            // Show interval for other campaigns
+            intervalGroup.style.display = 'block';
+        }
+    };
+}
+
+function closeCampaignModal() {
+    document.getElementById('campaignModal').style.display = 'none';
+}
+
+async function editCampaign(campaignId) {
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const campaign = data.campaigns.find(c => c.id === campaignId);
+            if (!campaign) return;
+            
+            currentEditingCampaignId = campaignId;
+            document.getElementById('campaignModalTitle').textContent = '✏️ Редактировать кампанию';
+            document.getElementById('campaignName').value = campaign.name;
+            document.getElementById('campaignAudience').value = campaign.audience;
+            document.getElementById('campaignTitle').value = campaign.title;
+            document.getElementById('campaignMessage').value = campaign.message;
+            document.getElementById('campaignImageUrl').value = campaign.image_url || '';
+            document.getElementById('campaignButtonLink').value = campaign.button_link || '';
+            document.getElementById('campaignButtonText').value = campaign.button_text || '';
+            document.getElementById('campaignInterval').value = campaign.interval_days || 7;
+            document.getElementById('campaignActive').checked = campaign.is_active;
+            document.getElementById('campaignSendNow').checked = false;
+            document.getElementById('campaignError').style.display = 'none';
+            
+            // Hide/show interval based on audience
+            const intervalGroup = document.getElementById('campaignIntervalGroup');
+            if (campaign.audience === 'birthday') {
+                intervalGroup.style.display = 'none';
+            } else {
+                intervalGroup.style.display = 'block';
+            }
+            
+            document.getElementById('campaignModal').style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки кампании:', error);
+        alert('❌ Ошибка загрузки кампании');
+    }
+}
+
+async function saveCampaign() {
+    const name = document.getElementById('campaignName').value.trim();
+    const audience = document.getElementById('campaignAudience').value;
+    const title = document.getElementById('campaignTitle').value.trim();
+    const message = document.getElementById('campaignMessage').value.trim();
+    const imageUrl = document.getElementById('campaignImageUrl').value.trim() || null;
+    const buttonLink = document.getElementById('campaignButtonLink').value.trim() || null;
+    const buttonText = document.getElementById('campaignButtonText').value.trim() || 'Перейти';
+    const intervalDays = audience === 'birthday' ? 1 : (parseInt(document.getElementById('campaignInterval').value) || 7);
+    const isActive = document.getElementById('campaignActive').checked;
+    const sendNow = document.getElementById('campaignSendNow').checked;
+    
+    if (!name || !title || !message) {
+        const errorEl = document.getElementById('campaignError');
+        errorEl.textContent = '❌ Заполните название, заголовок и сообщение';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    // Check if trying to create a second birthday campaign
+    if (audience === 'birthday' && !currentEditingCampaignId) {
+        // Load existing campaigns to check
+        try {
+            const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/campaigns`);
+            const data = await response.json();
+            
+            if (data.success) {
+                const hasBirthdayCampaign = data.campaigns.some(c => c.audience === 'birthday');
+                if (hasBirthdayCampaign) {
+                    const errorEl = document.getElementById('campaignError');
+                    errorEl.textContent = '❌ Кампания дня рождения уже существует. Нельзя создать более одной.';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка проверки кампаний:', error);
+        }
+    }
+    
+    try {
+        const url = currentEditingCampaignId 
+            ? `${API_URL}/api/campaigns/${currentEditingCampaignId}`
+            : `${API_URL}/api/companies/${currentBusiness.id}/campaigns`;
+        
+        const method = currentEditingCampaignId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name,
+                title,
+                message,
+                audience,
+                image_url: imageUrl,
+                button_link: buttonLink,
+                button_text: buttonText,
+                interval_days: intervalDays,
+                is_active: isActive
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Если нужно отправить сразу
+            if (sendNow && isActive) {
+                await sendCampaignNow(data.campaign.id || currentEditingCampaignId);
+            }
+            
+            closeCampaignModal();
+            await loadCampaigns();
+            alert(`✅ Кампания ${currentEditingCampaignId ? 'обновлена' : 'создана'}!`);
+        } else {
+            const errorEl = document.getElementById('campaignError');
+            errorEl.textContent = '❌ ' + (data.message || data.error);
+            errorEl.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения кампании:', error);
+        const errorEl = document.getElementById('campaignError');
+        errorEl.textContent = '❌ Ошибка сохранения: ' + error.message;
+        errorEl.style.display = 'block';
+    }
+}
+
+async function toggleCampaign(campaignId, isActive) {
+    try {
+        const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/toggle`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: isActive })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await loadCampaigns();
+            alert(isActive ? '✅ Кампания включена' : '⏸️ Кампания выключена');
+        }
+    } catch (error) {
+        console.error('Ошибка переключения кампании:', error);
+        alert('❌ Ошибка переключения кампании');
+    }
+}
+
+async function deleteCampaign(campaignId) {
+    if (!confirm('❓ Вы уверены, что хотите удалить эту кампанию?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/campaigns/${campaignId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await loadCampaigns();
+            alert('✅ Кампания удалена');
+        }
+    } catch (error) {
+        console.error('Ошибка удаления кампании:', error);
+        alert('❌ Ошибка удаления кампании');
+    }
+}
+
+async function sendCampaignNow(campaignId) {
+    if (!confirm('🚀 Отправить кампанию прямо сейчас?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/execute`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await loadCampaigns();
+            await loadNotificationsHistory();
+            alert(`✅ Кампания отправлена ${data.sentCount || 0} пользователям`);
+        } else {
+            alert('❌ Ошибка отправки: ' + (data.message || data.error));
+        }
+    } catch (error) {
+        console.error('Ошибка отправки кампании:', error);
+        alert('❌ Ошибка отправки кампании');
+    }
+}
+
+
+async function loadNotificationsHistory() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/notifications/history?limit=50`);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderNotificationsHistory(data.history);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+    }
+}
+
+function renderNotificationsHistory(history) {
+    const container = document.getElementById('notificationsHistory');
+    if (!container) return;
+    
+    const segmentNames = {
+        'all': 'Все',
+        'new': 'Новичок',
+        'active': 'Активный',
+        'regular': 'Постоянный',
+        'dormant': 'Спящий'
+    };
+    
+    if (!history || history.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">📭 Нет отправленных сообщений</div>';
+        return;
+    }
+    
+    container.innerHTML = history.map(notif => `
+        <div style="margin-bottom: 12px; padding: 12px; background: #f8f9fa; border-radius: 12px; border-left: 3px solid #ff4d4d;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(notif.title)}</div>
+                    <div style="font-size: 13px; color: #555; margin-bottom: 8px;">${escapeHtml(notif.message.substring(0, 100))}${notif.message.length > 100 ? '...' : ''}</div>
+                </div>
+                <div style="font-size: 12px; color: #2ecc71; white-space: nowrap; margin-left: 12px;">✅ ${notif.sent_count || 0} чел.</div>
+            </div>
+            <div style="font-size: 11px; color: #888; margin-top: 8px;">
+                👥 ${segmentNames[notif.audience] || notif.audience} • ${new Date(notif.sent_at || notif.created_at).toLocaleString('ru-RU')}
+            </div>
         </div>
     `).join('');
 }

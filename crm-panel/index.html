@@ -276,26 +276,79 @@
                 </div>
 
                 <!-- Модуль 3: Уведомления -->
-                <div id="notificationsModule" class="crm-module">
-                    <div class="module-header"><h2>📨 Умные уведомления</h2></div>
-                    <div class="notifications-grid">
-                        <div class="notification-card">
-                            <h3>📱 Создать рассылку</h3>
-                            <div class="form-group"><label>Тип</label><select id="notifType"><option>Push</option><option>SMS</option></select></div>
-                            <div class="form-group"><label>Аудитория</label><select id="notifSegment"><option value="all">Все</option><option value="sleeping">Спящие</option><option value="active">Активные</option><option value="vip">VIP</option></select></div>
-                            <div class="form-group"><label>Заголовок</label><input type="text" id="notifTitle" placeholder="Специальное предложение!"></div>
-                            <div class="form-group"><label>Сообщение</label><textarea id="notifMessage" rows="3" placeholder="Текст..."></textarea></div>
-                            <button class="btn-send" onclick="sendNotification()">📤 Отправить</button>
-                        </div>
-                        <div class="notification-card">
-                            <h3>⚙️ Автоматические кампании</h3>
-                            <div class="auto-campaign"><div class="campaign-item"><div><div class="campaign-title">🔄 Возвращение спящих</div><div class="campaign-desc">При неактивности 30 дней</div></div><div class="toggle-switch"><input type="checkbox" id="autoReactivate" checked><span>Активна</span></div></div>
-                            <div class="campaign-item"><div><div class="campaign-title">🎂 День рождения</div><div class="campaign-desc">Поздравление с бонусом</div></div><div class="toggle-switch"><input type="checkbox" id="autoBirthday" checked><span>Активна</span></div></div>
-                            <div class="campaign-item"><div><div class="campaign-title">📍 Geo-уведомления</div><div class="campaign-desc">При входе в радиусе 500м</div></div><div class="toggle-switch"><input type="checkbox" id="autoGeo" checked><span>Активна</span></div></div></div>
-                        </div>
-                    </div>
-                    <div class="notification-history"><h3>📋 История рассылок</h3><div id="notificationsHistory"></div></div>
-                </div>
+                <!-- Модуль 3: Уведомления -->
+<div id="notificationsModule" class="crm-module">
+    <div class="module-header">
+        <h2>📨 Рассылка сообщений в VK</h2>
+    </div>
+    
+    <!-- Форма отправки сообщения -->
+    <div class="notification-card" style="margin-bottom: 24px;">
+        <h3>📝 Отправить сообщение</h3>
+        <div class="form-group">
+            <label>👥 Выберите аудиторию</label>
+            <select id="notifSegment" class="form-select" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
+                <option value="all">📊 Все пользователи</option>
+                <option value="new">🌱 Новичок (1 покупка, ≤14 дней)</option>
+                <option value="active">🔥 Активный (2+ покупок, ≤7 дней)</option>
+                <option value="regular">⭐ Постоянный (2+ покупок, ≤3 дней)</option>
+                <option value="dormant">😴 Спящий (≥20 дней без покупок)</option>
+            </select>
+            <small style="display: block; margin-top: 4px; color: #666;">
+                💡 Пользователи автоматически классифицируются на основе их покупок
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label>📝 Заголовок сообщения</label>
+            <input type="text" id="notifTitle" class="form-input" placeholder="Например: 🔥 Специальное предложение для вас!" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
+        </div>
+        
+        <div class="form-group">
+            <label>💬 Текст сообщения</label>
+            <textarea id="notifMessage" rows="5" class="form-textarea" placeholder="Введите текст сообщения...&#10;&#10;Поддерживаются смайлики и перенос строк." style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; resize: vertical;"></textarea>
+            <small style="display: block; margin-top: 4px; color: #666;">
+                📨 Сообщение будет отправлено напрямую в личные сообщения ВКонтакте
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label>🖼️ Ссылка на изображение (опционально)</label>
+            <input type="text" id="notifImageUrl" class="form-input" placeholder="https://example.com/image.jpg" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
+            <small style="display: block; margin-top: 4px; color: #666;">
+                Можно добавить картинку к уведомлению
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label>🔗 Кнопка с ссылкой (опционально)</label>
+            <input type="text" id="notifButtonLink" class="form-input" placeholder="https://vk.com/app" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
+            <input type="text" id="notifButtonText" class="form-input" placeholder="Текст кнопки" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; margin-top: 8px;">
+        </div>
+        
+        <button class="btn-send" onclick="sendDirectMessage()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ff4d4d, #e74c3c); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin-top: 8px;">
+            📤 Отправить сообщение
+        </button>
+    </div>
+    
+    <!-- История рассылок -->
+    <div class="notification-card">
+        <h3>📋 История отправленных сообщений</h3>
+        <div id="notificationsHistory" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+    
+    <!-- Управление кампаниями -->
+    <div class="notification-card" style="margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0;">🔄 Автоматические кампании</h3>
+            <button class="btn-save" onclick="showAddCampaignModal()" style="padding: 10px 20px;">➕ Создать кампанию</button>
+        </div>
+        <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+            💡 Кампании автоматически отправляют сообщения по расписанию. Создайте свои или используйте готовые шаблоны.
+        </p>
+        <div id="campaignsList" style="max-height: 600px; overflow-y: auto;"></div>
+    </div>
+</div>
 
                 <!-- Модуль 4: Маркетинг (Акции и Задания) -->
 <div id="marketingModule" class="crm-module">
@@ -440,6 +493,79 @@
         <section id="faq" class="faq"><div class="container"><div class="section-header"><h2>Частые вопросы</h2></div><div class="faq-grid"><div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Сколько стоит?<span>+</span></div><div class="faq-answer">От 6 000 ₽/месяц. Первый месяц бесплатно.</div></div><div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Скорость запуска?<span>+</span></div><div class="faq-answer">7 дней под ключ.</div></div></div></div></section>
         <section id="cta" class="cta"><div class="container"><h2>Получите демо системы</h2><div class="cta-form"><div style="display: flex; gap: 16px; flex-wrap: wrap; width: 100%;"><input type="text" class="cta-input" placeholder="Название бренда" id="demoBrand"><input type="email" class="cta-input" placeholder="Ваш email" id="demoEmail"><button class="cta-button" onclick="submitDemo()">Отправить</button></div></div></div></section>
         <footer class="footer"><div class="container"><div class="footer-grid"><div><div class="footer-logo">LoyaltyPrime</div><p>Программа лояльности для бизнеса</p></div><div><h4>Продукт</h4><ul class="footer-links"><li><a href="#card">Карта</a></li><li><a href="#ranks">Ранги</a></li></ul></div><div><h4>Контакты</h4><ul class="footer-links"><li>@loyaltyprime</li><li>info@loyaltyprime.ru</li></ul></div></div><div style="text-align: center; margin-top: 60px;">© 2026 LoyaltyPrime</div></div></footer>
+    </div>
+
+    <!-- Модальное окно создания/редактирования кампании -->
+    <div id="campaignModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 700px;">
+            <span class="modal-close" onclick="closeCampaignModal()">&times;</span>
+            <div class="modal-title" id="campaignModalTitle">➕ Создать кампанию</div>
+            
+            <div class="form-group">
+                <label>📝 Название кампании</label>
+                <input type="text" id="campaignName" class="form-input" placeholder="Например: Возврат спящих пользователей">
+            </div>
+            
+            <div class="form-group">
+                <label>👥 Аудитория</label>
+                <select id="campaignAudience" class="form-select" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
+                    <option value="all">📊 Все пользователи</option>
+                    <option value="new">🌱 Новичок (1 покупка, ≤14 дней)</option>
+                    <option value="active">🔥 Активный (2+ покупок, ≤7 дней)</option>
+                    <option value="regular">⭐ Постоянный (2+ покупок, ≤3 дней)</option>
+                    <option value="dormant">😴 Спящий (≥20 дней без покупок)</option>
+                    <option value="birthday">🎂 С днем рождения (текущий месяц)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>📨 Заголовок сообщения</label>
+                <input type="text" id="campaignTitle" class="form-input" placeholder="Заголовок для VK сообщения">
+            </div>
+            
+            <div class="form-group">
+                <label>💬 Текст сообщения</label>
+                <textarea id="campaignMessage" rows="5" class="form-textarea" placeholder="Текст сообщения..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>🖼️ Ссылка на изображение (опционально)</label>
+                <input type="text" id="campaignImageUrl" class="form-input" placeholder="https://example.com/image.jpg">
+            </div>
+            
+            <div class="form-group">
+                <label>🔗 Кнопка с ссылкой (опционально)</label>
+                <input type="text" id="campaignButtonLink" class="form-input" placeholder="https://vk.com/app">
+                <input type="text" id="campaignButtonText" class="form-input" placeholder="Текст кнопки" style="margin-top: 8px;">
+            </div>
+            
+            <div class="form-group" id="campaignIntervalGroup">
+                <label>⏰ Интервал отправки (дни)</label>
+                <input type="number" id="campaignInterval" class="form-input" value="7" min="1" max="365">
+                <small style="display: block; margin-top: 4px; color: #666;">
+                    💡 Сообщение будет отправляться раз в указанное количество дней
+                </small>
+            </div>
+            
+            <div class="form-group" style="display: flex; gap: 20px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="campaignActive" style="width: 20px; height: 20px;">
+                    <span>✅ Включить кампанию</span>
+                </label>
+                
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="campaignSendNow" style="width: 20px; height: 20px;">
+                    <span>🚀 Отправить сразу после создания</span>
+                </label>
+            </div>
+            
+            <div id="campaignError" class="error" style="display: none;"></div>
+            
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button class="btn-save" onclick="saveCampaign()" style="flex: 1;">💾 Сохранить</button>
+                <button class="btn-cancel" onclick="closeCampaignModal()" style="flex: 1; padding: 14px; background: #95a5a6; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;">❌ Отмена</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>

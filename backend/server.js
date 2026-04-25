@@ -94,28 +94,19 @@ async function createDefaultCampaignsForCompany(companyId) {
             {
                 name: '😴 Возвращение спящих',
                 title: 'Мы скучаем по вам!',
-                message: 'Вернитесь к нам и получите двойные бонусы на следующую покупку!',
+                message: 'Вы давно не заходили к нам. Вернитесь и получите специальные бонусы на следующую покупку! 🎁',
                 audience: 'dormant',
-                is_active: true,
-                interval_days: 3,
+                is_active: false, // По умолчанию выключена
+                interval_days: 7,
                 is_default: true
             },
             {
                 name: '🎂 Поздравление с днем рождения',
-                title: 'С днем рождения! 🎉',
-                message: 'Поздравляем! В честь вашего праздника дарим вам специальные бонусы!',
-                audience: 'all',
-                is_active: true,
+                title: 'С днем рождения! 🎉🎂',
+                message: 'Поздравляем вас с днем рождения! В честь вашего праздника дарим вам удвоенные бонусы! Желаем счастья и здоровья! 🎈🎁',
+                audience: 'birthday',
+                is_active: false, // По умолчанию выключена
                 interval_days: 1,
-                is_default: true
-            },
-            {
-                name: '🔥 Достижение стрика',
-                title: 'Отличная серия! 🔥',
-                message: 'Вы с нами уже несколько дней подряд! Продолжайте получать бонусы!',
-                audience: 'active',
-                is_active: true,
-                interval_days: 2,
                 is_default: true
             }
         ];
@@ -2201,24 +2192,72 @@ app.put('/api/companies/:companyId/bonus-settings', async (req, res) => {
 // ============ API ДЛЯ УВЕДОМЛЕНИЙ ============
 
 // Отправка рассылки
+// Отправка рассылки
 app.post('/api/companies/:companyId/notifications/send', async (req, res) => {
     try {
         const { companyId } = req.params;
-        const { audience, title, message } = req.body;
+        const { audience, title, message, image_url, button_link, button_text } = req.body;
         
-        console.log('📨 Запрос на отправку рассылки:', { companyId, audience, title, message });
+        console.log('📨 Запрос на отправку рассылки:', { companyId, audience, title, message: message?.substring(0, 50) });
         
         if (!title || !message) {
             return res.status(400).json({ success: false, message: 'Заголовок и сообщение обязательны' });
         }
         
-        const result = await sendNotification(companyId, audience, title, message);
-        console.log('✅ Рассылка отправлена успешно:', result);
-        res.json({ success: true, ...result });
+        // Получаем пользователей по аудитории
+        const users = await getUsersBySegment(companyId, audience);
+        
+        if (users.length === 0) {
+            return res.json({ 
+                success: true, 
+                sentCount: 0, 
+                message: 'Нет пользователей в выбранном сегменте' 
+            });
+        }
+        
+        // Сохраняем в историю рассылок
+        const result = await query(
+            `INSERT INTO notifications (company_id, title, message, audience, status, sent_count, sent_at)
+             VALUES ($1, $2, $3, $4, 'sent', $5, NOW())
+             RETURNING *`,
+            [companyId, title, message, audience, users.length]
+        );
+        
+        // Отправляем уведомления через бота
+        const botUrl = 'http://localhost:5000/send_messages';
+        const payload = {
+            company_id: parseInt(companyId),
+            notification_id: result.rows[0].id,
+            title: title,
+            message: message,
+            image_url: image_url || null,
+            button_link: button_link || null,
+            button_text: button_text || 'Перейти',
+            users: users
+        };
+        
+        // Отправляем запрос боту асинхронно
+        fetch(botUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(response => {
+            console.log('✅ Бот получил задачу на отправку');
+        }).catch(error => {
+            console.error('❌ Ошибка отправки задачи боту:', error);
+        });
+        
+        console.log(`📨 Рассылка отправлена: ${title} (${users.length} пользователей, аудитория: ${audience})`);
+        
+        res.json({ 
+            success: true, 
+            notification: result.rows[0],
+            sentCount: users.length,
+            users: users.map(u => ({ vk_id: u.vk_id, name: u.name }))
+        });
     } catch (error) {
-        console.error('❌ Ошибка отправки уведомления:', error);
-        console.error('Stack:', error.stack);
-        res.status(500).json({ success: false, error: error.message, message: error.message });
+        console.error('❌ Ошибка отправки рассылки:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -2253,7 +2292,7 @@ app.get('/api/companies/:companyId/campaigns', async (req, res) => {
 app.post('/api/companies/:companyId/campaigns', async (req, res) => {
     try {
         const { companyId } = req.params;
-        const { name, title, message, audience, is_active, interval_days, image_url, is_default } = req.body;
+        const { name, title, message, audience, is_active, interval_days, image_url, is_default, button_link, button_text } = req.body;
         
         console.log('📝 Запрос на создание кампании:', { companyId, name, title, audience, interval_days });
         
@@ -2270,7 +2309,9 @@ app.post('/api/companies/:companyId/campaigns', async (req, res) => {
             is_active !== undefined ? is_active : true,
             interval_days || 1,
             image_url || null,
-            is_default || false
+            is_default || false,
+            button_link || null,
+            button_text || 'Перейти'
         );
         
         console.log('✅ Кампания создана:', campaign);
@@ -2286,7 +2327,7 @@ app.post('/api/companies/:companyId/campaigns', async (req, res) => {
 app.put('/api/campaigns/:campaignId', async (req, res) => {
     try {
         const { campaignId } = req.params;
-        const { name, title, message, audience, is_active, interval_days, image_url } = req.body;
+        const { name, title, message, audience, is_active, interval_days, image_url, button_link, button_text } = req.body;
         
         const campaign = await updateNotificationCampaign(
             campaignId,
@@ -2296,7 +2337,9 @@ app.put('/api/campaigns/:campaignId', async (req, res) => {
             audience,
             is_active,
             interval_days,
-            image_url
+            image_url,
+            button_link || null,
+            button_text || 'Перейти'
         );
         
         res.json({ success: true, campaign });
@@ -2350,6 +2393,8 @@ app.post('/api/campaigns/:campaignId/execute', async (req, res) => {
                 title: result.campaign.title,
                 message: result.campaign.message,
                 image_url: result.image_url,
+                button_link: result.button_link,
+                button_text: result.button_text,
                 users: result.users
             };
             
@@ -2384,6 +2429,9 @@ app.get('/api/companies/:companyId/users/segment/:segment', async (req, res) => 
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
+
+
 
 const PORT = 3001;
 app.listen(PORT, () => {
