@@ -223,8 +223,20 @@ async function initDatabase() {
             )
         `);
 
+        await query(`
+            CREATE TABLE IF NOT EXISTS cashier_credentials (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE UNIQUE,
+                login VARCHAR(255) NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         console.log('✅ Таблицы созданы/проверены');
-        
+		
+         await initLocationTables();
         await addMissingColumns();
 		await addGiveawayColumns();
 		await migrateGiveawaysTable();
@@ -1421,6 +1433,9 @@ async function updateUserBalance(userId, change, type, description) {
     if (type === 'earn') {
         await query('UPDATE users SET total_earned = total_earned + $1 WHERE id = $2', [change, userId]);
         await query('UPDATE user_progress SET total_earned = total_earned + $1 WHERE user_id = $2', [change, userId]);
+    } else if (type === 'spend') {
+        // ✅ ДОБАВЬТЕ ЭТУ СТРОКУ:
+        await query('UPDATE users SET total_spent = total_spent + $1 WHERE id = $2', [Math.abs(change), userId]);
     }
     
     await query(
@@ -3038,6 +3053,377 @@ async function saveNotificationToHistory(companyId, title, message, audience, se
     }
 }
 
+// Добавьте эти функции в database-pg.js после существующих
+
+// ============ API ДЛЯ ГОРОДОВ И АДРЕСОВ ============
+
+// Создание таблиц городов и адресов
+async function initLocationTables() {
+    try {
+        // Таблица городов
+        await query(`
+            CREATE TABLE IF NOT EXISTS cities (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                is_active BOOLEAN DEFAULT true,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(company_id, name)
+            )
+        `);
+        
+        // Таблица адресов
+        await query(`
+            CREATE TABLE IF NOT EXISTS addresses (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+                address TEXT NOT NULL,
+                latitude DECIMAL(10, 8),
+                longitude DECIMAL(11, 8),
+                phone VARCHAR(50),
+                working_hours TEXT,
+                is_main BOOLEAN DEFAULT false,
+                is_active BOOLEAN DEFAULT true,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        
+        // Таблица выбранных локаций пользователей (ДОБАВИТЬ СЮДА)
+        await query(`
+            CREATE TABLE IF NOT EXISTS user_selected_locations (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                selected_address_id INTEGER NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(user_id, company_id)
+            )
+        `);
+        
+        console.log('✅ Таблицы городов, адресов и выбранных локаций созданы/проверены');
+    } catch (error) {
+        console.error('❌ Ошибка создания таблиц локаций:', error);
+    }
+}
+
+// Получить все города компании
+async function getCities(companyId) {
+    const result = await query(
+        'SELECT * FROM cities WHERE company_id = $1 AND is_active = true ORDER BY sort_order, name',
+        [companyId]
+    );
+    return result.rows;
+}
+
+// Получить город по ID
+async function getCityById(cityId) {
+    const result = await query('SELECT * FROM cities WHERE id = $1', [cityId]);
+    return result.rows[0];
+}
+
+// Добавить город
+async function addCity(companyId, name, sortOrder = 0) {
+    const result = await query(
+        `INSERT INTO cities (company_id, name, sort_order) 
+         VALUES ($1, $2, $3) 
+         ON CONFLICT (company_id, name) DO UPDATE SET 
+            is_active = true, 
+            updated_at = NOW()
+         RETURNING *`,
+        [companyId, name, sortOrder]
+    );
+    return result.rows[0];
+}
+
+// Обновить город
+async function updateCity(cityId, name, isActive, sortOrder) {
+    const result = await query(
+        `UPDATE cities 
+         SET name = $1, is_active = $2, sort_order = $3, updated_at = NOW()
+         WHERE id = $4 
+         RETURNING *`,
+        [name, isActive, sortOrder, cityId]
+    );
+    return result.rows[0];
+}
+
+// Удалить город (мягкое удаление)
+async function deleteCity(cityId) {
+    await query('UPDATE cities SET is_active = false WHERE id = $1', [cityId]);
+    // Также деактивируем связанные адреса
+    await query('UPDATE addresses SET is_active = false WHERE city_id = $1', [cityId]);
+    return true;
+}
+
+// Получить все адреса компании
+async function getAddresses(companyId, cityId = null) {
+    let queryText = `
+        SELECT a.*, c.name as city_name 
+        FROM addresses a
+        LEFT JOIN cities c ON a.city_id = c.id
+        WHERE a.company_id = $1 AND a.is_active = true
+    `;
+    const params = [companyId];
+    
+    if (cityId) {
+        queryText += ` AND a.city_id = $2`;
+        params.push(cityId);
+    }
+    
+    queryText += ` ORDER BY a.is_main DESC, a.sort_order, a.address`;
+    
+    const result = await query(queryText, params);
+    return result.rows;
+}
+
+// Получить адрес по ID
+async function getAddressById(addressId) {
+    const result = await query(
+        `SELECT a.*, c.name as city_name 
+         FROM addresses a
+         LEFT JOIN cities c ON a.city_id = c.id
+         WHERE a.id = $1`,
+        [addressId]
+    );
+    return result.rows[0];
+}
+
+// Добавить адрес
+async function addAddress(companyId, addressData) {
+    const { cityId, address, latitude, longitude, phone, workingHours, isMain, sortOrder = 0 } = addressData;
+    
+    // Если этот адрес устанавливается как основной, сбрасываем флаг у других адресов
+    if (isMain) {
+        await query(
+            'UPDATE addresses SET is_main = false WHERE company_id = $1',
+            [companyId]
+        );
+    }
+    
+    const result = await query(
+        `INSERT INTO addresses (company_id, city_id, address, latitude, longitude, phone, working_hours, is_main, sort_order) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+         RETURNING *`,
+        [companyId, cityId || null, address, latitude || null, longitude || null, phone || null, workingHours || null, isMain || false, sortOrder]
+    );
+    return result.rows[0];
+}
+
+// Обновить адрес
+async function updateAddress(addressId, addressData) {
+    const { cityId, address, latitude, longitude, phone, workingHours, isMain, isActive, sortOrder } = addressData;
+    
+    // Если этот адрес устанавливается как основной, сбрасываем флаг у других адресов
+    if (isMain) {
+        const addr = await getAddressById(addressId);
+        if (addr) {
+            await query(
+                'UPDATE addresses SET is_main = false WHERE company_id = $1',
+                [addr.company_id]
+            );
+        }
+    }
+    
+    const result = await query(
+        `UPDATE addresses 
+         SET city_id = $1, address = $2, latitude = $3, longitude = $4, 
+             phone = $5, working_hours = $6, is_main = $7, is_active = $8, 
+             sort_order = $9, updated_at = NOW()
+         WHERE id = $10 
+         RETURNING *`,
+        [cityId || null, address, latitude || null, longitude || null, 
+         phone || null, workingHours || null, isMain || false, isActive !== undefined ? isActive : true, 
+         sortOrder || 0, addressId]
+    );
+    return result.rows[0];
+}
+
+// Удалить адрес (мягкое удаление)
+async function deleteAddress(addressId) {
+    await query('UPDATE addresses SET is_active = false WHERE id = $1', [addressId]);
+    return true;
+}
+
+// Получить основную локацию (город + адрес) для отображения в mini-app
+async function getMainLocation(companyId) {
+    // Сначала пытаемся получить основной адрес
+    let address = await query(
+        `SELECT a.*, c.name as city_name 
+         FROM addresses a
+         LEFT JOIN cities c ON a.city_id = c.id
+         WHERE a.company_id = $1 AND a.is_active = true AND a.is_main = true
+         LIMIT 1`,
+        [companyId]
+    );
+    
+    if (address.rows.length > 0) {
+        return {
+            city: address.rows[0].city_name,
+            address: address.rows[0].address,
+            addressId: address.rows[0].id,
+            phone: address.rows[0].phone,
+            workingHours: address.rows[0].working_hours,
+            latitude: address.rows[0].latitude,
+            longitude: address.rows[0].longitude
+        };
+    }
+    
+    // Если нет основного адреса, берем первый активный
+    address = await query(
+        `SELECT a.*, c.name as city_name 
+         FROM addresses a
+         LEFT JOIN cities c ON a.city_id = c.id
+         WHERE a.company_id = $1 AND a.is_active = true
+         ORDER BY a.sort_order
+         LIMIT 1`,
+        [companyId]
+    );
+    
+    if (address.rows.length > 0) {
+        return {
+            city: address.rows[0].city_name,
+            address: address.rows[0].address,
+            addressId: address.rows[0].id,
+            phone: address.rows[0].phone,
+            workingHours: address.rows[0].working_hours,
+            latitude: address.rows[0].latitude,
+            longitude: address.rows[0].longitude
+        };
+    }
+    
+    return null;
+}
+
+// Получить все локации для отображения в mini-app (для выбора города и адреса)
+async function getAllLocationsForApp(companyId) {
+    const cities = await getCities(companyId);
+    const addresses = await getAddresses(companyId);
+    
+    // Группируем адреса по городам
+    const locationsByCity = {};
+    for (const city of cities) {
+        locationsByCity[city.id] = {
+            cityId: city.id,
+            cityName: city.name,
+            addresses: addresses.filter(a => a.city_id === city.id)
+        };
+    }
+    
+    // Добавляем адреса без города
+    const addressesWithoutCity = addresses.filter(a => !a.city_id);
+    if (addressesWithoutCity.length > 0) {
+        locationsByCity['no_city'] = {
+            cityId: null,
+            cityName: 'Другие адреса',
+            addresses: addressesWithoutCity
+        };
+    }
+    
+    return {
+        cities: cities,
+        addresses: addresses,
+        locationsByCity: locationsByCity,
+        mainLocation: await getMainLocation(companyId)
+    };
+}
+
+// Обновить выбранную локацию пользователя
+async function updateUserSelectedLocation(userId, companyId, addressId) {
+    const result = await query(
+        `INSERT INTO user_selected_locations (user_id, company_id, selected_address_id, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (user_id, company_id) 
+         DO UPDATE SET selected_address_id = $3, updated_at = NOW()
+         RETURNING *`,
+        [userId, companyId, addressId]
+    );
+    return result.rows[0];
+}
+
+// Получить выбранную локацию пользователя
+async function getUserSelectedLocation(userId, companyId) {
+    const result = await query(
+        `SELECT usl.*, a.address, a.city_id, c.name as city_name, a.phone, a.working_hours, a.latitude, a.longitude
+         FROM user_selected_locations usl
+         LEFT JOIN addresses a ON usl.selected_address_id = a.id
+         LEFT JOIN cities c ON a.city_id = c.id
+         WHERE usl.user_id = $1 AND usl.company_id = $2`,
+        [userId, companyId]
+    );
+    
+    if (result.rows.length > 0) {
+        return result.rows[0];
+    }
+    
+    // Если нет выбранной локации, возвращаем основную
+    return await getMainLocation(companyId);
+}
+
+// ========== CASHIER CREDENTIALS ==========
+
+async function getCashierCredentials(companyId) {
+    try {
+        const result = await query(
+            'SELECT login, password FROM cashier_credentials WHERE company_id = $1',
+            [companyId]
+        );
+        
+        if (result.rows.length > 0) {
+            return result.rows[0];
+        }
+        return null;
+    } catch (error) {
+        console.error('Ошибка получения данных кассира:', error);
+        return null;
+    }
+}
+
+async function findCashierByLogin(login) {
+    try {
+        const result = await query(
+            `SELECT cc.company_id, cc.login, cc.password, c.name as company_name
+             FROM cashier_credentials cc
+             JOIN companies c ON cc.company_id = c.id
+             WHERE cc.login = $1`,
+            [login]
+        );
+        
+        if (result.rows.length > 0) {
+            return result.rows[0];
+        }
+        return null;
+    } catch (error) {
+        console.error('Ошибка поиска кассира по логину:', error);
+        return null;
+    }
+}
+
+async function saveCashierCredentials(companyId, login, password) {
+    try {
+        const result = await query(
+            `INSERT INTO cashier_credentials (company_id, login, password, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (company_id) 
+             DO UPDATE SET login = $2, password = $3, updated_at = NOW()
+             RETURNING *`,
+            [companyId, login, password]
+        );
+        
+        return result.rows[0];
+    } catch (error) {
+        console.error('Ошибка сохранения данных кассира:', error);
+        throw error;
+    }
+}
+
+
+
 module.exports = {
     pool,
     query,
@@ -3126,5 +3512,23 @@ module.exports = {
     getActiveCampaigns,
     getUsersBySegment,
     executeCampaign,
-	saveNotificationToHistory
+	saveNotificationToHistory,
+	initLocationTables,
+    getCities,
+    addCity,
+    updateCity,
+    deleteCity,
+    getAddresses,
+    getAddressById,
+    addAddress,
+    updateAddress,
+    deleteAddress,
+    getAllLocationsForApp,
+    getUserSelectedLocation,
+    updateUserSelectedLocation,
+    getMainLocation,
+    // Cashier credentials
+    getCashierCredentials,
+    saveCashierCredentials,
+    findCashierByLogin
 };

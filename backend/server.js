@@ -73,7 +73,25 @@ const {
     toggleNotificationCampaign,
     getActiveCampaigns,
     getUsersBySegment,
-    executeCampaign
+    executeCampaign,
+	initLocationTables,
+    getCities,
+    addCity,
+    updateCity,
+    deleteCity,
+    getAddresses,
+    getAddressById,
+    addAddress,
+    updateAddress,
+    deleteAddress,
+    getAllLocationsForApp,
+    getUserSelectedLocation,
+    updateUserSelectedLocation,
+    getMainLocation,
+    // Cashier credentials
+    getCashierCredentials,
+    saveCashierCredentials,
+    findCashierByLogin
 } = require('./database-pg');
 
 const app = express();
@@ -565,30 +583,20 @@ app.post('/api/users/updateBalance', async (req, res) => {
         const newBalance = await updateUserBalance(userId, change, type, description);
         
         const user = await getUserById(userId);
-        const tiers = await getCompanyTiers(user.company_id);
-        
-        let currentTier = tiers[0];
-        for (let i = tiers.length - 1; i >= 0; i--) {
-            if (newBalance >= tiers[i].threshold) {
-                currentTier = tiers[i];
-                break;
-            }
-        }
         
         res.json({ 
             success: true, 
             newBalance,
-            currentTier,
-            nextTier: getNextTier(tiers, newBalance)
+            newTotalSpent: user.total_spent  
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-function getNextTier(tiers, balance) {
+function getNextTier(tiers, totalSpent) {
     for (let i = 0; i < tiers.length; i++) {
-        if (balance < tiers[i].threshold) return tiers[i];
+        if (totalSpent < tiers[i].threshold) return tiers[i];
     }
     return null;
 }
@@ -1762,6 +1770,211 @@ app.delete('/api/giveaways/:id', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
+// ============ API ДЛЯ КАССИРА ============
+
+// Получение данных кассира
+app.get('/api/companies/:companyId/cashier-credentials', async (req, res) => {
+    try {
+        const credentials = await getCashierCredentials(req.params.companyId);
+        
+        if (credentials) {
+            res.json({ success: true, credentials: { login: credentials.login } });
+        } else {
+            res.json({ success: true, credentials: null });
+        }
+    } catch (error) {
+        console.error('Ошибка получения данных кассира:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Сохранение данных кассира
+app.post('/api/companies/:companyId/cashier-credentials', async (req, res) => {
+    try {
+        const { login, password } = req.body;
+        
+        if (!login || !password) {
+            return res.status(400).json({ success: false, message: 'Заполните все поля' });
+        }
+        
+        await saveCashierCredentials(req.params.companyId, login, password);
+        res.json({ success: true, message: 'Данные кассира сохранены' });
+    } catch (error) {
+        console.error('Ошибка сохранения данных кассира:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Авторизация кассира
+app.post('/api/cashier/login', async (req, res) => {
+    try {
+        const { login, password, companyId } = req.body;
+        
+        if (!login || !password) {
+            return res.status(400).json({ success: false, message: 'Заполните все поля' });
+        }
+        
+        let credentials;
+        let targetCompanyId = companyId;
+        
+        // If companyId is provided, use it (backward compatibility)
+        if (companyId) {
+            credentials = await getCashierCredentials(companyId);
+        } else {
+            // Otherwise, find cashier by login (independent page)
+            credentials = await findCashierByLogin(login);
+            if (credentials) {
+                targetCompanyId = credentials.company_id;
+            }
+        }
+        
+        if (!credentials) {
+            return res.status(401).json({ success: false, message: 'Неверный логин или пароль' });
+        }
+        
+        if (credentials.password !== password) {
+            return res.status(401).json({ success: false, message: 'Неверный логин или пароль' });
+        }
+        
+        // Получаем информацию о компании
+        const company = await getCompanyById(targetCompanyId);
+        
+        res.json({ success: true, company });
+    } catch (error) {
+        console.error('Ошибка авторизации кассира:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Верификация QR-кода кассиром
+app.post('/api/cashier/verify-qr', async (req, res) => {
+    try {
+        const { vkId, companyId, timestamp, signature } = req.body;
+        
+        if (!vkId && vkId !== 0) {
+            return res.status(400).json({ success: false, message: 'Отсутствует vkId' });
+        }
+        
+        if (!companyId && companyId !== 0) {
+            return res.status(400).json({ success: false, message: 'Отсутствует companyId' });
+        }
+        
+        // Проверяем возраст QR-кода (5 минут)
+        if (timestamp) {
+            const age = (Date.now() - timestamp) / 1000;
+            if (age > 300) {
+                return res.status(400).json({ success: false, message: 'QR-код истек' });
+            }
+        }
+        
+        // Получаем пользователя
+        const user = await getUserByVkId(vkId, companyId);
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        res.json({ success: true, user });
+    } catch (error) {
+        console.error('Ошибка верификации QR:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Начисление бонусов
+app.post('/api/cashier/earn-bonus', async (req, res) => {
+    try {
+        const { vk_id, company_id, amount, qr_data } = req.body;
+        
+        if (!vk_id || !company_id || !amount) {
+            return res.status(400).json({ success: false, message: 'Заполните все поля' });
+        }
+        
+        const user = await getUserByVkId(vk_id, company_id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        // Рассчитываем бонусы (3% от суммы покупки)
+        const bonusRate = 0.03;
+        const bonusEarned = Math.floor(amount * bonusRate);
+        
+        // Обновляем баланс
+        const result = await updateBalanceWithTransaction(
+            user.id,
+            company_id,
+            amount,
+            bonusEarned,
+            0,
+            'Начисление бонусов',
+            [],
+            'pos',
+            'cashier_terminal',
+            'cashier',
+            { qr_data }
+        );
+        
+        res.json({ 
+            success: true, 
+            bonusEarned, 
+            newBalance: result.new_balance,
+            purchaseAmount: amount
+        });
+    } catch (error) {
+        console.error('Ошибка начисления бонусов:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Списание бонусов
+app.post('/api/cashier/spend-bonus', async (req, res) => {
+    try {
+        const { vk_id, company_id, amount, qr_data } = req.body;
+        
+        if (!vk_id || !company_id || !amount) {
+            return res.status(400).json({ success: false, message: 'Заполните все поля' });
+        }
+        
+        const user = await getUserByVkId(vk_id, company_id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        const bonusBalance = user.bonus_balance || 0;
+        const bonusToSpend = Math.min(bonusBalance, amount);
+        
+        if (bonusToSpend <= 0) {
+            return res.status(400).json({ success: false, message: 'Недостаточно бонусов' });
+        }
+        
+        // Обновляем баланс
+        const result = await updateBalanceWithTransaction(
+            user.id,
+            company_id,
+            amount,
+            0,
+            bonusToSpend,
+            'Списание бонусов',
+            [],
+            'pos',
+            'cashier_terminal',
+            'cashier',
+            { qr_data }
+        );
+        
+        res.json({ 
+            success: true, 
+            bonusSpent: bonusToSpend, 
+            newBalance: result.new_balance,
+            purchaseAmount: amount
+        });
+    } catch (error) {
+        console.error('Ошибка списания бонусов:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ============ API ДЛЯ КЛАССИФИКАЦИИ ПОЛЬЗОВАТЕЛЕЙ ============
 
 // Получение классификации конкретного пользователя
@@ -2430,7 +2643,153 @@ app.get('/api/companies/:companyId/users/segment/:segment', async (req, res) => 
     }
 });
 
+// Добавьте эти эндпоинты в server.js
 
+// ============ API ДЛЯ ГОРОДОВ И АДРЕСОВ (CRM) ============
+
+// Получение всех городов компании
+app.get('/api/companies/:companyId/cities', async (req, res) => {
+    try {
+        const cities = await getCities(req.params.companyId);
+        res.json({ success: true, cities });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Добавление города
+app.post('/api/companies/:companyId/cities', async (req, res) => {
+    try {
+        const { name, sortOrder } = req.body;
+        if (!name) {
+            return res.status(400).json({ success: false, message: 'Название города обязательно' });
+        }
+        const city = await addCity(req.params.companyId, name, sortOrder || 0);
+        res.json({ success: true, city });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Обновление города
+app.put('/api/cities/:cityId', async (req, res) => {
+    try {
+        const { name, isActive, sortOrder } = req.body;
+        const city = await updateCity(req.params.cityId, name, isActive, sortOrder);
+        res.json({ success: true, city });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Удаление города
+app.delete('/api/cities/:cityId', async (req, res) => {
+    try {
+        await deleteCity(req.params.cityId);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение всех адресов компании
+app.get('/api/companies/:companyId/addresses', async (req, res) => {
+    try {
+        const { cityId } = req.query;
+        const addresses = await getAddresses(req.params.companyId, cityId);
+        res.json({ success: true, addresses });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Добавление адреса
+app.post('/api/companies/:companyId/addresses', async (req, res) => {
+    try {
+        const { cityId, address, latitude, longitude, phone, workingHours, isMain, sortOrder } = req.body;
+        if (!address) {
+            return res.status(400).json({ success: false, message: 'Адрес обязателен' });
+        }
+        const newAddress = await addAddress(req.params.companyId, {
+            cityId, address, latitude, longitude, phone, workingHours, isMain, sortOrder
+        });
+        res.json({ success: true, address: newAddress });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Обновление адреса
+app.put('/api/addresses/:addressId', async (req, res) => {
+    try {
+        const { cityId, address, latitude, longitude, phone, workingHours, isMain, isActive, sortOrder } = req.body;
+        const updatedAddress = await updateAddress(req.params.addressId, {
+            cityId, address, latitude, longitude, phone, workingHours, isMain, isActive, sortOrder
+        });
+        res.json({ success: true, address: updatedAddress });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Удаление адреса
+app.delete('/api/addresses/:addressId', async (req, res) => {
+    try {
+        await deleteAddress(req.params.addressId);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============ API ДЛЯ VK MINI APP - ЛОКАЦИИ ============
+
+// Получение всех локаций для mini-app
+app.get('/api/companies/:companyId/locations', async (req, res) => {
+    try {
+        const locations = await getAllLocationsForApp(req.params.companyId);
+        res.json({ success: true, ...locations });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение выбранной локации пользователя
+app.get('/api/users/:userId/location/:companyId', async (req, res) => {
+    try {
+        const location = await getUserSelectedLocation(req.params.userId, req.params.companyId);
+        res.json({ success: true, location });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Сохранение выбранной локации пользователя
+app.post('/api/users/:userId/location/:companyId', async (req, res) => {
+    try {
+        const { addressId } = req.body;
+        if (!addressId) {
+            return res.status(400).json({ success: false, message: 'addressId обязателен' });
+        }
+        const result = await updateUserSelectedLocation(req.params.userId, req.params.companyId, addressId);
+        res.json({ success: true, location: result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение информации об адресе по ID
+app.get('/api/addresses/:addressId/info', async (req, res) => {
+    try {
+        const address = await getAddressById(req.params.addressId);
+        if (!address) {
+            return res.status(404).json({ success: false, message: 'Адрес не найден' });
+        }
+        res.json({ success: true, address });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 
 const PORT = 3001;

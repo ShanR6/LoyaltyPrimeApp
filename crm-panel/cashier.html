@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POS Терминал - Касса лояльности</title>
+    <title>Страница кассира</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -147,29 +148,270 @@
             from { transform: translateX(-50%) translateY(0); opacity: 1; }
             to { transform: translateX(-50%) translateY(100px); opacity: 0; }
         }
+        
+        /* Header with logout button */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            color: white;
+            font-size: 28px;
+            margin: 0;
+        }
+        
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.5);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: white;
+        }
+        
+        /* Login Form */
+        .login-form {
+            max-width: 400px;
+            margin: 100px auto;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+        }
+        
+        /* QR Scanner */
+        .scanner-container {
+            width: 100%;
+            max-width: 500px;
+            margin: 20px auto;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        #reader {
+            width: 100%;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .bonus-rate-info {
+            background: #f0f8ff;
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+        
+        /* User Info */
+        .user-info-card {
+            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .user-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .user-balance {
+            font-size: 36px;
+            font-weight: bold;
+            color: #27ae60;
+        }
+        
+        .balance-label {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        /* Status Messages */
+        .error {
+            color: #e74c3c;
+            background: #fdf0ed;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 15px;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .success {
+            color: #27ae60;
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 15px;
+            border-left: 4px solid #27ae60;
+        }
+        
+        .info {
+            color: #1976d2;
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 15px;
+            border-left: 4px solid #1976d2;
+        }
     </style>
 </head>
 <body>
-    <h1 style="color: white; text-align: center; margin-bottom: 20px;">🏪 POS Терминал</h1>
+    <!-- Header with logout button -->
+    <div class="header" id="mainHeader" style="display: none;">
+        <h1>🏪 Страница кассира</h1>
+        <button class="logout-btn" onclick="cashierLogout()">🚪 Выйти</button>
+    </div>
     
-    <div class="card">
-        <h3>📷 Шаг 1: Сканирование QR-кода</h3>
-        <div class="scanner-area">
-            <p style="color: #666;">Вставьте данные из QR-кода</p>
-            <textarea id="qrData" rows="3" cols="50" placeholder='{"vkId":"1","companyId":1,"timestamp":...}' style="width: 100%;"></textarea>
-            <br>
-            <button id="verifyQrBtn" onclick="verifyQR()">🔍 Проверить QR-код</button>
+    <h1 id="pageTitle" style="color: white; text-align: center; margin-bottom: 20px;">🏪 Страница кассира</h1>
+    
+    <!-- Login Screen -->
+    <div id="loginScreen" class="card login-form">
+        <h2 style="text-align: center;">🔐 Вход кассира</h2>
+        <div class="form-group">
+            <label>Логин кассира</label>
+            <input type="text" id="cashierLogin" class="form-input" placeholder="Введите логин">
         </div>
-        <div id="verifyResult"></div>
+        <div class="form-group">
+            <label>Пароль кассира</label>
+            <input type="password" id="cashierPassword" class="form-input" placeholder="Введите пароль">
+        </div>
+        <div id="loginError" class="error hidden"></div>
+        <button class="btn" onclick="cashierLogin()">Войти в систему</button>
     </div>
+    
+    <!-- Main Content (hidden until login) -->
+    <div id="mainContent" class="hidden">
+        
+        <!-- Main Scanner Screen -->
+        <div id="scannerScreen" class="hidden">
+            <!-- QR Scanner Card -->
+            <div class="card">
+                <h3>📷 Сканирование QR-кода</h3>
+                <div class="scanner-area">
+                    <p style="color: #666;">Отсканируйте QR-код с помощью камеры или загрузите изображение</p>
+                    
+                    <!-- Scanner Control Buttons -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button class="btn" id="startScanBtn" onclick="startCameraScan()" style="flex: 1;">
+                            📸 Начать сканирование
+                        </button>
+                        <button class="btn btn-warning" id="stopScanBtn" onclick="stopCameraScan()" style="flex: 1; display: none;">
+                            ⏹️ Остановить
+                        </button>
+                    </div>
+                    
+                    <div class="scanner-container" id="scannerContainer" style="display: none;">
+                        <div id="reader"></div>
+                    </div>
+                    
+                    <!-- Image Upload Section -->
+                    <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 12px; text-align: center;">
+                        <h3 style="margin-bottom: 10px;">🖼️ Загрузите фото с QR-кодом</h3>
+                        <p style="color: #666; font-size: 14px; margin-bottom: 15px;">Выберите изображение, вставьте из буфера или перетащите сюда</p>
+                        
+                        <input type="file" id="qrImageInput" accept="image/*" style="display: none;" onchange="handleImageFileSelect(event)">
+                        <button class="btn" onclick="document.getElementById('qrImageInput').click()" style="max-width: 300px; margin-bottom: 10px;">
+                            📁 Выбрать изображение
+                        </button>
+                        
+                        <div style="margin: 10px 0; color: #999; font-size: 12px;">или</div>
+                        
+                        <button class="btn btn-warning" id="pasteBtn" onclick="pasteFromClipboard()" style="max-width: 300px;">
+                            📋 Вставить из буфера
+                        </button>
+                        
+                        <div id="dropZone" style="margin-top: 15px; padding: 20px; border: 2px dashed #ccc; border-radius: 8px; background: white;">
+                            <div style="color: #999; font-size: 13px;">📤 Перетащите изображение сюда</div>
+                        </div>
+                        
+                        <div id="imageUploadResult" style="margin-top: 10px;"></div>
+                    </div>
+                    
+                    <div id="scanResult"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- User Info Card -->
+        <div class="card" id="userInfoCard" style="display:none;">
+            <h3>📊 Информация о пользователе</h3>
+            <div id="userInfo"></div>
+        </div>
 
-    <div class="card" id="userInfoCard" style="display:none;">
-        <h3>📊 Информация о пользователе</h3>
-        <div id="userInfo"></div>
-    </div>
-
-    <div class="card" id="orderSection" style="display:none;">
-        <h3>🛒 Шаг 2: Оформление заказа</h3>
+        <!-- Order Section -->
+        <div class="card" id="orderSection" style="display:none;">
         
         <div>
             <label>💰 Сумма заказа (₽):</label>
@@ -233,6 +475,11 @@
         </div>
         
         <div id="applyResult"></div>
+        
+        <!-- Back Button -->
+        <button class="btn btn-warning" onclick="backToScanner()" style="margin-top: 20px;">
+            ⬅️ Вернуться назад к сканированию
+        </button>
     </div>
     
     <div class="card" id="historySection" style="display:none;">
@@ -244,6 +491,8 @@
         <div id="historyList" style="max-height: 400px; overflow-y: auto;"></div>
         <button onclick="refreshHistory()" style="margin-top: 15px; width: 100%;">🔄 Обновить</button>
     </div>
+    
+    </div> <!-- End mainContent -->
 
     <script>
         const API_URL = 'http://localhost:3001';
@@ -264,6 +513,472 @@
         let currentDiscountType = 'spend';
         let selectedPromotion = null;
         let availablePromotions = [];
+        let qrScanner = null;
+        let isScanning = false;
+        let cashierSession = null;
+        
+        // ========== AUTHENTICATION ==========
+        
+        async function cashierLogin() {
+            const login = document.getElementById('cashierLogin').value.trim();
+            const password = document.getElementById('cashierPassword').value.trim();
+            
+            if (!login || !password) {
+                showLoginError('Заполните все поля');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/cashier/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    cashierSession = data.company;
+                    cashierSession.login = login; // Store login for reference
+                    currentCompanyId = data.company.id; // Set companyId from response
+                    localStorage.setItem('cashierSession', JSON.stringify(cashierSession));
+                    showScannerScreen();
+                } else {
+                    showLoginError(data.message || 'Неверный логин или пароль');
+                }
+            } catch (error) {
+                showLoginError('Ошибка подключения к серверу');
+            }
+        }
+        
+        function showLoginError(message) {
+            const errorEl = document.getElementById('loginError');
+            errorEl.textContent = '❌ ' + message;
+            errorEl.classList.remove('hidden');
+            setTimeout(() => errorEl.classList.add('hidden'), 3000);
+        }
+        
+        function showScannerScreen() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('mainContent').classList.remove('hidden');
+            document.getElementById('scannerScreen').classList.remove('hidden');
+            document.getElementById('mainHeader').style.display = 'flex';
+            document.getElementById('pageTitle').style.display = 'none';
+        }
+        
+        function cashierLogout() {
+            if (confirm('Вы уверены, что хотите выйти?')) {
+                localStorage.removeItem('cashierSession');
+                cashierSession = null;
+                currentUser = null;
+                currentQrData = null;
+                currentCompanyId = null;
+                
+                // Reset all UI
+                document.getElementById('mainContent').classList.add('hidden');
+                document.getElementById('mainHeader').style.display = 'none';
+                document.getElementById('pageTitle').style.display = 'block';
+                document.getElementById('loginScreen').classList.remove('hidden');
+                document.getElementById('scannerScreen').classList.add('hidden');
+                document.getElementById('userInfoCard').style.display = 'none';
+                document.getElementById('orderSection').style.display = 'none';
+                document.getElementById('historySection').style.display = 'none';
+                document.getElementById('cashierLogin').value = '';
+                document.getElementById('cashierPassword').value = '';
+                
+                // Stop scanner if running
+                if (qrScanner && isScanning) {
+                    stopCameraScan();
+                }
+            }
+        }
+        
+        
+        function backToScanner() {
+            // Reset all data
+            currentUser = null;
+            currentQrData = null;
+            currentCompanyId = null;
+            currentMultiplier = 1;
+            currentOrderAmount = 0;
+            currentSpendBonuses = 0;
+            currentBonusToEarn = 0;
+            selectedPromotion = null;
+            availablePromotions = [];
+            
+            // Reset UI
+            document.getElementById('userInfoCard').style.display = 'none';
+            document.getElementById('orderSection').style.display = 'none';
+            document.getElementById('historySection').style.display = 'none';
+            document.getElementById('scanResult').innerHTML = '';
+            document.getElementById('imageUploadResult').innerHTML = '';
+            document.getElementById('bonusResult').innerHTML = '';
+            document.getElementById('applyResult').innerHTML = '';
+            document.getElementById('orderAmount').value = '';
+            document.getElementById('spendAmount').value = '';
+            document.getElementById('finalOrderCard').style.display = 'none';
+            document.getElementById('selectedPromotionInfo').style.display = 'none';
+            
+            // Reset discount type to spend
+            const spendRadio = document.querySelector('input[value="spend"]');
+            if (spendRadio) {
+                spendRadio.checked = true;
+                onDiscountTypeChange();
+            }
+        }
+        
+        // Check session on load
+        window.onload = function() {
+            const savedSession = localStorage.getItem('cashierSession');
+            if (savedSession) {
+                cashierSession = JSON.parse(savedSession);
+                currentCompanyId = cashierSession.id; // Set companyId from session
+                showScannerScreen();
+            }
+        };
+        
+        function handleImageFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleImageUpload(file);
+            }
+        }
+        
+        function startCameraScan() {
+            document.getElementById('scannerContainer').style.display = 'block';
+            document.getElementById('startScanBtn').style.display = 'none';
+            document.getElementById('stopScanBtn').style.display = 'block';
+            initQrScanner();
+            isScanning = true;
+        }
+        
+        function stopCameraScan() {
+            if (qrScanner && isScanning) {
+                qrScanner.stop().then(() => {
+                    document.getElementById('scannerContainer').style.display = 'none';
+                    document.getElementById('startScanBtn').style.display = 'block';
+                    document.getElementById('stopScanBtn').style.display = 'none';
+                    isScanning = false;
+                }).catch(err => {
+                    console.error('Ошибка остановки сканера:', err);
+                });
+            }
+        }
+        
+        async function handleImageUpload(file) {
+            if (!file) return;
+            
+            const resultDiv = document.getElementById('imageUploadResult');
+            resultDiv.innerHTML = '<div class="info">⏳ Обработка изображения...</div>';
+            
+            try {
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    resultDiv.innerHTML = '<div class="error">❌ Пожалуйста, выберите изображение</div>';
+                    return;
+                }
+                
+                console.log('Processing image file:', file.name, file.type, file.size);
+                
+                // Create image element to get dimensions
+                const img = await loadImage(file);
+                console.log('Image loaded:', img.width, 'x', img.height);
+                
+                // Create scanner
+                const tempScanner = new Html5Qrcode("reader", { 
+                    verbose: true,
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 }
+                });
+                
+                try {
+                    // Try scanning with scanFile
+                    console.log('Attempting to scan file...');
+                    const decodedText = await tempScanner.scanFile(file, true);
+                    
+                    console.log('✅ QR code successfully decoded:', decodedText);
+                    resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
+                    
+                    // Process the QR code
+                    setTimeout(async () => {
+                        await processQrCode(decodedText);
+                        cleanupScanner(tempScanner);
+                    }, 500);
+                    
+                } catch (scanErr) {
+                    console.error('❌ QR scan failed:', scanErr);
+                    
+                    // Try alternative: create canvas and scan
+                    console.log('Trying canvas-based scanning...');
+                    try {
+                        const decodedText = await scanWithCanvas(file, img);
+                        
+                        console.log('✅ QR code decoded via canvas:', decodedText);
+                        resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
+                        
+                        setTimeout(async () => {
+                            await processQrCode(decodedText);
+                        }, 500);
+                        
+                    } catch (canvasErr) {
+                        console.error('❌ Canvas scanning also failed:', canvasErr);
+                        resultDiv.innerHTML = '<div class="error">❌ QR-код не найден. Попробуйте:<br>1. Убедиться, что QR-код четкий<br>2. Приблизить QR-код<br>3. Использовать сканирование камерой</div>';
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Processing error:', error);
+                resultDiv.innerHTML = '<div class="error">❌ Ошибка: ' + error.message + '</div>';
+            }
+        }
+        
+        // Load image from file
+        function loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        // Alternative scanning using canvas
+        async function scanWithCanvas(file, img) {
+            return new Promise((resolve, reject) => {
+                try {
+                    // Create scanner
+                    const scanner = new Html5Qrcode("reader", { verbose: false });
+                    
+                    // Use the experimental scan approach
+                    scanner.scanFile(file, true)
+                        .then(resolve)
+                        .catch(reject);
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+        
+        // Cleanup scanner
+        async function cleanupScanner(scanner) {
+            try {
+                if (scanner && scanner.isScanning) {
+                    await scanner.stop();
+                }
+                await scanner.clear();
+            } catch (e) {
+                // Ignore cleanup errors
+                console.log('Cleanup error (ignored):', e);
+            }
+        }
+        
+        // Paste from clipboard
+        async function pasteFromClipboard() {
+            const resultDiv = document.getElementById('imageUploadResult');
+            
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                
+                let imageFile = null;
+                for (const item of clipboardItems) {
+                    for (const type of item.types) {
+                        if (type.startsWith('image/')) {
+                            const blob = await item.getType(type);
+                            imageFile = new File([blob], 'clipboard-image.png', { type });
+                            break;
+                        }
+                    }
+                    if (imageFile) break;
+                }
+                
+                if (imageFile) {
+                    resultDiv.innerHTML = '<div class="info">📋 Изображение получено из буфера</div>';
+                    await handleImageUpload(imageFile);
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ В буфере нет изображения. Скопируйте изображение и попробуйте снова.</div>';
+                }
+            } catch (error) {
+                console.error('Ошибка чтения буфера:', error);
+                resultDiv.innerHTML = '<div class="error">❌ Не удалось прочитать буфер обмена. Разрешите доступ к буферу или используйте Ctrl+V.</div>';
+            }
+        }
+        
+        // Handle Ctrl+V paste
+        document.addEventListener('paste', async function(event) {
+            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+            
+            for (let index in items) {
+                const item = items[index];
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    event.preventDefault();
+                    await handleImageUpload(blob);
+                    return;
+                }
+            }
+        });
+        
+        // Drag and drop
+        const dropZone = document.getElementById('dropZone');
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#667eea';
+            dropZone.style.background = '#f0f3ff';
+        });
+        
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#ccc';
+            dropZone.style.background = 'white';
+        });
+        
+        dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#ccc';
+            dropZone.style.background = 'white';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                await handleImageUpload(files[0]);
+            }
+        });
+        
+        function initQrScanner() {
+            qrScanner = new Html5Qrcode("reader");
+            
+            const config = {
+                fps: 10,
+                qrbox: { width: 300, height: 300 },
+                aspectRatio: 1.0
+            };
+            
+            qrScanner.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                onScanFailure
+            ).catch(err => {
+                console.error('Ошибка запуска сканера:', err);
+                document.getElementById('scanResult').innerHTML = 
+                    '<div class="error">❌ Не удалось запустить камеру</div>';
+            });
+        }
+        
+        function onScanSuccess(decodedText) {
+            console.log('QR код распознан:', decodedText);
+            processQrCode(decodedText);
+        }
+        
+        function onScanFailure(error) {
+            // Ignore scan failures
+        }
+        
+        async function processQrCode(qrText) {
+            console.log('🔍 Processing QR code:', qrText);
+            
+            try {
+                let qrData;
+                try {
+                    qrData = JSON.parse(qrText);
+                    console.log('✅ Parsed QR data:', qrData);
+                } catch (parseError) {
+                    console.error('❌ JSON parse error:', parseError);
+                    throw new Error('Неверный формат JSON. QR-код должен содержать JSON данные.');
+                }
+                
+                if (!qrData.vkId && qrData.vkId !== 0) {
+                    throw new Error('Отсутствует поле vkId в QR-коде');
+                }
+                
+                if (!qrData.companyId && qrData.companyId !== 0) {
+                    throw new Error('Отсутствует поле companyId в QR-коде');
+                }
+                
+                if (qrData.timestamp) {
+                    const age = (Date.now() - qrData.timestamp) / 1000;
+                    if (age > 300) {
+                        throw new Error('QR-код истек (старше 5 минут)');
+                    }
+                }
+                
+                currentQrData = qrData;
+                currentCompanyId = qrData.companyId;
+                
+                console.log('📡 Verifying QR with backend...');
+                
+                // Load bonus settings
+                await loadBonusSettings();
+                
+                const response = await fetch(`${API_URL}/api/cashier/verify-qr`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vkId: qrData.vkId,
+                        companyId: qrData.companyId,
+                        timestamp: qrData.timestamp,
+                        signature: qrData.signature || null
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('📨 Backend response:', data);
+                
+                if (data.success) {
+                    currentUser = data.user;
+                    currentMultiplier = data.multiplier || 1;
+                    
+                    // Show user info
+                    document.getElementById('userInfo').innerHTML = `
+                        <div class="user-info">
+                            <strong>👤 ${data.user.name || 'Пользователь'}</strong><br>
+                            💰 Баланс: <span class="balance">${data.user.bonus_balance || 0}</span> бонусов<br>
+                            🏆 Уровень: ${data.user.tier || 'Новичок'} (x${currentMultiplier})
+                        </div>
+                    `;
+                    
+                    document.getElementById('availableBonuses').innerText = data.user.bonus_balance || 0;
+                    document.getElementById('userInfoCard').style.display = 'block';
+                    document.getElementById('orderSection').style.display = 'block';
+                    document.getElementById('promotionSection').style.display = 'block';
+                    
+                    // Load promotions and history
+                    await loadAvailablePromotions();
+                    await loadUserHistory();
+                    
+                    // If no promotions available, disable the promotion radio
+                    if (availablePromotions.length === 0) {
+                        const promoRadio = document.querySelector('input[value="promotion"]');
+                        if (promoRadio) {
+                            promoRadio.disabled = true;
+                            promoRadio.parentElement.style.opacity = '0.5';
+                        }
+                    } else {
+                        const promoRadio = document.querySelector('input[value="promotion"]');
+                        if (promoRadio) promoRadio.disabled = false;
+                    }
+                    
+                    // Stop scanner if running
+                    if (qrScanner && isScanning) {
+                        stopCameraScan();
+                    }
+                    
+                    document.getElementById('scanResult').innerHTML = 
+                        '<div class="success">✅ QR-код проверен успешно</div>';
+                } else {
+                    throw new Error(data.message || 'Ошибка проверки QR-кода');
+                }
+            } catch (error) {
+                console.error('❌ QR processing error:', error);
+                document.getElementById('scanResult').innerHTML = 
+                    `<div class="error">❌ ${error.message}</div>`;
+            }
+        }
 
         // ============ ОБРАБОТЧИКИ ИЗМЕНЕНИЙ ============
         function onDiscountTypeChange() {

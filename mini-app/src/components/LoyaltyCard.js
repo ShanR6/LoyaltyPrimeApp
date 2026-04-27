@@ -3,9 +3,7 @@ import QRCode from 'qrcode';
 
 export function LoyaltyCard({ userInfo, selectedGroup }) {
     const [qrCodeUrl, setQrCodeUrl] = useState('');
-    const [qrData, setQrData] = useState('');
     const [countdown, setCountdown] = useState(0);
-    const [copySuccess, setCopySuccess] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     
     // Генерация QR-кода
@@ -23,8 +21,6 @@ export function LoyaltyCard({ userInfo, selectedGroup }) {
             expiresIn: 5 * 60 * 1000,
             version: '1.0'
         });
-        
-        setQrData(qrDataString);
         
         try {
             const qrDataUrl = await QRCode.toDataURL(qrDataString, {
@@ -65,34 +61,6 @@ export function LoyaltyCard({ userInfo, selectedGroup }) {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
     
-    // Копирование JSON данных QR-кода
-    const copyQRData = async () => {
-        if (!qrData) {
-            await generateQRCode();
-        }
-        
-        try {
-            await navigator.clipboard.writeText(qrData);
-            setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000);
-            
-            // Вибрация при успехе
-            if (navigator.vibrate) {
-                navigator.vibrate(100);
-            }
-        } catch (err) {
-            // Fallback для старых браузеров
-            const textarea = document.createElement('textarea');
-            textarea.value = qrData;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000);
-        }
-    };
-    
     return (
         <div style={styles.container}>
             <div style={styles.header}>
@@ -123,17 +91,11 @@ export function LoyaltyCard({ userInfo, selectedGroup }) {
                 </div>
             </div>
             
-            {/* Кнопка копирования QR-данных */}
-            <button onClick={copyQRData} style={styles.copyButton} disabled={!qrData}>
-                {copySuccess ? '✅ Данные скопированы!' : '📋 Скопировать QR-данные'}
-            </button>
-            
             <div style={styles.instruction}>
                 <div style={styles.instructionTitle}>📖 Как использовать:</div>
                 <ol style={styles.instructionList}>
-                    <li>Покажите QR-код кассиру ИЛИ</li>
-                    <li>Нажмите "Скопировать QR-данные" и отправьте кассиру</li>
-                    <li>Кассир вставит данные в систему</li>
+                    <li>Покажите QR-код кассиру</li>
+                    <li>Кассир отсканирует QR-код с помощью камеры или загрузит фото</li>
                     <li>Бонусы начислятся автоматически</li>
                 </ol>
             </div>
@@ -207,18 +169,6 @@ const styles = {
         fontSize: 11,
         color: '#ffd966',
         marginTop: 4
-    },
-    copyButton: {
-        background: 'linear-gradient(135deg, #ff4d4d, #cc0000)',
-        border: 'none',
-        padding: '14px 20px',
-        borderRadius: 40,
-        color: 'white',
-        fontWeight: 600,
-        fontSize: 16,
-        cursor: 'pointer',
-        width: '100%',
-        marginBottom: 20
     },
     instruction: {
         background: 'rgba(0,0,0,0.2)',

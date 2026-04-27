@@ -403,7 +403,9 @@ async function loadCRMPanel() {
     await loadDiceSettings();  
     loadNotificationsHistory();
     await loadCampaigns();
-    await loadBonusSettings();  
+    await loadBonusSettings();
+	loadCitiesAndAddresses();
+	await loadCashierCredentials();	
 }
 
 function closeCRMPanel() {
@@ -746,7 +748,7 @@ function renderTiersSettings() {
             
             <div class="tier-config-fields">
                 <div class="config-field">
-                    <label>💰 Порог LTV (₽):</label>
+                    <label>💰 Порог LTV (Бонусы):</label>
                     <input type="number" value="${tier.threshold}" 
                            onchange="updateTierConfig(${idx}, 'threshold', parseInt(this.value))" 
                            class="config-input">
@@ -2197,6 +2199,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (module === 'settings') {
                 loadBrandColor();
+            }
+            if (module === 'cashier') {
+                loadCashierCredentials();
             }
         });
     });
@@ -3737,5 +3742,352 @@ async function saveBonusSettings() {
     } finally {
         saveBtn.textContent = originalText;
         saveBtn.disabled = false;
+    }
+}
+// ============ УПРАВЛЕНИЕ ГОРОДАМИ И АДРЕСАМИ ==========
+
+let cities = [];
+let addresses = [];
+
+async function loadCitiesAndAddresses() {
+    if (!currentBusiness) return;
+    
+    try {
+        // Загружаем города
+        const citiesResponse = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/cities`);
+        const citiesData = await citiesResponse.json();
+        if (citiesData.success) {
+            cities = citiesData.cities;
+            renderCitiesList();
+        }
+        
+        // Загружаем адреса
+        const addressesResponse = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/addresses`);
+        const addressesData = await addressesResponse.json();
+        if (addressesData.success) {
+            addresses = addressesData.addresses;
+            renderAddressesList();
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки локаций:', error);
+    }
+}
+
+function renderCitiesList() {
+    const container = document.getElementById('citiesList');
+    if (!container) return;
+    
+    if (!cities || cities.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">Нет городов</div>';
+        return;
+    }
+    
+    container.innerHTML = cities.map(city => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
+            <span>${escapeHtml(city.name)}</span>
+            <div>
+                <button onclick="editCity(${city.id})" style="background: #3498db; border: none; border-radius: 4px; padding: 4px 8px; color: white; cursor: pointer; margin-right: 4px;">✏️</button>
+                <button onclick="deleteCity(${city.id})" style="background: #e74c3c; border: none; border-radius: 4px; padding: 4px 8px; color: white; cursor: pointer;">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderAddressesList() {
+    const container = document.getElementById('addressesList');
+    if (!container) return;
+    
+    if (!addresses || addresses.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">Нет адресов</div>';
+        return;
+    }
+    
+    container.innerHTML = addresses.map(addr => `
+        <div style="display: flex; justify-content: space-between; align-items: start; padding: 12px; border-bottom: 1px solid #eee; ${addr.is_main ? 'background: #e8f5e9;' : ''}">
+            <div style="flex: 1;">
+                <div>
+                    <strong>${escapeHtml(addr.address)}</strong>
+                    ${addr.is_main ? '<span style="background: #2ecc71; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 8px;">Основной</span>' : ''}
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                    ${addr.city_name ? `🏙️ ${escapeHtml(addr.city_name)}` : '🌍 Без города'}
+                    ${addr.phone ? ` • 📞 ${addr.phone}` : ''}
+                    ${addr.working_hours ? ` • ⏰ ${addr.working_hours.substring(0, 50)}${addr.working_hours.length > 50 ? '...' : ''}` : ''}
+                </div>
+            </div>
+            <div>
+                <button onclick="editAddress(${addr.id})" style="background: #3498db; border: none; border-radius: 4px; padding: 4px 8px; color: white; cursor: pointer; margin-right: 4px;">✏️</button>
+                <button onclick="deleteAddress(${addr.id})" style="background: #e74c3c; border: none; border-radius: 4px; padding: 4px 8px; color: white; cursor: pointer;">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+let currentEditingCityId = null;
+let currentEditingAddressId = null;
+
+function openCityModal() {
+    currentEditingCityId = null;
+    document.getElementById('cityModalTitle').textContent = '➕ Добавить город';
+    document.getElementById('cityName').value = '';
+    document.getElementById('citySortOrder').value = 0;
+    document.getElementById('cityModal').style.display = 'flex';
+}
+
+function editCity(cityId) {
+    const city = cities.find(c => c.id === cityId);
+    if (!city) return;
+    
+    currentEditingCityId = cityId;
+    document.getElementById('cityModalTitle').textContent = '✏️ Редактировать город';
+    document.getElementById('cityName').value = city.name;
+    document.getElementById('citySortOrder').value = city.sort_order || 0;
+    document.getElementById('cityModal').style.display = 'flex';
+}
+
+async function saveCity() {
+    const name = document.getElementById('cityName').value.trim();
+    const sortOrder = parseInt(document.getElementById('citySortOrder').value) || 0;
+    
+    if (!name) {
+        alert('Введите название города');
+        return;
+    }
+    
+    try {
+        let response;
+        if (currentEditingCityId) {
+            response = await fetch(`${API_URL}/api/cities/${currentEditingCityId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, isActive: true, sortOrder })
+            });
+        } else {
+            response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/cities`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, sortOrder })
+            });
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            closeCityModal();
+            await loadCitiesAndAddresses();
+            alert(`Город ${currentEditingCityId ? 'обновлен' : 'добавлен'}!`);
+        } else {
+            alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения города:', error);
+        alert('Ошибка сервера');
+    }
+}
+
+async function deleteCity(cityId) {
+    if (!confirm('Удалить город? Все адреса этого города также будут скрыты.')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/cities/${cityId}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        if (data.success) {
+            await loadCitiesAndAddresses();
+            alert('Город удален');
+        }
+    } catch (error) {
+        console.error('Ошибка удаления города:', error);
+        alert('Ошибка сервера');
+    }
+}
+
+function closeCityModal() {
+    document.getElementById('cityModal').style.display = 'none';
+}
+
+function openAddressModal() {
+    currentEditingAddressId = null;
+    document.getElementById('addressModalTitle').textContent = '➕ Добавить адрес';
+    document.getElementById('addressCityId').value = '';
+    document.getElementById('addressText').value = '';
+    document.getElementById('addressLatitude').value = '';
+    document.getElementById('addressLongitude').value = '';
+    document.getElementById('addressPhone').value = '';
+    document.getElementById('addressWorkingHours').value = '';
+    document.getElementById('addressIsMain').checked = false;
+    document.getElementById('addressModal').style.display = 'flex';
+    
+    // Заполняем select городов
+    const citySelect = document.getElementById('addressCityId');
+    citySelect.innerHTML = '<option value="">-- Без города --</option>' + 
+        cities.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+}
+
+function editAddress(addressId) {
+    const address = addresses.find(a => a.id === addressId);
+    if (!address) return;
+    
+    currentEditingAddressId = addressId;
+    document.getElementById('addressModalTitle').textContent = '✏️ Редактировать адрес';
+    
+    const citySelect = document.getElementById('addressCityId');
+    citySelect.innerHTML = '<option value="">-- Без города --</option>' + 
+        cities.map(c => `<option value="${c.id}" ${address.city_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    
+    document.getElementById('addressText').value = address.address;
+    document.getElementById('addressLatitude').value = address.latitude || '';
+    document.getElementById('addressLongitude').value = address.longitude || '';
+    document.getElementById('addressPhone').value = address.phone || '';
+    document.getElementById('addressWorkingHours').value = address.working_hours || '';
+    document.getElementById('addressIsMain').checked = address.is_main || false;
+    document.getElementById('addressModal').style.display = 'flex';
+}
+
+async function saveAddress() {
+    const cityId = document.getElementById('addressCityId').value || null;
+    const address = document.getElementById('addressText').value.trim();
+    const latitude = document.getElementById('addressLatitude').value || null;
+    const longitude = document.getElementById('addressLongitude').value || null;
+    const phone = document.getElementById('addressPhone').value || null;
+    const workingHours = document.getElementById('addressWorkingHours').value || null;
+    const isMain = document.getElementById('addressIsMain').checked;
+    
+    if (!address) {
+        alert('Введите адрес');
+        return;
+    }
+    
+    try {
+        let response;
+        if (currentEditingAddressId) {
+            response = await fetch(`${API_URL}/api/addresses/${currentEditingAddressId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cityId, address, latitude, longitude, phone, workingHours, isMain, isActive: true })
+            });
+        } else {
+            response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/addresses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cityId, address, latitude, longitude, phone, workingHours, isMain })
+            });
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            closeAddressModal();
+            await loadCitiesAndAddresses();
+            alert(`Адрес ${currentEditingAddressId ? 'обновлен' : 'добавлен'}!`);
+        } else {
+            alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения адреса:', error);
+        alert('Ошибка сервера');
+    }
+}
+
+async function deleteAddress(addressId) {
+    if (!confirm('Удалить адрес?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/addresses/${addressId}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        if (data.success) {
+            await loadCitiesAndAddresses();
+            alert('Адрес удален');
+        }
+    } catch (error) {
+        console.error('Ошибка удаления адреса:', error);
+        alert('Ошибка сервера');
+    }
+}
+
+function closeAddressModal() {
+    document.getElementById('addressModal').style.display = 'none';
+}
+
+// ========== МОДУЛЬ: СТРАНИЦА КАССИРА ==========
+
+async function saveCashierCredentials() {
+    if (!currentBusiness) {
+        showCashierStatus('❌ Ошибка: компания не выбрана', 'error');
+        return;
+    }
+    
+    const login = document.getElementById('cashierLogin').value.trim();
+    const password = document.getElementById('cashierPassword').value;
+    const passwordConfirm = document.getElementById('cashierPasswordConfirm').value;
+    
+    if (!login || !password) {
+        showCashierStatus('❌ Заполните все поля', 'error');
+        return;
+    }
+    
+    if (password !== passwordConfirm) {
+        showCashierStatus('❌ Пароли не совпадают', 'error');
+        return;
+    }
+    
+    if (password.length < 4) {
+        showCashierStatus('❌ Пароль должен быть не менее 4 символов', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/cashier-credentials`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showCashierStatus('✅ Данные кассира успешно сохранены!', 'success');
+            // Clear password fields
+            document.getElementById('cashierPassword').value = '';
+            document.getElementById('cashierPasswordConfirm').value = '';
+        } else {
+            showCashierStatus('❌ ' + (data.message || 'Ошибка сохранения'), 'error');
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения данных кассира:', error);
+        showCashierStatus('❌ Ошибка подключения к серверу', 'error');
+    }
+}
+
+function showCashierStatus(message, type) {
+    const statusEl = document.getElementById('cashierCredentialsStatus');
+    if (!statusEl) return;
+    
+    statusEl.innerHTML = `<div class="${type === 'success' ? 'success' : 'error'}" style="padding: 12px; border-radius: 8px; margin-top: 8px;">${message}</div>`;
+    
+    setTimeout(() => {
+        statusEl.innerHTML = '';
+    }, 3000);
+}
+
+function openCashierPage() {
+    // Open cashier.html in new window (no companyId needed - cashier page is independent)
+    window.open('cashier.html', '_blank', 'width=800,height=900,scrollbars=yes');
+}
+
+async function loadCashierCredentials() {
+    if (!currentBusiness) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/cashier-credentials`);
+        const data = await response.json();
+        
+        if (data.success && data.credentials) {
+            document.getElementById('cashierLogin').value = data.credentials.login || '';
+            // Don't load password for security
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки данных кассира:', error);
     }
 }
