@@ -2179,6 +2179,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 document.addEventListener('DOMContentLoaded', () => {
+    const fullGreetingTextInput = document.getElementById('fullGreetingText');
+    if (fullGreetingTextInput) {
+        fullGreetingTextInput.addEventListener('input', updateGreetingPreview);
+    }
+    
     document.querySelectorAll('.crm-nav-item').forEach(btn => {
         btn.addEventListener('click', () => {
             const module = btn.dataset.module;
@@ -2199,6 +2204,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (module === 'settings') {
                 loadBrandColor();
+                initEmojiPicker();
+                loadGreetingSettings();
             }
             if (module === 'cashier') {
                 loadCashierCredentials();
@@ -4091,3 +4098,220 @@ async function loadCashierCredentials() {
         console.error('Ошибка загрузки данных кассира:', error);
     }
 }
+
+// ========== GREETING SETTINGS ==========
+
+// Available emojis for selection
+const availableEmojis = [
+    '🏢', '🏪', '🏬', '🏭', '🏗️', '🏠', '🏡', '🏘️',
+    '🍕', '☕', '🍔', '🍰', '🍩', '🧁', '🍦', '🍪',
+    '🛍️', '🎁', '💎', '👗', '👟', '💄', '📱', '💻',
+    '🏋️', '🎨', '📚', '🎭', '🎪', '🎬', '🎵', '⚽',
+    '🏥', '💊', '🏨', '🚗', '⛽', '🔧', '💈', '🐾',
+    '👋', '🎉', '🌟', '💫', '✨', '🎊', '🎈', '🔥'
+];
+
+// Initialize emoji picker
+function initEmojiPicker() {
+    const pickerContainer = document.getElementById('emojiPicker');
+    if (!pickerContainer) {
+        console.error('emojiPicker element not found');
+        return;
+    }
+    
+    pickerContainer.innerHTML = '';
+    
+    availableEmojis.forEach(emoji => {
+        const emojiBtn = document.createElement('button');
+        emojiBtn.type = 'button';
+        emojiBtn.className = 'emoji-btn';
+        emojiBtn.textContent = emoji;
+        emojiBtn.style.cssText = `
+            font-size: 24px;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        `;
+        
+        emojiBtn.onmouseover = function() {
+            this.style.transform = 'scale(1.2)';
+            this.style.borderColor = '#667eea';
+        };
+        
+        emojiBtn.onmouseout = function() {
+            if (document.getElementById('selectedEmoji').value !== emoji) {
+                this.style.transform = 'scale(1)';
+                this.style.borderColor = '#e0e0e0';
+            }
+        };
+        
+        emojiBtn.onclick = function() {
+            document.querySelectorAll('#emojiPicker .emoji-btn').forEach(btn => {
+                btn.style.borderColor = '#e0e0e0';
+                btn.style.background = 'white';
+                btn.style.transform = 'scale(1)';
+            });
+            
+            this.style.borderColor = '#667eea';
+            this.style.background = '#f0f3ff';
+            this.style.transform = 'scale(1.2)';
+            
+            document.getElementById('selectedEmoji').value = emoji;
+            updateGreetingPreview();
+        };
+        
+        pickerContainer.appendChild(emojiBtn);
+    });
+    
+    // Select default emoji
+    const defaultEmoji = document.getElementById('selectedEmoji').value;
+    const defaultBtn = Array.from(document.querySelectorAll('#emojiPicker .emoji-btn')).find(
+        btn => btn.textContent === defaultEmoji
+    );
+    if (defaultBtn) {
+        defaultBtn.style.borderColor = '#667eea';
+        defaultBtn.style.background = '#f0f3ff';
+        defaultBtn.style.transform = 'scale(1.2)';
+    }
+}
+
+// Update greeting preview
+function updateGreetingPreview() {
+    const emoji = document.getElementById('selectedEmoji').value;
+    const fullText = document.getElementById('fullGreetingText').value || 'Добро пожаловать в нашу компанию!';
+    
+    let previewHTML = `
+        <div style="text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 8px;">${emoji}</div>
+            <div style="font-size: 18px; opacity: 0.9;">Название компании</div>
+    `;
+    
+    if (fullText) {
+        previewHTML += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0; font-size: 14px; opacity: 0.8;">${fullText}</div>`;
+    }
+    
+    previewHTML += `</div>`;
+    
+    document.getElementById('greetingPreview').innerHTML = previewHTML;
+}
+
+// Load greeting settings from backend
+async function loadGreetingSettings() {
+    if (!currentBusiness) {
+        console.error('currentBusiness is null');
+        return;
+    }
+    
+    if (!currentBusiness.id) {
+        console.error('currentBusiness.id is undefined:', currentBusiness);
+        return;
+    }
+    
+    console.log('Loading greeting settings for company ID:', currentBusiness.id);
+    
+    try {
+        const url = `${API_URL}/api/companies/${currentBusiness.id}/greeting-settings`;
+        console.log('Fetching from URL:', url);
+        
+        const response = await fetch(url);
+        console.log('Response status:', response.status);
+        
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (data.success && data.settings) {
+            document.getElementById('selectedEmoji').value = data.settings.company_emoji || '🏢';
+            document.getElementById('fullGreetingText').value = data.settings.full_greeting_text || '';
+            
+            updateGreetingPreview();
+            
+            // Update emoji picker selection
+            const selectedEmoji = data.settings.company_emoji || '🏢';
+            document.querySelectorAll('#emojiPicker .emoji-btn').forEach(btn => {
+                if (btn.textContent === selectedEmoji) {
+                    btn.style.borderColor = '#667eea';
+                    btn.style.background = '#f0f3ff';
+                    btn.style.transform = 'scale(1.2)';
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки настроек приветствия:', error);
+    }
+}
+
+// Save greeting settings to backend
+async function saveGreetingSettings() {
+    if (!currentBusiness) {
+        console.error('currentBusiness is null');
+        showGreetingStatus('❌ Ошибка: компания не выбрана', 'error');
+        return;
+    }
+    
+    if (!currentBusiness.id) {
+        console.error('currentBusiness.id is undefined:', currentBusiness);
+        showGreetingStatus('❌ Ошибка: ID компании не найден', 'error');
+        return;
+    }
+    
+    const companyEmoji = document.getElementById('selectedEmoji').value;
+    const fullGreetingText = document.getElementById('fullGreetingText').value.trim();
+    
+    console.log('=== Saving Greeting Settings ===');
+    console.log('Company ID:', currentBusiness.id);
+    console.log('Company Emoji:', companyEmoji);
+    console.log('Full Greeting Text:', fullGreetingText);
+    
+    const payload = {
+        greetingText: 'Welcome', // Required field, dummy value
+        greetingEmoji: companyEmoji, // Required field, using company emoji
+        companyEmoji: companyEmoji,
+        fullGreetingText: fullGreetingText
+    };
+    
+    console.log('Payload:', payload);
+    
+    try {
+        const url = `${API_URL}/api/companies/${currentBusiness.id}/greeting-settings`;
+        console.log('POST to URL:', url);
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (data.success) {
+            showGreetingStatus('✅ Настройки успешно сохранены!', 'success');
+            updateGreetingPreview();
+        } else {
+            console.error('Server error:', data);
+            showGreetingStatus('❌ ' + (data.message || data.error || 'Ошибка сохранения'), 'error');
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения приветствия:', error);
+        showGreetingStatus('❌ Ошибка подключения: ' + error.message, 'error');
+    }
+}
+
+// Show greeting status message
+function showGreetingStatus(message, type) {
+    const statusEl = document.getElementById('greetingStatus');
+    if (!statusEl) return;
+    
+    statusEl.innerHTML = `<div style="padding: 12px; border-radius: 8px; margin-top: 8px; ${type === 'success' ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">${message}</div>`;
+    
+    setTimeout(() => {
+        statusEl.innerHTML = '';
+    }, 3000);
+}
+

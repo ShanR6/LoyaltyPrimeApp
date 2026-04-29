@@ -91,7 +91,10 @@ const {
     // Cashier credentials
     getCashierCredentials,
     saveCashierCredentials,
-    findCashierByLogin
+    findCashierByLogin,
+    // Greeting settings
+    saveGreetingSettings,
+    getGreetingSettings
 } = require('./database-pg');
 
 const app = express();
@@ -577,19 +580,21 @@ app.post('/api/users/completeQuest', async (req, res) => {
     }
 });
 
+
 app.post('/api/users/updateBalance', async (req, res) => {
     try {
-        const { userId, change, type, description } = req.body;
-        const newBalance = await updateUserBalance(userId, change, type, description);
+        const { userId, change, type, description, metadata } = req.body;
         
-        const user = await getUserById(userId);
+        const result = await updateUserBalance(userId, change, type, description, metadata);
         
         res.json({ 
             success: true, 
-            newBalance,
-            newTotalSpent: user.total_spent  
+            newBalance: result.newBalance,
+            newTotalSpent: result.totalSpent,
+            newTotalEarned: result.totalEarned
         });
     } catch (error) {
+        console.error('Ошибка обновления баланса:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2787,6 +2792,109 @@ app.get('/api/addresses/:addressId/info', async (req, res) => {
         }
         res.json({ success: true, address });
     } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+
+app.get('/api/users/:userId/full-data/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        
+        const userResult = await query(
+            'SELECT * FROM users WHERE id = $1 AND company_id = $2',
+            [userId, companyId]
+        );
+        
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+        }
+        
+        const user = userResult.rows[0];
+        
+        // Получаем историю транзакций
+        const historyResult = await query(
+            `SELECT id, description, bonus_earned, bonus_spent, created_at, source, metadata
+             FROM transactions 
+             WHERE user_id = $1 AND company_id = $2 
+             ORDER BY created_at DESC 
+             LIMIT 50`,
+            [userId, companyId]
+        );
+        
+        const history = historyResult.rows.map(t => ({
+            id: t.id,
+            desc: t.description,
+            points: t.bonus_earned > 0 ? `+${t.bonus_earned}` : `-${t.bonus_spent}`,
+            date: new Date(t.created_at).toLocaleString('ru-RU'),
+            type: t.bonus_earned > 0 ? 'earn' : 'spend'
+        }));
+        
+        res.json({ 
+            success: true, 
+            user: {
+                id: user.id,
+                name: user.name,
+                bonus_balance: user.bonus_balance || 0,
+                total_earned: user.total_earned || 0,
+                total_spent: user.total_spent || 0,
+                regDate: new Date(user.created_at).toLocaleDateString('ru-RU'),
+                history: history
+            }
+        });
+    } catch (error) {
+        console.error('Ошибка получения данных пользователя:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+// ============ API ДЛЯ ПРИВЕТСТВИЙ ============
+
+// Получить настройки приветствия
+app.get('/api/companies/:companyId/greeting-settings', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const settings = await getGreetingSettings(companyId);
+        console.log('Greeting settings retrieved:', settings);
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Ошибка получения настроек приветствия:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Сохранить настройки приветствия
+app.post('/api/companies/:companyId/greeting-settings', async (req, res) => {
+    try {
+        const { greetingText, greetingEmoji, companyEmoji, fullGreetingText } = req.body;
+        
+        console.log('Saving greeting settings:', { 
+            companyId: req.params.companyId, 
+            greetingText, 
+            greetingEmoji,
+            companyEmoji,
+            fullGreetingText
+        });
+        
+        if (!greetingText || !greetingEmoji) {
+            return res.status(400).json({ success: false, message: 'Заполните обязательные поля' });
+        }
+        
+        const companyId = parseInt(req.params.companyId);
+        const result = await saveGreetingSettings(
+            companyId,
+            greetingText,
+            greetingEmoji,
+            companyEmoji || '🏢',
+            fullGreetingText || ''
+        );
+        
+        console.log('Greeting saved successfully:', result);
+        res.json({ success: true, settings: result.settings });
+    } catch (error) {
+        console.error('Ошибка сохранения настроек приветствия:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

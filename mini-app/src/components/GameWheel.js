@@ -171,7 +171,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
         }
     };
 
-    const spin = (useFreeSpin = false) => {
+    const spin = async (useFreeSpin = false) => {
     if (isSpinning) return;
     if (!settings.active) {
         alert('Игра временно недоступна');
@@ -192,7 +192,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
     }
     
     if (cost > 0) {
-        onBalanceUpdate(-cost, 'spend');
+        await onBalanceUpdate(-cost, 'spend', { source: 'game', gameType: 'wheel' });
     }
     
     setIsSpinning(true);
@@ -226,56 +226,53 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
     const selectedSector = settings.sectors[sectorIndex];
     const currentCost = cost;
     
-    setTimeout(() => {
-        const sector = selectedSector;
-        let prize = null;
-        
-        if (sector.value === 0) {
-            prize = { type: 'lose', value: 0, message: 'Попробуйте ещё раз!', sector: sector };
-            setLastWin('0');
-            playSound('lose');
-        } else {
-            const winAmount = sector.value;
-            if (currentCost === 0) {
-                // Бесплатное вращение - выигрыш без списания
-                onBalanceUpdate(winAmount, 'earn');
+    // ✅ Обернём в Promise, чтобы дождаться анимации
+    await new Promise(resolve => {
+        setTimeout(async () => {
+            const sector = selectedSector;
+            let prize = null;
+            
+            if (sector.value === 0) {
+                prize = { type: 'lose', value: 0, message: 'Попробуйте ещё раз!', sector: sector };
+                setLastWin('0');
+                playSound('lose');
             } else {
-                onBalanceUpdate(winAmount, 'earn');
+                const winAmount = sector.value;
+                // ✅ Дожидаемся начисления выигрыша
+                await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'wheel' });
+                
+                setLastWin(winAmount);
+                saveStats(winAmount);
+                setShowConfetti(true);
+                createParticles();
+                playSound('win');
+                
+                setTimeout(() => setShowConfetti(false), 2500);
+                prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
+                
+                // ✅ Обновляем прогресс задания
+                console.log('🎡 GameWheel: Выигрыш', winAmount, 'бонусов');
+                
+                if (typeof window.updateQuestProgress === 'function') {
+                    console.log('🎡 Вызов updateQuestProgress для spin_wheel');
+                    window.updateQuestProgress('spin_wheel', 1);
+                } else {
+                    console.error('❌ window.updateQuestProgress не функция!');
+                    window.dispatchEvent(new CustomEvent('questProgress', { 
+                        detail: { type: 'spin_wheel', increment: 1 } 
+                    }));
+                }
+                
+                if (winAmount > 10) {
+                    try { navigator.vibrate?.(200); } catch(e) {}
+                }
             }
-            setLastWin(winAmount);
-            saveStats(winAmount);
-            setShowConfetti(true);
-            createParticles();
-            playSound('win');
             
-            setTimeout(() => setShowConfetti(false), 2500);
-            prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
-            
-            // ====== ИСПРАВЛЕННЫЙ ВЫЗОВ ======
-            console.log('🎡 GameWheel: sector.value =', winAmount);
-            console.log('🎡 GameWheel: window.updateQuestProgress тип =', typeof window.updateQuestProgress);
-            
-            // В GameWheel.js, внутри setTimeout после начисления выигрыша
-if (typeof window.updateQuestProgress === 'function') {
-    console.log('🎡 Вызов updateQuestProgress для spin_wheel');
-    window.updateQuestProgress('spin_wheel', 1);
-} else {
-    console.error('❌ window.updateQuestProgress не функция!');
-    // Альтернативный способ через событие
-    window.dispatchEvent(new CustomEvent('questProgress', { 
-        detail: { type: 'spin_wheel', increment: 1 } 
-    }));
-}
-            // ===============================
-        }
-        
-        setResult(prize);
-        setIsSpinning(false);
-        
-        if (sector.value > 10) {
-            try { navigator.vibrate?.(200); } catch(e) {}
-        }
-    }, 3500);
+            setResult(prize);
+            setIsSpinning(false);
+            resolve();
+        }, 3500);
+    });
 };
 
     const getSectorGradient = (color, isWinning) => {

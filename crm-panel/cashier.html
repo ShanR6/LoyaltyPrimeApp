@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Страница кассира</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
@@ -680,101 +681,279 @@
                 
                 console.log('Processing image file:', file.name, file.type, file.size);
                 
-                // Create image element to get dimensions
-                const img = await loadImage(file);
-                console.log('Image loaded:', img.width, 'x', img.height);
+                // Try multiple scanning approaches with different configurations
+                let decodedText = null;
                 
-                // Create scanner
-                const tempScanner = new Html5Qrcode("reader", { 
-                    verbose: true,
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 }
-                });
-                
+                // Approach 1: Try html5-qrcode with original image
                 try {
-                    // Try scanning with scanFile
-                    console.log('Attempting to scan file...');
-                    const decodedText = await tempScanner.scanFile(file, true);
-                    
+                    console.log('Approach 1: html5-qrcode original...');
+                    const scanner = new Html5Qrcode("reader", { verbose: false });
+                    decodedText = await scanner.scanFile(file, true);
+                    await scanner.clear();
+                    console.log('✅ Success approach 1');
+                } catch (err) {
+                    console.log('Approach 1 failed');
+                }
+                
+                // Approach 2: Try jsQR with canvas preprocessing
+                if (!decodedText) {
+                    try {
+                        console.log('Approach 2: jsQR with preprocessing...');
+                        decodedText = await scanWithJsQR(file);
+                        console.log('✅ Success approach 2');
+                    } catch (err) {
+                        console.log('Approach 2 failed');
+                    }
+                }
+                
+                // Approach 3: Try with resized versions
+                if (!decodedText) {
+                    try {
+                        console.log('Approach 3: Multiple sizes...');
+                        decodedText = await scanMultipleSizes(file);
+                        console.log('✅ Success approach 3');
+                    } catch (err) {
+                        console.log('Approach 3 failed');
+                    }
+                }
+                
+                // Approach 4: Try html5-qrcode with inverted colors
+                if (!decodedText) {
+                    try {
+                        console.log('Approach 4: Inverted colors...');
+                        decodedText = await scanWithInversion(file);
+                        console.log('✅ Success approach 4');
+                    } catch (err) {
+                        console.log('Approach 4 failed');
+                    }
+                }
+                
+                if (decodedText) {
                     console.log('✅ QR code successfully decoded:', decodedText);
                     resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
                     
-                    // Process the QR code
                     setTimeout(async () => {
                         await processQrCode(decodedText);
-                        cleanupScanner(tempScanner);
-                    }, 500);
-                    
-                } catch (scanErr) {
-                    console.error('❌ QR scan failed:', scanErr);
-                    
-                    // Try alternative: create canvas and scan
-                    console.log('Trying canvas-based scanning...');
-                    try {
-                        const decodedText = await scanWithCanvas(file, img);
-                        
-                        console.log('✅ QR code decoded via canvas:', decodedText);
-                        resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
-                        
-                        setTimeout(async () => {
-                            await processQrCode(decodedText);
-                        }, 500);
-                        
-                    } catch (canvasErr) {
-                        console.error('❌ Canvas scanning also failed:', canvasErr);
-                        resultDiv.innerHTML = '<div class="error">❌ QR-код не найден. Попробуйте:<br>1. Убедиться, что QR-код четкий<br>2. Приблизить QR-код<br>3. Использовать сканирование камерой</div>';
-                    }
+                    }, 300);
+                } else {
+                    throw new Error('QR-код не распознан');
                 }
                 
             } catch (error) {
                 console.error('Processing error:', error);
-                resultDiv.innerHTML = '<div class="error">❌ Ошибка: ' + error.message + '</div>';
+                resultDiv.innerHTML = '<div class="error">❌ QR-код не найден. Убедитесь, что:<br>1. QR-код четкий и не размытый<br>2. QR-код полностью виден на изображении<br>3. Изображение не слишком темное или светлое</div>';
             }
         }
         
-        // Load image from file
-        function loadImage(file) {
+        // Scan using jsQR library with canvas preprocessing
+        async function scanWithJsQR(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = function(e) {
                     const img = new Image();
-                    img.onload = () => resolve(img);
-                    img.onerror = reject;
+                    img.onload = function() {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            
+                            // Try multiple preprocessing strategies
+                            const strategies = [
+                                { name: 'original', process: null },
+                                { name: 'grayscale', process: grayscale },
+                                { name: 'high-contrast', process: highContrast },
+                                { name: 'brighter', process: brighter },
+                                { name: 'darker', process: darker }
+                            ];
+                            
+                            for (const strategy of strategies) {
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                ctx.drawImage(img, 0, 0);
+                                
+                                if (strategy.process) {
+                                    strategy.process(ctx, canvas.width, canvas.height);
+                                }
+                                
+                                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                                    inversionAttempts: "dontInvert"
+                                });
+                                
+                                if (code && code.data) {
+                                    resolve(code.data);
+                                    return;
+                                }
+                                
+                                // Try with inversion
+                                const codeInverted = jsQR(imageData.data, imageData.width, imageData.height, {
+                                    inversionAttempts: "attemptBoth"
+                                });
+                                
+                                if (codeInverted && codeInverted.data) {
+                                    resolve(codeInverted.data);
+                                    return;
+                                }
+                            }
+                            
+                            reject(new Error('jsQR failed'));
+                        } catch (err) {
+                            reject(err);
+                        }
+                    };
+                    img.onerror = () => reject(new Error('Failed to load image'));
                     img.src = e.target.result;
                 };
-                reader.onerror = reject;
+                reader.onerror = () => reject(new Error('Failed to read file'));
                 reader.readAsDataURL(file);
             });
         }
         
-        // Alternative scanning using canvas
-        async function scanWithCanvas(file, img) {
+        // Scan with multiple image sizes
+        async function scanMultipleSizes(file) {
             return new Promise((resolve, reject) => {
-                try {
-                    // Create scanner
-                    const scanner = new Html5Qrcode("reader", { verbose: false });
-                    
-                    // Use the experimental scan approach
-                    scanner.scanFile(file, true)
-                        .then(resolve)
-                        .catch(reject);
-                } catch (err) {
-                    reject(err);
-                }
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const img = new Image();
+                    img.onload = async function() {
+                        try {
+                            const sizes = [
+                                { width: img.width, height: img.height },
+                                { width: 800, height: 800 },
+                                { width: 600, height: 600 },
+                                { width: 400, height: 400 },
+                                { width: 1000, height: 1000 }
+                            ];
+                            
+                            for (const size of sizes) {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = size.width;
+                                canvas.height = size.height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0, size.width, size.height);
+                                
+                                const resizedFile = await new Promise(resolve => {
+                                    canvas.toBlob(blob => {
+                                        resolve(new File([blob], 'resized.jpg', { type: 'image/jpeg' }));
+                                    }, 'image/jpeg', 0.95);
+                                });
+                                
+                                try {
+                                    const scanner = new Html5Qrcode("reader", { verbose: false });
+                                    const result = await scanner.scanFile(resizedFile, true);
+                                    await scanner.clear();
+                                    resolve(result);
+                                    return;
+                                } catch (err) {
+                                    // Continue to next size
+                                }
+                            }
+                            
+                            reject(new Error('All sizes failed'));
+                        } catch (err) {
+                            reject(err);
+                        }
+                    };
+                    img.onerror = () => reject(new Error('Failed to load image'));
+                    img.src = e.target.result;
+                };
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsDataURL(file);
             });
         }
         
-        // Cleanup scanner
-        async function cleanupScanner(scanner) {
-            try {
-                if (scanner && scanner.isScanning) {
-                    await scanner.stop();
-                }
-                await scanner.clear();
-            } catch (e) {
-                // Ignore cleanup errors
-                console.log('Cleanup error (ignored):', e);
+        // Scan with inverted colors
+        async function scanWithInversion(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const img = new Image();
+                    img.onload = async function() {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            
+                            // Invert colors
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const data = imageData.data;
+                            for (let i = 0; i < data.length; i += 4) {
+                                data[i] = 255 - data[i];     // red
+                                data[i + 1] = 255 - data[i + 1]; // green
+                                data[i + 2] = 255 - data[i + 2]; // blue
+                            }
+                            ctx.putImageData(imageData, 0, 0);
+                            
+                            const invertedFile = await new Promise(resolve => {
+                                canvas.toBlob(blob => {
+                                    resolve(new File([blob], 'inverted.jpg', { type: 'image/jpeg' }));
+                                }, 'image/jpeg', 0.95);
+                            });
+                            
+                            const scanner = new Html5Qrcode("reader", { verbose: false });
+                            const result = await scanner.scanFile(invertedFile, true);
+                            await scanner.clear();
+                            resolve(result);
+                        } catch (err) {
+                            reject(err);
+                        }
+                    };
+                    img.onerror = () => reject(new Error('Failed to load image'));
+                    img.src = e.target.result;
+                };
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        // Image preprocessing functions
+        function grayscale(ctx, width, height) {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                data[i] = avg;
+                data[i + 1] = avg;
+                data[i + 2] = avg;
             }
+            ctx.putImageData(imageData, 0, 0);
+        }
+        
+        function highContrast(ctx, width, height) {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            const threshold = 128;
+            for (let i = 0; i < data.length; i += 4) {
+                const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                const value = avg > threshold ? 255 : 0;
+                data[i] = value;
+                data[i + 1] = value;
+                data[i + 2] = value;
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+        
+        function brighter(ctx, width, height) {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = Math.min(255, data[i] + 50);
+                data[i + 1] = Math.min(255, data[i + 1] + 50);
+                data[i + 2] = Math.min(255, data[i + 2] + 50);
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+        
+        function darker(ctx, width, height) {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = Math.max(0, data[i] - 50);
+                data[i + 1] = Math.max(0, data[i + 1] - 50);
+                data[i + 2] = Math.max(0, data[i + 2] - 50);
+            }
+            ctx.putImageData(imageData, 0, 0);
         }
         
         // Paste from clipboard

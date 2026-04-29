@@ -251,6 +251,7 @@ async function initDatabase() {
 		await addStreakColumns();
 		await addBonusSettingsColumn();
 		await addNotificationCampaignColumns();
+		await addUserProgressSpentColumn();
         await insertTestData();
 
     } catch (error) {
@@ -1057,7 +1058,17 @@ async function getCompanyByEmail(email) {
 }
 
 async function getAllCompanies() {
-    const result = await query('SELECT id, company, brand_color as "brandColor", description FROM companies WHERE active = true ORDER BY created_at DESC');
+    const result = await query(`
+        SELECT 
+            id, 
+            company, 
+            brand_color as "brandColor", 
+            description,
+            COALESCE(settings->>'company_emoji', '🏢') as "companyEmoji"
+        FROM companies 
+        WHERE active = true 
+        ORDER BY created_at DESC
+    `);
     return result.rows;
 }
 
@@ -1078,20 +1089,33 @@ async function getUserByVkId(vkId, companyId) {
 }
 
 async function createUser(vkId, companyId, name) {
-    const result = await query(
-        `INSERT INTO users (vk_id, company_id, name, bonus_balance, created_at) 
-         VALUES ($1, $2, $3, 100, NOW()) 
-         RETURNING *`,
-        [vkId, companyId, name || 'Пользователь']
-    );
-    
-    await query(
-        `INSERT INTO user_progress (user_id, company_id, total_earned, streak, last_login_date) 
-         VALUES ($1, $2, 100, 0, NULL)`,
-        [result.rows[0].id, companyId]
-    );
-    
-    return result.rows[0];
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        const result = await client.query(
+            `INSERT INTO users (vk_id, company_id, name, bonus_balance, created_at) 
+             VALUES ($1, $2, $3, 100, NOW()) 
+             RETURNING *`,
+            [vkId, companyId, name || 'Пользователь']
+        );
+        
+        const user = result.rows[0];
+        
+        await client.query(
+            `INSERT INTO user_progress (user_id, company_id, total_earned, streak, created_at) 
+             VALUES ($1, $2, 100, 0, NOW())`,
+            [user.id, companyId]
+        );
+        
+        await client.query('COMMIT');
+        return user;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
 }
 
 
@@ -1421,30 +1445,88 @@ async function resetQuestProgress(questId) {
     }
 }
 
-async function updateUserBalance(userId, change, type, description) {
-    const user = await getUserById(userId);
-    if (!user) throw new Error('Пользователь не найден');
-    
-    const newBalance = type === 'earn' ? user.bonus_balance + change : user.bonus_balance - change;
-    if (newBalance < 0) throw new Error('Недостаточно бонусов');
-    
-    await query('UPDATE users SET bonus_balance = $1 WHERE id = $2', [newBalance, userId]);
-    
-    if (type === 'earn') {
-        await query('UPDATE users SET total_earned = total_earned + $1 WHERE id = $2', [change, userId]);
-        await query('UPDATE user_progress SET total_earned = total_earned + $1 WHERE user_id = $2', [change, userId]);
-    } else if (type === 'spend') {
-        // ✅ ДОБАВЬТЕ ЭТУ СТРОКУ:
-        await query('UPDATE users SET total_spent = total_spent + $1 WHERE id = $2', [Math.abs(change), userId]);
+
+
+async function updateUserBalance(userId, change, type, description, metadata = {}) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        const userResult = await client.query(
+            'SELECT bonus_balance, total_earned, total_spent, company_id FROM users WHERE id = $1',
+            [userId]
+        );
+        
+        if (userResult.rows.length === 0) {
+            throw new Error('Пользователь не найден');
+        }
+        
+        const user = userResult.rows[0];
+        const newBalance = type === 'earn' ? user.bonus_balance + change : user.bonus_balance - change;
+        
+        if (newBalance < 0) {
+            throw new Error('Недостаточно бонусов');
+        }
+        
+        // Обновляем баланс пользователя
+        await client.query(
+            'UPDATE users SET bonus_balance = $1 WHERE id = $2',
+            [newBalance, userId]
+        );
+        
+        if (type === 'earn') {
+            await client.query(
+                'UPDATE users SET total_earned = total_earned + $1 WHERE id = $2',
+                [change, userId]
+            );
+            await client.query(
+                `INSERT INTO user_progress (user_id, company_id, total_earned, updated_at)
+                 VALUES ($1, $2, $3, NOW())
+                 ON CONFLICT (user_id, company_id)
+                 DO UPDATE SET total_earned = user_progress.total_earned + $3, updated_at = NOW()`,
+                [userId, user.company_id, change]
+            );
+        } else if (type === 'spend') {
+            // ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: при списании увеличиваем total_spent
+            const spendAmount = Math.abs(change);
+            await client.query(
+                'UPDATE users SET total_spent = total_spent + $1 WHERE id = $2',
+                [spendAmount, userId]
+            );
+            await client.query(
+                `INSERT INTO user_progress (user_id, company_id, total_spent, updated_at)
+                 VALUES ($1, $2, $3, NOW())
+                 ON CONFLICT (user_id, company_id)
+                 DO UPDATE SET total_spent = user_progress.total_spent + $3, updated_at = NOW()`,
+                [userId, user.company_id, spendAmount]
+            );
+        }
+        
+        // Добавляем транзакцию
+        const source = metadata.source || (type === 'earn' ? 'app' : 'game');
+        await client.query(
+            `INSERT INTO transactions (user_id, company_id, amount, bonus_earned, bonus_spent, description, source, metadata, created_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+            [userId, user.company_id, 
+             type === 'spend' ? Math.abs(change) : 0, 
+             type === 'earn' ? change : 0, 
+             type === 'spend' ? Math.abs(change) : 0, 
+             description, source, JSON.stringify(metadata)]
+        );
+        
+        await client.query('COMMIT');
+        
+        return {
+            newBalance,
+            totalEarned: type === 'earn' ? user.total_earned + change : user.total_earned,
+            totalSpent: type === 'spend' ? (user.total_spent || 0) + Math.abs(change) : (user.total_spent || 0)
+        };
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
     }
-    
-    await query(
-        `INSERT INTO transactions (user_id, company_id, amount, bonus_earned, bonus_spent, description, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [userId, user.company_id, type === 'spend' ? change : 0, type === 'earn' ? change : 0, type === 'spend' ? change : 0, description]
-    );
-    
-    return newBalance;
 }
 
 async function completeUserQuest(userId, questId, reward) {
@@ -3404,6 +3486,68 @@ async function findCashierByLogin(login) {
     }
 }
 
+async function saveGreetingSettings(companyId, greetingText, greetingEmoji, companyEmoji, fullGreetingText) {
+    try {
+        const result = await query(
+            `UPDATE companies 
+             SET settings = jsonb_set(
+                 jsonb_set(
+                     jsonb_set(
+                         COALESCE(settings, '{}'::jsonb),
+                         '{greeting}',
+                         jsonb_build_object('text', $2::text, 'emoji', $3::text)
+                     ),
+                     '{company_emoji}',
+                     to_jsonb($4::text)
+                 ),
+                 '{full_greeting_text}',
+                 to_jsonb($5::text)
+             )
+             WHERE id = $1
+             RETURNING id, settings`,
+            [companyId, greetingText, greetingEmoji, companyEmoji || '🏢', fullGreetingText || '']
+        );
+        
+        return result.rows[0];
+    } catch (error) {
+        console.error('Ошибка сохранения приветствия:', error);
+        throw error;
+    }
+}
+
+async function getGreetingSettings(companyId) {
+    try {
+        const result = await query(
+            `SELECT 
+                COALESCE(settings->'greeting'->>'text', 'Добро пожаловать!') as greeting_text,
+                COALESCE(settings->'greeting'->>'emoji', '👋') as greeting_emoji,
+                COALESCE(settings->>'company_emoji', '🏢') as company_emoji,
+                COALESCE(settings->>'full_greeting_text', '') as full_greeting_text
+             FROM companies 
+             WHERE id = $1`,
+            [companyId]
+        );
+        
+        if (result.rows.length > 0) {
+            return result.rows[0];
+        }
+        return { 
+            greeting_text: 'Добро пожаловать!', 
+            greeting_emoji: '👋',
+            company_emoji: '🏢',
+            full_greeting_text: ''
+        };
+    } catch (error) {
+        console.error('Ошибка получения приветствия:', error);
+        return { 
+            greeting_text: 'Добро пожаловать!', 
+            greeting_emoji: '👋',
+            company_emoji: '🏢',
+            full_greeting_text: ''
+        };
+    }
+}
+
 async function saveCashierCredentials(companyId, login, password) {
     try {
         const result = await query(
@@ -3418,6 +3562,80 @@ async function saveCashierCredentials(companyId, login, password) {
         return result.rows[0];
     } catch (error) {
         console.error('Ошибка сохранения данных кассира:', error);
+        throw error;
+    }
+}
+async function addUserProgressSpentColumn() {
+    try {
+        const checkColumn = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'user_progress' AND column_name = 'total_spent'
+        `);
+        
+        if (checkColumn.rows.length === 0) {
+            console.log('📝 Добавляем колонку total_spent в таблицу user_progress...');
+            await query(`ALTER TABLE user_progress ADD COLUMN total_spent INTEGER DEFAULT 0`);
+            console.log('✅ Колонка total_spent добавлена в user_progress');
+        }
+    } catch (error) {
+        console.error('Ошибка добавления total_spent в user_progress:', error);
+    }
+}
+async function getUserFullData(userId, companyId) {
+    try {
+        // Получаем пользователя
+        const userResult = await query(
+            'SELECT * FROM users WHERE id = $1 AND company_id = $2',
+            [userId, companyId]
+        );
+        
+        if (userResult.rows.length === 0) return null;
+        
+        const user = userResult.rows[0];
+        
+        // Получаем прогресс пользователя
+        const progressResult = await query(
+            'SELECT * FROM user_progress WHERE user_id = $1 AND company_id = $2',
+            [userId, companyId]
+        );
+        
+        const progress = progressResult.rows[0] || {};
+        
+        // Получаем историю транзакций (последние 50)
+        const historyResult = await query(
+            `SELECT id, description, bonus_earned, bonus_spent, created_at, source
+             FROM transactions 
+             WHERE user_id = $1 AND company_id = $2 
+             ORDER BY created_at DESC 
+             LIMIT 50`,
+            [userId, companyId]
+        );
+        
+        // Форматируем историю
+        const history = historyResult.rows.map(t => ({
+            id: t.id,
+            desc: t.description,
+            points: t.bonus_earned > 0 ? `+${t.bonus_earned}` : `-${t.bonus_spent}`,
+            date: new Date(t.created_at).toLocaleString('ru-RU'),
+            type: t.bonus_earned > 0 ? 'earn' : 'spend',
+            source: t.source
+        }));
+        
+        return {
+            id: user.id,
+            vk_id: user.vk_id,
+            name: user.name,
+            bonus_balance: user.bonus_balance || 0,
+            total_earned: user.total_earned || 0,
+            total_spent: user.total_spent || 0,
+            regDate: new Date(user.created_at).toLocaleDateString('ru-RU'),
+            lastDaily: progress.last_login_date,
+            streak: progress.streak || 0,
+            history: history
+        };
+    } catch (error) {
+        console.error('Ошибка getUserFullData:', error);
         throw error;
     }
 }
@@ -3530,5 +3748,10 @@ module.exports = {
     // Cashier credentials
     getCashierCredentials,
     saveCashierCredentials,
-    findCashierByLogin
+    findCashierByLogin,
+	addUserProgressSpentColumn,
+	getUserFullData,
+    // Greeting settings
+    saveGreetingSettings,
+    getGreetingSettings
 };

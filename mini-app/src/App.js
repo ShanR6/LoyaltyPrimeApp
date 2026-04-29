@@ -54,6 +54,7 @@ export function App() {
   const [showLocationSelector, setShowLocationSelector] = useState(false);
   const [selectedCityId, setSelectedCityId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [greetingSettings, setGreetingSettings] = useState({ text: 'Добро пожаловать!', emoji: '👋' });
   
 
 const getCurrentTierBySpent = (spent) => {
@@ -406,7 +407,9 @@ const loadUserData = async (companyId, vkUserId, userName) => {
     saveCurrentGroupData({ ...cur, history: newHistory });
   };
   
-const updateBalanceAndStats = async (change, type) => {
+
+
+const updateBalanceAndStats = async (change, type, metadata = {}) => {
   if (!selectedGroup) return false;
   const cur = getCurrentGroupData();
   let newBalance = cur.bonusBalance + change;
@@ -415,15 +418,16 @@ const updateBalanceAndStats = async (change, type) => {
     return false;
   }
   
-  let newTotalSpent = cur.totalSpent;
-  let newTotalEarned = cur.totalEarned;
+  let newTotalSpent = cur.totalSpent || 0;
+  let newTotalEarned = cur.totalEarned || 0;
   
   if (type === 'earn') {
     newTotalEarned = cur.totalEarned + change;
     addHistory(`Начисление +${change}`, change, 'earn');
   } else if (type === 'spend') {
+    // ✅ При списании бонусов (игры) увеличиваем totalSpent
     newTotalSpent = (cur.totalSpent || 0) + Math.abs(change);
-    addHistory(`Списание: ${Math.abs(change)} баллов`, change, 'spend');
+    addHistory(`Списание: ${Math.abs(change)} баллов (игровая активность)`, change, 'spend');
   }
   
   const newData = { 
@@ -433,27 +437,46 @@ const updateBalanceAndStats = async (change, type) => {
     totalSpent: newTotalSpent
   };
   
-  // Сначала сохраняем локально
+  // Сохраняем локально (для быстрого UI)
   saveCurrentGroupData(newData);
   
-  // Затем отправляем на сервер асинхронно (не ждем ответа)
+  // ✅ Отправляем на сервер и получаем обновленные данные
   if (userId) {
-    fetch(`${API_URL}/api/users/updateBalance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: userId,
-        change: change,
-        type: type,
-        description: type === 'earn' ? `Начисление ${change} бонусов` : `Списание ${Math.abs(change)} бонусов`
-      })
-    }).catch(error => console.error('Ошибка обновления баланса на сервере:', error));
+    try {
+      const response = await fetch(`${API_URL}/api/users/updateBalance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userId,
+          change: change,
+          type: type,
+          description: type === 'earn' ? `Начисление ${change} бонусов` : `Списание ${Math.abs(change)} бонусов`,
+          metadata: { source: metadata.source || 'game', gameType: metadata.gameType }
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        // ✅ Синхронизируем с сервером (на случай расхождений)
+        if (result.newTotalSpent !== undefined) {
+          const syncedData = { 
+            ...newData, 
+            totalSpent: result.newTotalSpent,
+            totalEarned: result.newTotalEarned,
+            bonusBalance: result.newBalance
+          };
+          saveCurrentGroupData(syncedData);
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка обновления баланса на сервере:', error);
+    }
   }
   
   return true;
 };
   
-// Функция для синхронизации баланса из БД
+
 const syncBalanceFromDB = async () => {
   if (!userId || !selectedGroup) return;
   
@@ -472,18 +495,15 @@ const syncBalanceFromDB = async () => {
     if (data.success) {
       const cur = getCurrentGroupData();
       
-      // ✅ НЕ перезаписываем totalSpent вообще из БД!
-      // totalSpent обновляется только локально при списаниях и выигрышах
-      // В БД total_spent обновляется только при POS-покупках
+      // ✅ ОБНОВЛЯЕМ: totalSpent берем из БД (теперь игры увеличивают его)
       const newData = {
         ...cur,
         bonusBalance: data.user.bonus_balance || 0,
         totalEarned: data.user.total_earned || 0,
-        // totalSpent НЕ обновляем из БД, оставляем локальное значение
-        totalSpent: cur.totalSpent || 0
+        totalSpent: data.user.total_spent || 0  // Теперь игры обновляют total_spent на сервере
       };
       saveCurrentGroupData(newData);
-      console.log('Баланс синхронизирован из БД:', newData.bonusBalance, 'локальный totalSpent:', newData.totalSpent);
+      console.log('Баланс синхронизирован из БД:', newData.bonusBalance, 'totalSpent:', newData.totalSpent);
     }
   } catch (error) {
     console.error('Ошибка синхронизации баланса:', error);
@@ -665,9 +685,38 @@ useEffect(() => {
       id: company.id, 
       name: company.company, 
       color: color, 
-      icon: '🏢', 
-      description: company.description 
+      icon: '🏢', // Default, will be updated from CRM
+      description: company.description,
+      greetingEmoji: '👋', // Default, will be updated from CRM
+      greetingText: 'Добро пожаловать!', // Default, will be updated from CRM
+      fullGreetingText: '' // Default, will be updated from CRM
     });
+    
+    // Загружаем настройки приветствия
+    try {
+      const greetingResponse = await fetch(`${API_URL}/api/companies/${company.id}/greeting-settings`);
+      if (greetingResponse.ok) {
+        const greetingData = await greetingResponse.json();
+        if (greetingData.success && greetingData.settings) {
+          const companyEmoji = greetingData.settings.company_emoji || '🏢';
+          const fullGreetingText = greetingData.settings.full_greeting_text || '';
+          
+          setGreetingSettings({
+            text: company.name,
+            emoji: companyEmoji
+          });
+          
+          // Update selectedGroup with greeting settings and company emoji
+          setSelectedGroup(prev => ({
+            ...prev,
+            icon: companyEmoji,
+            fullGreetingText
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки приветствия:', error);
+    }
     
     if (userInfo?.id) {
       await loadUserData(company.id, userInfo.id, `${userInfo.first_name} ${userInfo.last_name}`);
@@ -868,7 +917,7 @@ if (step === 'selectGroup') {
                             background: `${compColor}20`,
                             borderRadius: '50%'
                           }}>
-                            🏢
+                            {company.companyEmoji || '🏢'}
                           </div>
                           <div style={{ flex:1 }}>
                             <div style={{ fontWeight:700, fontSize:18, color:'white' }}>
@@ -939,7 +988,7 @@ if (step === 'selectGroup') {
                         background: `${compColor}20`,
                         borderRadius: '50%'
                       }}>
-                        🏢
+                        {company.companyEmoji || '🏢'}
                       </div>
                       <div style={{ flex:1 }}>
                         <div style={{ fontWeight:700, fontSize:18, color:'white' }}>
@@ -1133,10 +1182,32 @@ const progressToNext = getProgressToNextTier(currentSpent);
       
       {activeTab === 'home' && selectedGroup && (
   <>
-    <div style={{ background:`linear-gradient(135deg, ${selectedGroup.color}20, rgba(30,35,48,0.7))`, borderRadius:28, padding:20, marginBottom:20, textAlign:'center' }}>
-      <div style={{ fontSize:48, marginBottom:8 }}>{selectedGroup.icon}</div>
-      <h2 style={{ fontSize:22, marginBottom:4, color:'white' }}>{selectedGroup.name}</h2>
-      <p style={{ opacity:0.8, fontSize:14, color:'white' }}>{selectedGroup.description}</p>
+    {/* Greeting Section - Controlled by CRM Settings */}
+    <div style={{ 
+      background: `linear-gradient(135deg, ${selectedGroup.color}30, ${selectedGroup.color}10)`, 
+      borderRadius: 28, 
+      padding: 24, 
+      marginBottom: 20, 
+      textAlign: 'center',
+      border: `2px solid ${selectedGroup.color}40`
+    }}>
+      <div style={{ fontSize: 64, marginBottom: 12 }}>{greetingSettings.emoji}</div>
+      <h2 style={{ fontSize: 22, marginBottom: 8, color: 'white', fontWeight: 700 }}>
+        {greetingSettings.text}
+      </h2>
+      {selectedGroup.fullGreetingText && (
+        <div style={{ 
+          marginTop: 16, 
+          paddingTop: 16, 
+          borderTop: '1px solid rgba(255,255,255,0.2)',
+          fontSize: 14, 
+          color: 'white', 
+          opacity: 0.85,
+          lineHeight: 1.6
+        }}>
+          {selectedGroup.fullGreetingText}
+        </div>
+      )}
     </div>
     
     <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>

@@ -176,86 +176,96 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
         return { winAmount, combo, isJackpot };
     };
     
-    const rollDice = () => {
-        if (isRolling) return;
-        if (!settings.active) {
-            alert('Игра временно недоступна');
-            return;
-        }
+    const rollDice = async () => {
+    if (isRolling) return;
+    if (!settings.active) {
+        alert('Игра временно недоступна');
+        return;
+    }
+    
+    const totalCost = settings.cost * betMultiplier;
+    if (userBalance < totalCost) {
+        alert(`❌ Недостаточно бонусов! Нужно ${totalCost} бонусов.`);
+        return;
+    }
+    
+    
+    await onBalanceUpdate(-totalCost, 'spend', { source: 'game', gameType: 'dice' });
+    
+    setIsRolling(true);
+    setResult(null);
+    
+    let rollCount = 0;
+    const maxRolls = 12;
+    const final1 = Math.floor(Math.random() * 6) + 1;
+    const final2 = Math.floor(Math.random() * 6) + 1;
+    
+    const interval = setInterval(() => {
+        setDice1(Math.floor(Math.random() * 6) + 1);
+        setDice2(Math.floor(Math.random() * 6) + 1);
+        rollCount++;
         
-        const totalCost = settings.cost * betMultiplier;
-        if (userBalance < totalCost) {
-            alert(`❌ Недостаточно бонусов! Нужно ${totalCost} бонусов.`);
-            return;
-        }
-        
-        onBalanceUpdate(-totalCost, 'spend');
-        setIsRolling(true);
-        setResult(null);
-        
-        let rollCount = 0;
-        const maxRolls = 12;
-        const final1 = Math.floor(Math.random() * 6) + 1;
-        const final2 = Math.floor(Math.random() * 6) + 1;
-        
-        const interval = setInterval(() => {
-            setDice1(Math.floor(Math.random() * 6) + 1);
-            setDice2(Math.floor(Math.random() * 6) + 1);
-            rollCount++;
+        if (rollCount >= maxRolls) {
+            clearInterval(interval);
+            setDice1(final1);
+            setDice2(final2);
             
-            if (rollCount >= maxRolls) {
-                clearInterval(interval);
-                setDice1(final1);
-                setDice2(final2);
-                
-                const { winAmount, combo, isJackpot } = evaluateRoll(final1, final2);
-                
-                setTimeout(() => {
-                    if (winAmount > 0) {
-                        onBalanceUpdate(winAmount, 'earn');
-                        setLastWin(winAmount);
-                        createParticles();
-                        
-                        const newHistory = [{
-                            id: Date.now(),
-                            dice1: final1,
-                            dice2: final2,
-                            combo: combo?.name || 'Выигрыш',
-                            win: winAmount,
-                            multiplier: betMultiplier
-                        }, ...comboHistory].slice(0, 10);
-                        setComboHistory(newHistory);
-                        localStorage.setItem('dice_history', JSON.stringify(newHistory));
-                        
-                        setResult({
-                            win: true,
-                            amount: winAmount,
-                            combo: combo,
-                            message: `${combo?.icon || '🎉'} ${combo?.name || 'Выигрыш'}! +${winAmount} бонусов!`,
-                            isJackpot
-                        });
-                        
-                        if (winAmount > 100) {
-                            try { navigator.vibrate?.(200); } catch(e) {}
-                        }
-                    } else {
-                        setResult({
-                            win: false,
-                            amount: 0,
-                            message: `😢 Выпало ${final1} и ${final2} (сумма ${final1 + final2}). Попробуйте ещё раз!`
-                        });
+            const { winAmount, combo, isJackpot } = evaluateRoll(final1, final2);
+            
+            // ✅ Используем async функцию внутри setTimeout
+            setTimeout(async () => {
+                if (winAmount > 0) {
+                    // ✅ Дожидаемся начисления выигрыша
+                    await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'dice' });
+                    setLastWin(winAmount);
+                    createParticles();
+                    
+                    const newHistory = [{
+                        id: Date.now(),
+                        dice1: final1,
+                        dice2: final2,
+                        combo: combo?.name || 'Выигрыш',
+                        win: winAmount,
+                        multiplier: betMultiplier
+                    }, ...comboHistory].slice(0, 10);
+                    setComboHistory(newHistory);
+                    localStorage.setItem('dice_history', JSON.stringify(newHistory));
+                    
+                    setResult({
+                        win: true,
+                        amount: winAmount,
+                        combo: combo,
+                        message: `${combo?.icon || '🎉'} ${combo?.name || 'Выигрыш'}! +${winAmount} бонусов!`,
+                        isJackpot
+                    });
+                    
+                    if (winAmount > 100) {
+                        try { navigator.vibrate?.(200); } catch(e) {}
                     }
-                    
-                    setIsRolling(false);
-                    
-                    if (typeof window.updateQuestProgress === 'function') {
-    console.log('🎲 Вызов updateQuestProgress для play_dice');
-    window.updateQuestProgress('play_dice', 1);
-}
-                }, 200);
-            }
-        }, 80);
-    };
+                } else {
+                    setResult({
+                        win: false,
+                        amount: 0,
+                        message: `😢 Выпало ${final1} и ${final2} (сумма ${final1 + final2}). Попробуйте ещё раз!`
+                    });
+                }
+                
+                setIsRolling(false);
+                
+                // ✅ Обновляем прогресс задания (даже при проигрыше, за саму игру)
+                if (typeof window.updateQuestProgress === 'function') {
+                    console.log('🎲 Вызов updateQuestProgress для play_dice');
+                    window.updateQuestProgress('play_dice', 1);
+                } else {
+                    console.error('❌ window.updateQuestProgress не функция!');
+                    window.dispatchEvent(new CustomEvent('questProgress', { 
+                        detail: { type: 'play_dice', increment: 1 } 
+                    }));
+                }
+            }, 200);
+        }
+    }, 80);
+};
     
     // Функция для отображения точек на кубике
     const renderDiceDots = (value) => {

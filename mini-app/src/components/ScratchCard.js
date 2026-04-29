@@ -169,126 +169,141 @@ export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId })
     };
 
     // Новая игра
-    const newGame = () => {
-        if (isRevealing) return;
-        if (!settings.active) {
-            alert('Игра временно недоступна');
-            return;
-        }
-        
-        if (userBalance < settings.cost) {
-            alert(`❌ Недостаточно бонусов! Нужно ${settings.cost} бонусов.`);
-            return;
-        }
-        
-        onBalanceUpdate(-settings.cost, 'spend');
-        
-        const newBoard = createBoard(settings.symbols);
-        const winningSym = newBoard.find(cell => cell.isWinning)?.symbol;
-        
-        setBoard(newBoard);
-        setSelectedSymbol(winningSym);
-        setGameActive(true);
-        setResult(null);
-        setLastWin(null);
-        setShowConfetti(false);
-        setAttemptsLeft(settings.maxAttempts);
-        setFoundWinning(0);
-    };
+const newGame = async () => {
+    if (isRevealing) return;
+    if (!settings.active) {
+        alert('Игра временно недоступна');
+        return;
+    }
+    
+    if (userBalance < settings.cost) {
+        alert(`❌ Недостаточно бонусов! Нужно ${settings.cost} бонусов.`);
+        return;
+    }
+    
+    
+    await onBalanceUpdate(-settings.cost, 'spend', { source: 'game', gameType: 'scratch', action: 'newGame' });
+    
+    const newBoard = createBoard(settings.symbols);
+    const winningSym = newBoard.find(cell => cell.isWinning)?.symbol;
+    
+    setBoard(newBoard);
+    setSelectedSymbol(winningSym);
+    setGameActive(true);
+    setResult(null);
+    setLastWin(null);
+    setShowConfetti(false);
+    setAttemptsLeft(settings.maxAttempts);
+    setFoundWinning(0);
+};
 
-    // Открыть ячейку
-    const revealCell = (index, isFreeHint = false) => {
-        if (!gameActive) return;
-        if (isRevealing) return;
-        if (board[index].revealed) return;
-        if (attemptsLeft <= 0) return;
+// Открыть ячейку
+const revealCell = (index, isFreeHint = false) => {
+    if (!gameActive) return;
+    if (isRevealing) return;
+    if (board[index].revealed) return;
+    if (attemptsLeft <= 0) return;
+    
+    setIsRevealing(true);
+    
+    // ✅ Сохраняем текущие значения
+    const currentAttemptsLeft = attemptsLeft;
+    const currentFoundWinning = foundWinning;
+    
+    setTimeout(async () => {
+        const newBoard = [...board];
+        newBoard[index].revealed = true;
+        setBoard(newBoard);
         
-        setIsRevealing(true);
+        let newAttemptsLeft = currentAttemptsLeft;
+        let newFoundWinning = currentFoundWinning;
         
-        setTimeout(() => {
-            const newBoard = [...board];
-            newBoard[index].revealed = true;
-            setBoard(newBoard);
+        // Если это не бесплатная подсказка, тратим попытку
+        if (!isFreeHint) {
+            newAttemptsLeft = currentAttemptsLeft - 1;
+            setAttemptsLeft(newAttemptsLeft);
+        }
+        
+        if (newBoard[index].isWinning) {
+            newFoundWinning = currentFoundWinning + 1;
+            setFoundWinning(newFoundWinning);
             
-            // Если это не бесплатная подсказка, тратим попытку
-            if (!isFreeHint) {
-                const newAttemptsLeft = attemptsLeft - 1;
-                setAttemptsLeft(newAttemptsLeft);
-            }
-            
-            if (newBoard[index].isWinning) {
-                const newFoundWinning = foundWinning + 1;
-                setFoundWinning(newFoundWinning);
-                
-                if (newFoundWinning === 3) {
-                    const winAmount = newBoard[index].symbol.value * newBoard[index].symbol.multiplier;
-                    onBalanceUpdate(winAmount, 'earn');
-                    setLastWin(winAmount);
-                    setShowConfetti(true);
-                    setTimeout(() => setShowConfetti(false), 3000);
-                    setResult({
-                        type: 'win',
-                        value: winAmount,
-                        message: `🎉 ПОБЕДА! Вы нашли 3 ${newBoard[index].symbol.name} и выиграли ${winAmount} бонусов! 🎉`
-                    });
-                    setGameActive(false);
-                    try { navigator.vibrate?.(200); } catch(e) {}
-                }
-            }
-            
-            // Проверка на проигрыш (только если не бесплатная подсказка)
-            if (!isFreeHint && attemptsLeft - 1 === 0 && foundWinning < 2) {
+            if (newFoundWinning === 3) {
+                const winAmount = newBoard[index].symbol.value * newBoard[index].symbol.multiplier;
+                // ✅ Дожидаемся начисления выигрыша
+                await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'scratch', action: 'win' });
+                setLastWin(winAmount);
+                setShowConfetti(true);
+                setTimeout(() => setShowConfetti(false), 3000);
                 setResult({
-                    type: 'lose',
-                    value: 0,
-                    message: `😢 Вы не нашли 3 одинаковых символа за ${settings.maxAttempts} попыток. Попробуйте ещё раз!`
+                    type: 'win',
+                    value: winAmount,
+                    message: `🎉 ПОБЕДА! Вы нашли 3 ${newBoard[index].symbol.name} и выиграли ${winAmount} бонусов! 🎉`
                 });
                 setGameActive(false);
+                try { navigator.vibrate?.(200); } catch(e) {}
+                
+                // ✅ Обновляем прогресс задания при победе
+                if (typeof window.updateQuestProgress === 'function') {
+                    console.log('🎫 Вызов updateQuestProgress для scratch_card (победа)');
+                    window.updateQuestProgress('scratch_card', 1);
+                }
             }
-            
-            setIsRevealing(false);
-            
-            // В функции revealCell, после открытия ячейки
-if (typeof window.updateQuestProgress === 'function') {
-    console.log('🎫 Вызов updateQuestProgress для scratch_card');
-    window.updateQuestProgress('scratch_card', 1);
-}
-        }, 200);
-    };
-
-    // Подсказка - показать одну выигрышную ячейку
-    const showHint = () => {
-        if (!gameActive) return;
-        if (isRevealing) return;
-        if (attemptsLeft <= 0) return;
-        
-        const unrevealedWinning = board.findIndex(cell => cell.isWinning && !cell.revealed);
-        
-        if (unrevealedWinning === -1) {
-            alert('❌ Нет доступных подсказок!');
-            return;
         }
         
-        // Проверяем, есть ли бесплатная подсказка
-        if (settings.freeHintDaily && freeHintAvailable && !freeHintUsed) {
-            // Используем бесплатную подсказку
-            saveFreeHintState(true);
-            revealCell(unrevealedWinning, true);
+        // ✅ Используем сохранённые значения для проверки проигрыша
+        if (!isFreeHint && newAttemptsLeft === 0 && newFoundWinning < 3) {
             setResult({
-                type: 'info',
-                message: '🎁 Использована бесплатная подсказка!'
+                type: 'lose',
+                value: 0,
+                message: `😢 Вы не нашли 3 одинаковых символа за ${settings.maxAttempts} попыток. Попробуйте ещё раз!`
             });
-            setTimeout(() => setResult(null), 2000);
-        } 
-        else if (userBalance >= settings.hintCost) {
-            // Используем платную подсказку
-            onBalanceUpdate(-settings.hintCost, 'spend');
-            revealCell(unrevealedWinning, false);
-        } 
-        else {
-            alert(`❌ Недостаточно бонусов! Нужно ${settings.hintCost} бонусов за подсказку.`);
+            setGameActive(false);
         }
-    };
+        
+        setIsRevealing(false);
+        
+        // ✅ Обновляем прогресс задания за саму игру (если не бесплатная подсказка)
+        if (!isFreeHint && typeof window.updateQuestProgress === 'function') {
+            console.log('🎫 Вызов updateQuestProgress для scratch_card (игра)');
+            window.updateQuestProgress('scratch_card', 1);
+        }
+    }, 200);
+};
+
+// Подсказка - показать одну выигрышную ячейку
+const showHint = async () => {
+    if (!gameActive) return;
+    if (isRevealing) return;
+    if (attemptsLeft <= 0) return;
+    
+    const unrevealedWinning = board.findIndex(cell => cell.isWinning && !cell.revealed);
+    
+    if (unrevealedWinning === -1) {
+        alert('❌ Нет доступных подсказок!');
+        return;
+    }
+    
+    // Проверяем, есть ли бесплатная подсказка
+    if (settings.freeHintDaily && freeHintAvailable && !freeHintUsed) {
+        // Используем бесплатную подсказку
+        saveFreeHintState(true);
+        revealCell(unrevealedWinning, true);
+        setResult({
+            type: 'info',
+            message: '🎁 Использована бесплатная подсказка!'
+        });
+        setTimeout(() => setResult(null), 2000);
+    } 
+    else if (userBalance >= settings.hintCost) {
+        // ✅ Дожидаемся списания за подсказку
+        await onBalanceUpdate(-settings.hintCost, 'spend', { source: 'game', gameType: 'scratch', action: 'hint' });
+        revealCell(unrevealedWinning, false);
+    } 
+    else {
+        alert(`❌ Недостаточно бонусов! Нужно ${settings.hintCost} бонусов за подсказку.`);
+    }
+};
 
     if (!settingsLoaded) {
         return (
