@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Страница кассира</title>
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="/js/html5-qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -666,84 +666,126 @@
             }
         }
         
+		async function preprocessImageForQR(file) {
+  const img = await createImageBitmap(file);
+  const srcW = img.width, srcH = img.height;
+
+  const MIN_SIZE = 800;
+  let scale = 1;
+  if (Math.max(srcW, srcH) < MIN_SIZE) {
+    scale = MIN_SIZE / Math.max(srcW, srcH);
+  }
+  const w = Math.round(srcW * scale);
+  const h = Math.round(srcH * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const data = imageData.data;
+
+  // Gray
+  const gray = new Uint8Array(w * h);
+  for (let i = 0; i < data.length; i += 4) {
+    gray[i / 4] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+  }
+
+  // Adaptive threshold
+  const blockSize = 15, C = 10;
+  const half = Math.floor(blockSize / 2);
+  const integral = new Uint32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    let sum = 0;
+    for (let x = 0; x < w; x++) {
+      sum += gray[y * w + x];
+      const above = y > 0 ? integral[(y - 1) * w + x] : 0;
+      integral[y * w + x] = sum + above;
+    }
+  }
+  const binary = new Uint8ClampedArray(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const x1 = Math.max(x - half, 0);
+      const y1 = Math.max(y - half, 0);
+      const x2 = Math.min(x + half, w - 1);
+      const y2 = Math.min(y + half, h - 1);
+      const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+      const sumBlock = integral[y2 * w + x2]
+                     - (x1 > 0 ? integral[y2 * w + x1 - 1] : 0)
+                     - (y1 > 0 ? integral[(y1 - 1) * w + x2] : 0)
+                     + (x1 > 0 && y1 > 0 ? integral[(y1 - 1) * w + x1 - 1] : 0);
+      const mean = sumBlock / area;
+      binary[y * w + x] = gray[y * w + x] > (mean - C) ? 255 : 0;
+    }
+  }
+  for (let i = 0; i < binary.length; i++) {
+    const val = binary[i];
+    const idx = i * 4;
+    data[idx] = val;
+    data[idx + 1] = val;
+    data[idx + 2] = val;
+    data[idx + 3] = 255;
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+		
         async function handleImageUpload(file) {
-            if (!file) return;
-            
-            const resultDiv = document.getElementById('imageUploadResult');
-            resultDiv.innerHTML = '<div class="info">⏳ Обработка изображения...</div>';
-            
-            try {
-                // Validate file type
-                if (!file.type.startsWith('image/')) {
-                    resultDiv.innerHTML = '<div class="error">❌ Пожалуйста, выберите изображение</div>';
-                    return;
-                }
-                
-                console.log('Processing image file:', file.name, file.type, file.size);
-                
-                // Try multiple scanning approaches with different configurations
-                let decodedText = null;
-                
-                // Approach 1: Try html5-qrcode with original image
-                try {
-                    console.log('Approach 1: html5-qrcode original...');
-                    const scanner = new Html5Qrcode("reader", { verbose: false });
-                    decodedText = await scanner.scanFile(file, true);
-                    await scanner.clear();
-                    console.log('✅ Success approach 1');
-                } catch (err) {
-                    console.log('Approach 1 failed');
-                }
-                
-                // Approach 2: Try jsQR with canvas preprocessing
-                if (!decodedText) {
-                    try {
-                        console.log('Approach 2: jsQR with preprocessing...');
-                        decodedText = await scanWithJsQR(file);
-                        console.log('✅ Success approach 2');
-                    } catch (err) {
-                        console.log('Approach 2 failed');
-                    }
-                }
-                
-                // Approach 3: Try with resized versions
-                if (!decodedText) {
-                    try {
-                        console.log('Approach 3: Multiple sizes...');
-                        decodedText = await scanMultipleSizes(file);
-                        console.log('✅ Success approach 3');
-                    } catch (err) {
-                        console.log('Approach 3 failed');
-                    }
-                }
-                
-                // Approach 4: Try html5-qrcode with inverted colors
-                if (!decodedText) {
-                    try {
-                        console.log('Approach 4: Inverted colors...');
-                        decodedText = await scanWithInversion(file);
-                        console.log('✅ Success approach 4');
-                    } catch (err) {
-                        console.log('Approach 4 failed');
-                    }
-                }
-                
-                if (decodedText) {
-                    console.log('✅ QR code successfully decoded:', decodedText);
-                    resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
-                    
-                    setTimeout(async () => {
-                        await processQrCode(decodedText);
-                    }, 300);
-                } else {
-                    throw new Error('QR-код не распознан');
-                }
-                
-            } catch (error) {
-                console.error('Processing error:', error);
-                resultDiv.innerHTML = '<div class="error">❌ QR-код не найден. Убедитесь, что:<br>1. QR-код четкий и не размытый<br>2. QR-код полностью виден на изображении<br>3. Изображение не слишком темное или светлое</div>';
-            }
-        }
+  if (!file) return;
+  const resultDiv = document.getElementById('imageUploadResult');
+  resultDiv.innerHTML = '<div class="info">⏳ Обработка изображения...</div>';
+
+  try {
+    if (!file.type.startsWith('image/')) {
+      resultDiv.innerHTML = '<div class="error">❌ Пожалуйста, выберите изображение</div>';
+      return;
+    }
+
+    // 1. Предобработка: увеличение + бинаризация
+    const processedBlob = await preprocessImageForQR(file);
+    const processedFile = new File([processedBlob], 'processed-qr.png', { type: 'image/png' });
+
+    // 2. Пытаемся распознать html5-qrcode
+    let decodedText = null;
+    try {
+      const scanner = new Html5Qrcode("reader", { verbose: false });
+      decodedText = await scanner.scanFile(processedFile, true);
+      await scanner.clear();
+    } catch (err) { /* игнорируем */ }
+
+    // 3. Запасной вариант – jsQR
+    if (!decodedText) {
+      try {
+        const img = await createImageBitmap(processedBlob);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth"
+        });
+        if (code) decodedText = code.data;
+      } catch (err) { /* игнорируем */ }
+    }
+
+    if (decodedText) {
+      resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
+      setTimeout(async () => await processQrCode(decodedText), 300);
+    } else {
+      throw new Error('QR-код не распознан');
+    }
+  } catch (error) {
+    console.error('Processing error:', error);
+    resultDiv.innerHTML = '<div class="error">❌ QR-код не найден. Убедитесь, что изображение чёткое.</div>';
+  }
+}
         
         // Scan using jsQR library with canvas preprocessing
         async function scanWithJsQR(file) {
