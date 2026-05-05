@@ -276,6 +276,34 @@
                             </div>
                         </div>
                     </div>
+					<!-- Реферальная программа -->
+    <div class="game-card" style="margin-top: 20px;">
+        <h3>👥 Реферальная программа</h3>
+        <div class="setting-row">
+            <label>Бонус за приглашение:</label>
+            <input type="number" id="referralBonus" value="100">
+            <span>бонусов</span>
+        </div>
+        <div class="setting-row">
+            <label>Бонус за регистрацию:</label>
+            <input type="number" id="welcomeBonus" value="50">
+            <span>бонусов</span>
+        </div>
+        <div class="referral-stats">
+            <div class="stat">
+                <div class="stat-value" id="referralTotal">0</div>
+                <div class="stat-label">Приглашений</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="referralActive">0</div>
+                <div class="stat-label">Активных</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="referralEarned">0</div>
+                <div class="stat-label">Начислено</div>
+            </div>
+        </div>
+    </div>
                 </div>
 
                 <!-- Модуль 3: Уведомления -->
@@ -390,36 +418,6 @@
     
     <!-- Контейнер для настроек скретч-карты -->
     <div id="scratchSettingsContainer"></div>
-    
-    
-    <!-- Реферальная программа -->
-    <div class="game-card" style="margin-top: 20px;">
-        <h3>👥 Реферальная программа</h3>
-        <div class="setting-row">
-            <label>Бонус за приглашение:</label>
-            <input type="number" id="referralBonus" value="100">
-            <span>бонусов</span>
-        </div>
-        <div class="setting-row">
-            <label>Бонус за регистрацию:</label>
-            <input type="number" id="welcomeBonus" value="50">
-            <span>бонусов</span>
-        </div>
-        <div class="referral-stats">
-            <div class="stat">
-                <div class="stat-value" id="referralTotal">0</div>
-                <div class="stat-label">Приглашений</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value" id="referralActive">0</div>
-                <div class="stat-label">Активных</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value" id="referralEarned">0</div>
-                <div class="stat-label">Начислено</div>
-            </div>
-        </div>
-    </div>
 </div>
 
                 <!-- Модуль страницы кассира -->
@@ -542,20 +540,8 @@
     Выберите часовой пояс, по которому будут рассчитываться сроки акций, заданий и розыгрышей.
   </p>
   <select id="timezoneSelect" class="form-select" onchange="saveTimezone()">
-    <option value="-720">UTC-12</option>
-    <option value="-600">UTC-10</option>
-    <option value="-480">UTC-8 (Тихий океан)</option>
-    <option value="-420">UTC-7 (Горное время)</option>
-    <option value="-360">UTC-6 (Центральное время)</option>
-    <option value="-300">UTC-5 (Восточное время)</option>
-    <option value="-240">UTC-4</option>
-    <option value="-180">UTC-3</option>
-    <option value="-120">UTC-2</option>
-    <option value="-60">UTC-1</option>
-    <option value="0" selected>UTC+0 (Лондон)</option>
-    <option value="60">UTC+1 (Берлин, Париж)</option>
-    <option value="120">UTC+2 (Киев, Калининград)</option>
-    <option value="180">UTC+3 (Москва)</option>
+    <option value="120">UTC+2 (Калининград)</option>
+    <option value="180" selected>UTC+3 (Москва)</option>
     <option value="240">UTC+4 (Самара)</option>
     <option value="300">UTC+5 (Екатеринбург)</option>
     <option value="360">UTC+6 (Омск)</option>
@@ -566,9 +552,7 @@
     <option value="660">UTC+11</option>
     <option value="720">UTC+12</option>
   </select>
-</div>
-                </div>
-				<div class="settings-card" style="margin-top: 20px;">
+  <div class="settings-card" style="margin-top: 20px;">
     <h3>📍 Города и адреса</h3>
     <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
         Управляйте городами и адресами ваших заведений. Пользователи смогут выбрать удобную локацию в приложении.
@@ -587,6 +571,8 @@
         </div>
     </div>
 </div>
+</div>
+                </div>
 
                 <!-- Модуль информации -->
                 <div id="informationModule" class="crm-module">

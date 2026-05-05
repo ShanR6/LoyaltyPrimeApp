@@ -405,7 +405,6 @@ async function loadCRMPanel() {
     await loadCampaigns();
     await loadBonusSettings();
 	await loadTimezone();
-	loadCitiesAndAddresses();
 	await loadCashierCredentials();	
 }
 
@@ -2233,6 +2232,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadBrandColor();
                 initEmojiPicker();
                 loadGreetingSettings();
+				loadCitiesAndAddresses();
             }
             if (module === 'cashier') {
                 loadCashierCredentials();
@@ -4177,17 +4177,6 @@ function initEmojiPicker() {
         
         pickerContainer.appendChild(emojiBtn);
     });
-    
-    // Select default emoji
-    const defaultEmoji = document.getElementById('selectedEmoji').value;
-    const defaultBtn = Array.from(document.querySelectorAll('#emojiPicker .emoji-btn')).find(
-        btn => btn.textContent === defaultEmoji
-    );
-    if (defaultBtn) {
-        defaultBtn.style.borderColor = '#667eea';
-        defaultBtn.style.background = '#f0f3ff';
-        defaultBtn.style.transform = 'scale(1.2)';
-    }
 }
 
 // Update greeting preview

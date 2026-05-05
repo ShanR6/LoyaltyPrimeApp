@@ -12,7 +12,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
   const hasCheckedToday = useRef(false);
   const hasAutoCompleted = useRef(false);
   const streakCheckPerformed = useRef(false);
-
+  const getNow = () => new Date(Date.now() + (companyTimezoneOffset || 0) * 60000);
   // Функция для получения ключа localStorage для задания
   const getQuestStorageKey = (quest) => {
     return `quest_claimed_${userId}_${selectedGroupId}_${quest.id}`;
