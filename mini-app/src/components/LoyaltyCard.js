@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 
-export function LoyaltyCard({ userInfo, selectedGroup }) {
+export function LoyaltyCard({ userInfo, selectedGroup, companyTimezoneOffset }) {
     const [qrCodeUrl, setQrCodeUrl] = useState('');
     const [countdown, setCountdown] = useState(0);
     const [isGenerating, setIsGenerating] = useState(false);
     
+	const getNow = () => Date.now() + (companyTimezoneOffset || 0) * 60000;
     // Генерация QR-кода
     const generateQRCode = async () => {
         if (!userInfo || !selectedGroup) return;
@@ -17,7 +18,7 @@ export function LoyaltyCard({ userInfo, selectedGroup }) {
             userName: `${userInfo.first_name} ${userInfo.last_name}`,
             companyId: selectedGroup.id,
             companyName: selectedGroup.name,
-            timestamp: Date.now(),
+            timestamp: getNow(),
             expiresIn: 5 * 60 * 1000,
             version: '1.0'
         });

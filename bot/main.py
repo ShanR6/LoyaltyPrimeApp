@@ -105,11 +105,7 @@ def get_main_keyboard():
     return {
         "buttons": [
             [
-                {"action": {"type": "text", "label": "📖 Описание"}, "color": "primary"},
-                {"action": {"type": "open_app", "label": "🚀 Перейти в приложение", "app_id": APP_ID}}  # Без color!
-            ],
-            [
-                {"action": {"type": "text", "label": "ℹ️ Помощь"}, "color": "secondary"}
+                {"action": {"type": "open_app", "label": "🚀 Перейти в приложение", "app_id": APP_ID}}
             ]
         ],
         "inline": False
@@ -330,25 +326,13 @@ while True:
                 if text in ('привет', 'start', 'начать'):
                     send_message(
                         user_id,
-                        "👋 Привет! Добро пожаловать!\n\nИспользуй кнопки ниже.",
-                        get_main_keyboard()
-                    )
-                elif text in ('описание', '📖 описание'):
-                    send_message(
-                        user_id,
-                        "📖 **Наше предложение**\n\nБонусы, акции, личный кабинет.\nНажмите «Перейти в приложение»!",
-                        get_main_keyboard()
-                    )
-                elif text in ('помощь', 'ℹ помощь', 'ℹ️ помощь'):
-                    send_message(
-                        user_id,
-                        "ℹ️ **Помощь**\n\n• Описание — подробности.\n• Перейти в приложение — запуск Mini App.\n• Бот присылает уведомления.",
+                        "👋 Привет! Добро пожаловать!\nНажми кнопку ниже, чтобы открыть приложение.",
                         get_main_keyboard()
                     )
                 else:
                     send_message(
                         user_id,
-                        "Пожалуйста, используйте кнопки меню.",
+                        "Нажми кнопку «Перейти в приложение» для продолжения.",
                         get_main_keyboard()
                     )
     except Exception as e:

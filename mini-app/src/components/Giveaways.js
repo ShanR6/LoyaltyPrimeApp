@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const API_URL = 'http://localhost:3001';
 
-export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdate }) {
+export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdate, companyTimezoneOffset }) {
   const [giveaways, setGiveaways] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -17,6 +17,8 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
       }
     }
   }, [selectedGroupId, userId]);
+
+  const getNow = () => new Date(Date.now() + (companyTimezoneOffset || 0) * 60000);
 
   const loadGiveaways = async () => {
     if (!selectedGroupId) return;
@@ -132,7 +134,7 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
     if (!giveaway.active) return false;
     
     // Проверяем дату окончания
-    if (giveaway.end_date && new Date(giveaway.end_date) < new Date()) {
+    if (giveaway.end_date && new Date(giveaway.end_date) < getNow()) {
       return false;
     }
     
@@ -158,7 +160,7 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
   // Функция для получения оставшегося времени
   const getTimeLeft = (endDate) => {
     if (!endDate) return null;
-    const now = new Date();
+    const now = getNow();
     const end = new Date(endDate);
     const diffMs = end - now;
     
@@ -286,7 +288,7 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
           const isAvailable = isGiveawayAvailable(giveaway);
           const isPurchased = purchasedGiveaways[giveaway.id];
           const endDate = giveaway.end_date ? new Date(giveaway.end_date) : null;
-          const isExpired = endDate && endDate < new Date();
+          const isExpired = endDate && endDate < getNow();
           const timeLeftText = getTimeLeft(giveaway.end_date);
           const formattedEndDate = formatEndDate(giveaway.end_date);
           

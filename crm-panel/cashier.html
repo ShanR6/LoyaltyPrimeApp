@@ -496,6 +496,7 @@
     </div> <!-- End mainContent -->
 
     <script>
+		let currentCashbackPercent = 3;
         const API_URL = 'http://localhost:3001';
         let currentUser = null;
         let currentQrData = null;
@@ -667,124 +668,181 @@
         }
         
 		async function preprocessImageForQR(file) {
-  const img = await createImageBitmap(file);
-  const srcW = img.width, srcH = img.height;
-
-  const MIN_SIZE = 800;
-  let scale = 1;
-  if (Math.max(srcW, srcH) < MIN_SIZE) {
-    scale = MIN_SIZE / Math.max(srcW, srcH);
-  }
-  const w = Math.round(srcW * scale);
-  const h = Math.round(srcH * scale);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-
-  // Gray
-  const gray = new Uint8Array(w * h);
-  for (let i = 0; i < data.length; i += 4) {
-    gray[i / 4] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-  }
-
-  // Adaptive threshold
-  const blockSize = 15, C = 10;
-  const half = Math.floor(blockSize / 2);
-  const integral = new Uint32Array(w * h);
-  for (let y = 0; y < h; y++) {
-    let sum = 0;
-    for (let x = 0; x < w; x++) {
-      sum += gray[y * w + x];
-      const above = y > 0 ? integral[(y - 1) * w + x] : 0;
-      integral[y * w + x] = sum + above;
-    }
-  }
-  const binary = new Uint8ClampedArray(w * h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const x1 = Math.max(x - half, 0);
-      const y1 = Math.max(y - half, 0);
-      const x2 = Math.min(x + half, w - 1);
-      const y2 = Math.min(y + half, h - 1);
-      const area = (x2 - x1 + 1) * (y2 - y1 + 1);
-      const sumBlock = integral[y2 * w + x2]
-                     - (x1 > 0 ? integral[y2 * w + x1 - 1] : 0)
-                     - (y1 > 0 ? integral[(y1 - 1) * w + x2] : 0)
-                     + (x1 > 0 && y1 > 0 ? integral[(y1 - 1) * w + x1 - 1] : 0);
-      const mean = sumBlock / area;
-      binary[y * w + x] = gray[y * w + x] > (mean - C) ? 255 : 0;
-    }
-  }
-  for (let i = 0; i < binary.length; i++) {
-    const val = binary[i];
-    const idx = i * 4;
-    data[idx] = val;
-    data[idx + 1] = val;
-    data[idx + 2] = val;
-    data[idx + 3] = 255;
-  }
-  ctx.putImageData(imageData, 0, 0);
-
-  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            try {
+                // Определяем оптимальный размер
+                let width = img.width;
+                let height = img.height;
+                const maxSize = 1000;
+                const minSize = 400;
+                
+                // Масштабируем если нужно
+                if (width > maxSize || height > maxSize) {
+                    const scale = maxSize / Math.max(width, height);
+                    width = Math.floor(width * scale);
+                    height = Math.floor(height * scale);
+                } else if (width < minSize || height < minSize) {
+                    const scale = minSize / Math.min(width, height);
+                    width = Math.floor(width * scale);
+                    height = Math.floor(height * scale);
+                }
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                
+                // Рисуем изображение
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Получаем данные пикселей
+                let imageData = ctx.getImageData(0, 0, width, height);
+                const data = imageData.data;
+                
+                // Конвертируем в оттенки серого для лучшего распознавания
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                }
+                
+                // Применяем пороговую обработку (бинаризация)
+                // Используем адаптивный порог
+                const blockSize = 15;
+                const halfBlock = Math.floor(blockSize / 2);
+                
+                // Создаем копию для вычислений
+                const grayData = new Uint8Array(width * height);
+                for (let i = 0; i < width * height; i++) {
+                    grayData[i] = data[i * 4];
+                }
+                
+                // Вычисляем адаптивный порог для каждого пикселя
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let sum = 0;
+                        let count = 0;
+                        
+                        for (let dy = -halfBlock; dy <= halfBlock; dy++) {
+                            const ny = y + dy;
+                            if (ny < 0 || ny >= height) continue;
+                            
+                            for (let dx = -halfBlock; dx <= halfBlock; dx++) {
+                                const nx = x + dx;
+                                if (nx < 0 || nx >= width) continue;
+                                
+                                sum += grayData[ny * width + nx];
+                                count++;
+                            }
+                        }
+                        
+                        const threshold = sum / count - 10; // -10 для небольшого смещения
+                        const idx = (y * width + x) * 4;
+                        const value = grayData[y * width + x] > threshold ? 255 : 0;
+                        data[idx] = value;
+                        data[idx + 1] = value;
+                        data[idx + 2] = value;
+                    }
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Конвертируем обратно в Blob
+                canvas.toBlob(blob => {
+                    URL.revokeObjectURL(url);
+                    resolve(blob);
+                }, 'image/png');
+                
+            } catch (err) {
+                URL.revokeObjectURL(url);
+                reject(err);
+            }
+        };
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Не удалось загрузить изображение'));
+        };
+        
+        img.src = url;
+    });
 }
 		
         async function handleImageUpload(file) {
-  if (!file) return;
-  const resultDiv = document.getElementById('imageUploadResult');
-  resultDiv.innerHTML = '<div class="info">⏳ Обработка изображения...</div>';
+    if (!file) return;
+    const resultDiv = document.getElementById('imageUploadResult');
+    resultDiv.innerHTML = '<div class="info">⏳ Обработка изображения...</div>';
 
-  try {
-    if (!file.type.startsWith('image/')) {
-      resultDiv.innerHTML = '<div class="error">❌ Пожалуйста, выберите изображение</div>';
-      return;
-    }
-
-    // 1. Предобработка: увеличение + бинаризация
-    const processedBlob = await preprocessImageForQR(file);
-    const processedFile = new File([processedBlob], 'processed-qr.png', { type: 'image/png' });
-
-    // 2. Пытаемся распознать html5-qrcode
-    let decodedText = null;
     try {
-      const scanner = new Html5Qrcode("reader", { verbose: false });
-      decodedText = await scanner.scanFile(processedFile, true);
-      await scanner.clear();
-    } catch (err) { /* игнорируем */ }
+        if (!file.type.startsWith('image/')) {
+            resultDiv.innerHTML = '<div class="error">❌ Пожалуйста, выберите изображение</div>';
+            return;
+        }
 
-    // 3. Запасной вариант – jsQR
-    if (!decodedText) {
-      try {
-        const img = await createImageBitmap(processedBlob);
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "attemptBoth"
-        });
-        if (code) decodedText = code.data;
-      } catch (err) { /* игнорируем */ }
-    }
+        // Предобработка: увеличение + бинаризация
+        const processedBlob = await preprocessImageForQR(file);
+        const processedFile = new File([processedBlob], 'processed-qr.png', { type: 'image/png' });
 
-    if (decodedText) {
-      resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
-      setTimeout(async () => await processQrCode(decodedText), 300);
-    } else {
-      throw new Error('QR-код не распознан');
+        let decodedText = null;
+        
+        // Пытаемся распознать через jsQR (более надёжный)
+        try {
+            const img = await new Promise((resolve, reject) => {
+                const image = new Image();
+                const url = URL.createObjectURL(processedFile);
+                image.onload = () => {
+                    URL.revokeObjectURL(url);
+                    resolve(image);
+                };
+                image.onerror = reject;
+                image.src = url;
+            });
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Пробуем с разными настройками
+            let code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "attemptBoth"
+            });
+            
+            if (code) {
+                decodedText = code.data;
+            }
+        } catch (err) {
+            console.log('jsQR error:', err);
+        }
+        
+        // Если не нашли, пробуем через html5-qrcode
+        if (!decodedText) {
+            try {
+                const scanner = new Html5Qrcode("reader", { verbose: false });
+                decodedText = await scanner.scanFile(processedFile, true);
+                await scanner.clear();
+            } catch (err) {
+                console.log('Html5Qrcode error:', err);
+            }
+        }
+
+        if (decodedText) {
+            resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
+            setTimeout(async () => await processQrCode(decodedText), 300);
+        } else {
+            throw new Error('QR-код не распознан');
+        }
+    } catch (error) {
+        console.error('Processing error:', error);
+        resultDiv.innerHTML = '<div class="error">❌ QR-код не найден. Убедитесь, что изображение чёткое и содержит QR-код.</div>';
     }
-  } catch (error) {
-    console.error('Processing error:', error);
-    resultDiv.innerHTML = '<div class="error">❌ QR-код не найден. Убедитесь, что изображение чёткое.</div>';
-  }
 }
         
         // Scan using jsQR library with canvas preprocessing
@@ -1152,16 +1210,16 @@
                 
                 if (data.success) {
                     currentUser = data.user;
-                    currentMultiplier = data.multiplier || 1;
+                    currentCashbackPercent = data.cashbackPercent || 3;
                     
                     // Show user info
                     document.getElementById('userInfo').innerHTML = `
-                        <div class="user-info">
-                            <strong>👤 ${data.user.name || 'Пользователь'}</strong><br>
-                            💰 Баланс: <span class="balance">${data.user.bonus_balance || 0}</span> бонусов<br>
-                            🏆 Уровень: ${data.user.tier || 'Новичок'} (x${currentMultiplier})
-                        </div>
-                    `;
+    <div class="user-info">
+        <strong>👤 ${data.user.name || 'Пользователь'}</strong><br>
+        💰 Баланс: <span class="balance">${data.user.bonus_balance || 0}</span> бонусов<br>
+        🏆 Уровень: ${data.tier || 'Новичок'} (кешбэк ${data.cashbackPercent || 3}%)
+    </div>
+`;
                     
                     document.getElementById('availableBonuses').innerText = data.user.bonus_balance || 0;
                     document.getElementById('userInfoCard').style.display = 'block';
@@ -1287,63 +1345,67 @@
         
         // ============ ОБНОВЛЕНИЕ ИТОГОВОЙ СУММЫ ============
         function updateFinalOrderSummary() {
-            const orderAmount = currentOrderAmount;
-            
-            if (!orderAmount || orderAmount <= 0) {
-                document.getElementById('finalOrderCard').style.display = 'none';
-                return;
-            }
-            
-            let discountRub = 0;
-            let discountText = '';
-            
-            if (currentDiscountType === 'spend') {
-                discountRub = Math.floor(currentSpendBonuses / currentBonusSettings.rubToBonus);
-                if (currentSpendBonuses > 0) {
-                    discountText = `🎁 Скидка бонусами: -${discountRub} ₽ (${currentSpendBonuses} бонусов)`;
-                } else {
-                    discountText = `💸 Без списания бонусов`;
-                }
-            } else if (currentDiscountType === 'promotion' && selectedPromotion) {
-                discountRub = Math.floor(orderAmount * selectedPromotion.discount / 100);
-                discountText = `🎁 Скидка по акции "${selectedPromotion.name}": -${discountRub} ₽ (${selectedPromotion.discount}%)`;
-            }
-            
-            const finalAmount = Math.max(0, orderAmount - discountRub);
-            
-            // Рассчитываем бонусы к начислению
-            const minPurchase = currentBonusSettings.minPurchaseForBonus;
-            let bonusToEarn = 0;
-            
-            if (orderAmount >= minPurchase) {
-                const bonusRate = currentMultiplier * (currentBonusSettings.bonusRatePerThousand || 10);
-                bonusToEarn = Math.floor(orderAmount / 1000) * bonusRate;
-            }
-            currentBonusToEarn = bonusToEarn;
-            
-            document.getElementById('finalAmountToPay').innerHTML = `${finalAmount.toLocaleString()} ₽`;
-            document.getElementById('discountInfo').innerHTML = discountText;
-            
-            if (bonusToEarn > 0) {
-                document.getElementById('bonusToEarnInfo').innerHTML = `⭐ Будет начислено: +${bonusToEarn} бонусов (x${currentMultiplier})`;
-                document.getElementById('bonusToEarnInfo').style.color = '#ffd966';
-            } else {
-                document.getElementById('bonusToEarnInfo').innerHTML = `⚠️ Минимальная сумма для начисления: ${minPurchase}₽`;
-                document.getElementById('bonusToEarnInfo').style.color = '#ffaa66';
-            }
-            
-            document.getElementById('finalOrderCard').style.display = 'block';
-            
-            // Проверка валидности
-            const confirmBtn = document.getElementById('confirmBtn');
-            if (finalAmount < 0) {
-                confirmBtn.disabled = true;
-                confirmBtn.style.opacity = '0.5';
-            } else {
-                confirmBtn.disabled = false;
-                confirmBtn.style.opacity = '1';
-            }
+    const orderAmount = currentOrderAmount;
+    
+    if (!orderAmount || orderAmount <= 0) {
+        document.getElementById('finalOrderCard').style.display = 'none';
+        return;
+    }
+    
+    let discountRub = 0;
+    let discountText = '';
+    
+    if (currentDiscountType === 'spend') {
+        discountRub = Math.floor(currentSpendBonuses / currentBonusSettings.rubToBonus);
+        if (currentSpendBonuses > 0) {
+            discountText = `🎁 Скидка бонусами: -${discountRub} ₽ (${currentSpendBonuses} бонусов)`;
+        } else {
+            discountText = `💸 Без списания бонусов`;
         }
+    } else if (currentDiscountType === 'promotion' && selectedPromotion) {
+        discountRub = Math.floor(orderAmount * selectedPromotion.discount / 100);
+        discountText = `🎁 Скидка по акции "${selectedPromotion.name}": -${discountRub} ₽ (${selectedPromotion.discount}%)`;
+    }
+    
+    const finalAmount = Math.max(0, orderAmount - discountRub);
+    
+    // Рассчитываем бонусы к начислению
+    const minPurchase = currentBonusSettings.minPurchaseForBonus;
+    const rubToBonus = currentBonusSettings.rubToBonus || 10;
+    let bonusToEarn = 0;
+    
+    if (orderAmount >= minPurchase) {
+        const cashbackPercent = currentCashbackPercent || 3;
+        // ПРАВИЛЬНЫЙ РАСЧЁТ: кешбэк в рублях → переводим в бонусы
+        const cashbackRub = orderAmount * cashbackPercent / 100;
+        bonusToEarn = Math.floor(cashbackRub * rubToBonus);
+    }
+    currentBonusToEarn = bonusToEarn;
+    
+    document.getElementById('finalAmountToPay').innerHTML = `${finalAmount.toLocaleString()} ₽`;
+    document.getElementById('discountInfo').innerHTML = discountText;
+    
+    if (bonusToEarn > 0) {
+        const cashbackRub = orderAmount * (currentCashbackPercent || 3) / 100;
+        document.getElementById('bonusToEarnInfo').innerHTML = `⭐ Будет начислено: +${bonusToEarn.toLocaleString()} бонусов<br><span style="font-size: 10px;">(кешбэк ${currentCashbackPercent || 3}% = ${cashbackRub.toFixed(2)}₽ × ${rubToBonus} бонусов/₽)</span>`;
+        document.getElementById('bonusToEarnInfo').style.color = '#ffd966';
+    } else {
+        document.getElementById('bonusToEarnInfo').innerHTML = `⚠️ Минимальная сумма для начисления: ${minPurchase}₽`;
+        document.getElementById('bonusToEarnInfo').style.color = '#ffaa66';
+    }
+    
+    document.getElementById('finalOrderCard').style.display = 'block';
+    
+    // Проверка валидности
+    const confirmBtn = document.getElementById('confirmBtn');
+    if (finalAmount < 0) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.5';
+    } else {
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+    }
+}
         
 
         // ============ ЗАГРУЗКА ДОСТУПНЫХ АКЦИЙ (ПЛАТНЫХ И БЕСПЛАТНЫХ) ============
@@ -1506,13 +1568,13 @@ async function loadAvailablePromotions() {
                 
                 if (result.success) {
                     currentUser = result.user;
-                    currentMultiplier = result.multiplier;
+                    urrentCashbackPercent = result.cashbackPercent || 3;
                     
                     document.getElementById('verifyResult').innerHTML = `
                         <div class="success">
                             ✅ Пользователь: ${result.user.name}<br>
                             💰 Баланс: ${result.user.balance} бонусов<br>
-                            🏆 Уровень: ${result.tier} (x${result.multiplier})
+                            💸 Кешбэк: ${result.cashbackPercent}%
                         </div>
                     `;
                     
@@ -1586,23 +1648,35 @@ async function loadAvailablePromotions() {
         }
         
         function calculateBonus() {
-            const amount = currentOrderAmount;
-            if (!amount || amount <= 0) return;
-            
-            const minPurchase = currentBonusSettings.minPurchaseForBonus;
-            
-            if (amount < minPurchase) {
-                document.getElementById('bonusResult').innerHTML = `
-                    <div class="warning">⚠️ Минимальная сумма для начисления бонусов: ${minPurchase}₽</div>
-                `;
-            } else {
-                const bonusRate = currentMultiplier * (currentBonusSettings.bonusRatePerThousand || 10);
-                const bonusEarned = Math.floor(amount / 1000) * bonusRate;
-                document.getElementById('bonusResult').innerHTML = `
-                    <div class="success">🎉 За заказ на сумму ${amount}₽ клиент получит ${bonusEarned} бонусов! (x${currentMultiplier})</div>
-                `;
-            }
-        }
+    const amount = currentOrderAmount;
+    if (!amount || amount <= 0) return;
+    
+    const minPurchase = currentBonusSettings.minPurchaseForBonus;
+    
+    if (amount < minPurchase) {
+        document.getElementById('bonusResult').innerHTML = `
+            <div class="warning">⚠️ Минимальная сумма для начисления бонусов: ${minPurchase}₽</div>
+        `;
+    } else {
+        // Получаем кешбэк в процентах (из уровня пользователя)
+        const cashbackPercent = currentCashbackPercent || 3;
+        // Получаем курс: 1 рубль = сколько бонусов
+        const rubToBonus = currentBonusSettings.rubToBonus || 10;
+        
+        // ПРАВИЛЬНЫЙ РАСЧЁТ:
+        // 1. Считаем кешбэк в рублях
+        const cashbackRub = amount * cashbackPercent / 100;
+        // 2. Переводим рубли в бонусы по курсу
+        const bonusEarned = Math.floor(cashbackRub * rubToBonus);
+        
+        document.getElementById('bonusResult').innerHTML = `
+            <div class="success">
+                🎉 За заказ на сумму ${amount.toLocaleString()}₽ клиент получит ${bonusEarned.toLocaleString()} бонусов!<br>
+                (кешбэк ${cashbackPercent}% = ${cashbackRub.toFixed(2)}₽ × ${rubToBonus} бонусов/₽)
+            </div>
+        `;
+    }
+}
         
         // ============ ПОДТВЕРЖДЕНИЕ ЗАКАЗА ============
         async function confirmOrder() {
@@ -1629,7 +1703,7 @@ async function loadAvailablePromotions() {
                 body: JSON.stringify({ 
                     qrData: JSON.stringify(currentQrData),
                     bonusToSpend: currentSpendBonuses,
-                    storeId: 'POS_Terminal_001',
+                    storeId: 'Касса',
                     cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
                 })
             });
@@ -1669,7 +1743,7 @@ async function loadAvailablePromotions() {
             body: JSON.stringify({ 
                 qrData: JSON.stringify(currentQrData),
                 amount: currentOrderAmount,
-                storeId: 'POS_Terminal_001',
+                storeId: 'Касса',
                 cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
             })
         });
@@ -1742,15 +1816,7 @@ async function loadAvailablePromotions() {
             let totalEarned = 0, totalSpent = 0;
             
             // Фильтруем транзакции (убираем дубли)
-            const filteredTransactions = result.transactions.filter(t => {
-                // Скрываем дублирующиеся "Списание баллов" с плюсом
-                if (t.description === 'Списание баллов' && t.bonusChange > 0) {
-                    return false;
-                }
-                // Скрываем обычные "Списание бонусов", если есть связанная покупка акции
-                // (т.к. теперь покупка акции создает одну транзакцию с названием акции)
-                return true;
-            });
+            const filteredTransactions = result.transactions; // больше не фильтруем
             
             const historyHtml = filteredTransactions.map(t => {
                 // Определяем тип транзакции через metadata или описание

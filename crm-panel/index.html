@@ -67,7 +67,7 @@
         </div>
         
         <div class="form-group">
-            <label>Продукты (для POS-терминала)</label>
+            <label>Продукты (для страницы кассира)</label>
             <textarea id="promoProducts" class="form-input" rows="2" placeholder="Латте, Капучино, Espresso (через запятую)"></textarea>
             <small style="display: block; margin-top: 4px; color: #666;">Укажите конкретные продукты, на которые действует скидка</small>
         </div>
@@ -430,7 +430,7 @@
                     <div class="settings-card">
                         <h3>🔐 Настройка доступа кассира</h3>
                         <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
-                            Установите логин и пароль для доступа к странице кассира. Эти данные будут использоваться для входа в POS-терминал.
+                            Установите логин и пароль для доступа к странице кассира. Эти данные будут использоваться для входа на страницу кассира.
                         </p>
                         
                         <div class="form-group">
@@ -536,6 +536,37 @@
 						
 						<div id="greetingStatus" style="margin-top: 12px;"></div>
 					</div>
+					<div class="settings-card" style="margin-top: 20px;">
+	<h3>🕐 Часовой пояс компании</h3>
+  <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+    Выберите часовой пояс, по которому будут рассчитываться сроки акций, заданий и розыгрышей.
+  </p>
+  <select id="timezoneSelect" class="form-select" onchange="saveTimezone()">
+    <option value="-720">UTC-12</option>
+    <option value="-600">UTC-10</option>
+    <option value="-480">UTC-8 (Тихий океан)</option>
+    <option value="-420">UTC-7 (Горное время)</option>
+    <option value="-360">UTC-6 (Центральное время)</option>
+    <option value="-300">UTC-5 (Восточное время)</option>
+    <option value="-240">UTC-4</option>
+    <option value="-180">UTC-3</option>
+    <option value="-120">UTC-2</option>
+    <option value="-60">UTC-1</option>
+    <option value="0" selected>UTC+0 (Лондон)</option>
+    <option value="60">UTC+1 (Берлин, Париж)</option>
+    <option value="120">UTC+2 (Киев, Калининград)</option>
+    <option value="180">UTC+3 (Москва)</option>
+    <option value="240">UTC+4 (Самара)</option>
+    <option value="300">UTC+5 (Екатеринбург)</option>
+    <option value="360">UTC+6 (Омск)</option>
+    <option value="420">UTC+7 (Красноярск)</option>
+    <option value="480">UTC+8 (Иркутск)</option>
+    <option value="540">UTC+9 (Якутск)</option>
+    <option value="600">UTC+10 (Владивосток)</option>
+    <option value="660">UTC+11</option>
+    <option value="720">UTC+12</option>
+  </select>
+</div>
                 </div>
 				<div class="settings-card" style="margin-top: 20px;">
     <h3>📍 Города и адреса</h3>

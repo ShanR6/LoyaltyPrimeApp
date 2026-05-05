@@ -23,11 +23,11 @@ const getApiUrl = () => {
 
 // Определяем DEFAULT_TIERS ДО его использования
 const DEFAULT_TIERS = [
-    { name: '🌱 Новичок', threshold: 0, multiplier: 1, cashback: 3, color: '#95a5a6', icon: '🌱' },
-    { name: '🥉 Бронза', threshold: 500, multiplier: 1.2, cashback: 5, color: '#cd7f32', icon: '🥉' },
-    { name: '🥈 Серебро', threshold: 2000, multiplier: 1.5, cashback: 7, color: '#bdc3c7', icon: '🥈' },
-    { name: '🥇 Золото', threshold: 8000, multiplier: 2, cashback: 10, color: '#f1c40f', icon: '🥇' },
-    { name: '💎 Бриллиант', threshold: 20000, multiplier: 2.5, cashback: 15, color: '#00b4d8', icon: '💎' }
+    { name: '🌱 Новичок', threshold: 0, cashback: 3, color: '#95a5a6', icon: '🌱' },
+    { name: '🥉 Бронза', threshold: 500, cashback: 5, color: '#cd7f32', icon: '🥉' },
+    { name: '🥈 Серебро', threshold: 2000, cashback: 7, color: '#bdc3c7', icon: '🥈' },
+    { name: '🥇 Золото', threshold: 8000, cashback: 10, color: '#f1c40f', icon: '🥇' },
+    { name: '💎 Бриллиант', threshold: 20000, cashback: 15, color: '#00b4d8', icon: '💎' }
 ];
 
 export function App() {
@@ -77,7 +77,12 @@ const getCurrentTierBySpent = (spent) => {
   }
   return current;
 };
-  
+
+function getCompanyTime(date = new Date()) {
+  const offset = selectedGroup?.timezoneOffset || 0;
+  return new Date(date.getTime() + offset * 60000);
+}
+
 const getNextTierBySpent = (spent) => {
   const tiersList = tiers.length > 0 ? tiers : DEFAULT_TIERS;
   for (let i = 0; i < tiersList.length; i++) {
@@ -130,7 +135,7 @@ useEffect(() => {
         const response = await fetch(`${API_URL}/api/promotions/${selectedGroup.id}`);
         if (response.ok) {
           const allPromos = await response.json();
-          const now = new Date();
+          const now = new Date(Date.now() + (selectedGroup?.timezoneOffset || 0) * 60000);
           
           const activePromotions = allPromos.filter(promo => {
             if (!promo.active) return false;
@@ -160,7 +165,7 @@ useEffect(() => {
 }, [activeTab, userId, selectedGroup?.id]);
 useEffect(() => {
   const timer = setInterval(() => {
-    setCurrentTime(new Date());
+    setCurrentTime(new Date(Date.now() + (selectedGroup?.timezoneOffset || 0) * 60000));
   }, 1000);
   
   return () => clearInterval(timer);
@@ -718,6 +723,16 @@ useEffect(() => {
       console.error('Ошибка загрузки приветствия:', error);
     }
     
+	// Загружаем часовой пояс компании
+try {
+  const tzResp = await fetch(`${API_URL}/api/companies/${company.id}/timezone`);
+  const tzData = await tzResp.json();
+  const timezoneOffset = tzData.success ? tzData.timezoneOffset : 0;
+  setSelectedGroup(prev => ({ ...prev, timezoneOffset }));
+} catch (e) {
+  console.error('Ошибка загрузки timezone:', e);
+}
+	
     if (userInfo?.id) {
       await loadUserData(company.id, userInfo.id, `${userInfo.first_name} ${userInfo.last_name}`);
     }
@@ -1164,7 +1179,6 @@ const progressToNext = getProgressToNextTier(currentSpent);
 </div>
   
   <div style={{ display:'flex', justifyContent:'center', gap:16, background:'rgba(0,0,0,0.3)', borderRadius:16, padding:'8px 12px' }}>
-  <div style={{ textAlign:'center' }}><div style={{ fontSize:11, opacity:0.7, color:'white' }}>Множитель</div><div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>x{getCurrentTierBySpent(currentGroupData?.totalSpent || 0)?.multiplier || 1}</div></div>
   <div style={{ textAlign:'center' }}><div style={{ fontSize:11, opacity:0.7, color:'white' }}>Кешбэк</div><div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>{getCurrentTierBySpent(currentGroupData?.totalSpent || 0)?.cashback || (getCurrentTierBySpent(currentGroupData?.totalSpent || 0)?.multiplier * 5) || 5}%</div></div>
   <div style={{ textAlign:'center' }}><div style={{ fontSize:11, opacity:0.7, color:'white' }}>Всего потрачено</div><div style={{ fontSize:18, fontWeight:700, color:'#ffd966' }}>{currentGroupData?.totalSpent?.toLocaleString() || 0}</div></div>
 </div>
@@ -1178,7 +1192,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
         ))}
       </nav>
 
-      {activeTab === 'card' && selectedGroup && <LoyaltyCard userInfo={userInfo} selectedGroup={selectedGroup} />}
+      {activeTab === 'card' && selectedGroup && <LoyaltyCard userInfo={userInfo} selectedGroup={selectedGroup} companyTimezoneOffset={selectedGroup?.timezoneOffset || 0} />}
       
       {activeTab === 'home' && selectedGroup && (
   <>
@@ -1649,6 +1663,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
                 userId={userId} 
                 selectedGroupId={selectedGroup?.id}
                 vkId={userInfo?.id}
+				companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
             />
         </div>
         
@@ -1657,17 +1672,20 @@ const progressToNext = getProgressToNextTier(currentSpent);
             userBalance={currentBalance}
             companyId={selectedGroup?.id}
             userId={userId}
+			companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
         />
         <DiceRoll 
             onBalanceUpdate={updateBalanceAndStats} 
             userBalance={currentBalance}
             companyId={selectedGroup?.id}
+			companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
         />
         <ScratchCard 
             onBalanceUpdate={updateBalanceAndStats} 
             userBalance={currentBalance}
             companyId={selectedGroup?.id}
             userId={userId}
+			companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
         />
     </div>
 )}
@@ -1678,6 +1696,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
     userId={userId}
     userBalance={currentBalance}
     onBalanceUpdate={updateBalanceAndStats}
+	companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
   />
 )}
       
@@ -1688,10 +1707,11 @@ const progressToNext = getProgressToNextTier(currentSpent);
           userId={userId} 
           selectedGroupId={selectedGroup?.id}
           vkId={userInfo?.id}
+		  companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
         />
       )}
       
-      {activeTab === 'referral' && selectedGroup && <ReferralSystem onBalanceUpdate={updateBalanceAndStats} userId={userInfo?.id} selectedGroupId={selectedGroup?.id} />}
+      {activeTab === 'referral' && selectedGroup && <ReferralSystem onBalanceUpdate={updateBalanceAndStats} userId={userInfo?.id} selectedGroupId={selectedGroup?.id} companyTimezoneOffset={selectedGroup?.timezoneOffset || 0} />}
       
 
       {activeTab === 'history' && (
@@ -1878,41 +1898,40 @@ const progressToNext = getProgressToNextTier(currentSpent);
 )}
 
       {showTiersModal && (
-        <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => setShowTiersModal(false)}>
-          <div style={{ background:'linear-gradient(135deg,#1e2538,#131825)', borderRadius:32, maxWidth:400, width:'100%', maxHeight:'80vh', overflow:'auto', position:'relative' }} onClick={e=>e.stopPropagation()}>
-            <div style={{ padding:24 }}>
-              <h3 style={{ color:'white', marginBottom:20, fontSize:20 }}>🏆 Все уровни программы</h3>
-              <p style={{ color:'#aaa', fontSize:12, marginBottom:16 }}>Чем больше тратите, тем выше уровень и больше преимуществ!</p>
-              {tiers.map((tier, idx) => (
-                <div key={idx} style={{ marginBottom:12, padding:12, background:`${tier.color}20`, borderRadius:16, borderLeft:`4px solid ${tier.color}`, transition:'all 0.2s' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                    <span style={{ fontSize:28 }}>{tier.icon}</span>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:700, color:'white', fontSize:16 }}>{tier.name}</div>
-                      <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>
-                        <span>💰 от {tier.threshold.toLocaleString()} бонусов</span>
-                        <span style={{ marginLeft:12 }}>⚡ x{tier.multiplier}</span>
-                        <span style={{ marginLeft:12 }}>💸 {tier.cashback || tier.multiplier * 5}%</span>
-                      </div>
-                    </div>
-                    {idx === tiers.findIndex(t => t.name === getCurrentTierBySpent(currentSpent).name) && (
-  <span style={{ background:'#ffd966', color:'#1a1f2e', padding:'4px 8px', borderRadius:12, fontSize:10, fontWeight:600 }}>Текущий</span>
-)}
-                  </div>
-                </div>
-              ))}
-              <div style={{ background:'rgba(255,255,255,0.05)', borderRadius:16, padding:12, marginTop:16 }}>
-                <div style={{ fontSize:12, color:'#aaa', textAlign:'center' }}>
-                  💡 Подсказка: Уровень повышается автоматически при достижении порога трат
+  <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => setShowTiersModal(false)}>
+    <div style={{ background:'linear-gradient(135deg,#1e2538,#131825)', borderRadius:32, maxWidth:400, width:'100%', maxHeight:'80vh', overflow:'auto', position:'relative' }} onClick={e=>e.stopPropagation()}>
+      <div style={{ padding:24 }}>
+        <h3 style={{ color:'white', marginBottom:20, fontSize:20 }}>🏆 Все уровни программы</h3>
+        <p style={{ color:'#aaa', fontSize:12, marginBottom:16 }}>Чем больше тратите, тем выше кешбэк!</p>
+        {tiers.map((tier, idx) => (
+          <div key={idx} style={{ marginBottom:12, padding:12, background:`${tier.color}20`, borderRadius:16, borderLeft:`4px solid ${tier.color}`, transition:'all 0.2s' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:28 }}>{tier.icon}</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, color:'white', fontSize:16 }}>{tier.name}</div>
+                <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>
+                  <span>💰 от {tier.threshold.toLocaleString()} ₽</span>
+                  <span style={{ marginLeft:12 }}>💸 кешбэк {tier.cashback || 3}%</span>
                 </div>
               </div>
-              <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
-                Закрыть
-              </button>
+              {idx === tiers.findIndex(t => t.name === getCurrentTierBySpent(currentSpent).name) && (
+                <span style={{ background:'#ffd966', color:'#1a1f2e', padding:'4px 8px', borderRadius:12, fontSize:10, fontWeight:600 }}>Текущий</span>
+              )}
             </div>
           </div>
+        ))}
+        <div style={{ background:'rgba(255,255,255,0.05)', borderRadius:16, padding:12, marginTop:16 }}>
+          <div style={{ fontSize:12, color:'#aaa', textAlign:'center' }}>
+            💡 Подсказка: Кешбэк — это процент от покупки, который начисляется бонусами
+          </div>
         </div>
-      )}
+        <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
+          Закрыть
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       
       {showBirthdayModal && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => !birthdayDate && setShowBirthdayModal(false)}>

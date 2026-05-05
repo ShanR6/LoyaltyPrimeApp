@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 const API_URL = 'http://localhost:3001';
 
-export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGroupId, vkId }) {
+export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGroupId, vkId, companyTimezoneOffset }) {
   const [quests, setQuests] = useState([]);
   const [totalEarned, setTotalEarned] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -29,7 +29,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
       try {
         const data = JSON.parse(saved);
         const lastClaimDate = new Date(data.date);
-        const today = new Date();
+        const today = getNow();
         const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
         
         const durationDays = quest.durationDays || 1;
@@ -106,7 +106,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     const dailyQuests = getDailyQuests(questsList);
     if (dailyQuests.length === 0) return false;
     
-    const today = new Date();
+    const today = getNow();
     today.setHours(0, 0, 0, 0);
     
     // Проверяем, что все ежедневные задания выполнены и получены сегодня
@@ -186,7 +186,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     const streakDates = getAllStreakDates(questsList);
     if (streakDates.length === 0) return 0;
     
-    const today = new Date();
+    const today = getNow();
     today.setHours(0, 0, 0, 0);
     
     const yesterday = new Date(today);
@@ -275,7 +275,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
   // Обновление стрика после выполнения заданий
   const updateStreakAfterCompletion = async (updatedQuests) => {
     const newStreak = calculateCurrentStreak(updatedQuests);
-    const today = new Date();
+    const today = getNow();
     today.setHours(0, 0, 0, 0);
     
     const completedToday = areAllDailyQuestsCompletedToday(updatedQuests);
@@ -562,7 +562,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
               try {
                 const data = JSON.parse(saved);
                 const lastClaimDate = new Date(data.date);
-                const today = new Date();
+                const today = getNow();
                 const durationDays = q.duration_days || 1;
                 const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
                 
@@ -718,7 +718,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     if (!loading && quests.length > 0 && !streakCheckPerformed.current) {
       streakCheckPerformed.current = true;
       
-      const today = new Date();
+      const today = getNow();
       today.setHours(0, 0, 0, 0);
       
       const completedToday = areAllDailyQuestsCompletedToday(quests);

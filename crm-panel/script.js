@@ -404,6 +404,7 @@ async function loadCRMPanel() {
     loadNotificationsHistory();
     await loadCampaigns();
     await loadBonusSettings();
+	await loadTimezone();
 	loadCitiesAndAddresses();
 	await loadCashierCredentials();	
 }
@@ -529,7 +530,7 @@ async function loadAnalytics(period = 'month') {
                         <div style="text-align: center; padding: 40px; color: #999;">
                             <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
                             <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет данных активности</div>
-                            <div style="font-size: 13px;">Покупки через POS терминал появятся здесь</div>
+                            <div style="font-size: 13px;">Покупки через страницу кассира появятся здесь</div>
                         </div>
                     `;
                 }
@@ -582,7 +583,7 @@ async function loadAnalytics(period = 'month') {
                         <div style="text-align: center; padding: 40px; color: #999;">
                             <div style="font-size: 48px; margin-bottom: 16px;">🛒</div>
                             <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет продаж</div>
-                            <div style="font-size: 13px;">Продажи через POS терминал появятся здесь</div>
+                            <div style="font-size: 13px;">Продажи через страницу кассира появятся здесь</div>
                         </div>
                     `;
                 }
@@ -748,35 +749,31 @@ function renderTiersSettings() {
             
             <div class="tier-config-fields">
                 <div class="config-field">
-                    <label>💰 Порог LTV (Бонусы):</label>
+                    <label>💰 Порог LTV (бонусов или ₽):</label>
                     <input type="number" value="${tier.threshold}" 
                            onchange="updateTierConfig(${idx}, 'threshold', parseInt(this.value))" 
                            class="config-input">
                 </div>
                 
+                <!-- ИСПРАВЛЕНО: убрали multiplier, оставили только cashback -->
                 <div class="config-field">
-                    <label>⚡ Множитель бонусов:</label>
-                    <input type="number" step="0.1" value="${tier.multiplier}" 
-                           onchange="updateTierConfig(${idx}, 'multiplier', parseFloat(this.value))" 
-                           class="config-input">
-                </div>
-                
-                <div class="config-field">
-                    <label>💰 Кешбэк (%):</label>
-                    <input type="number" step="0.5" value="${tier.cashback || tier.multiplier * 5}" 
+                    <label>💰 Кешбэк (% начисления):</label>
+                    <input type="number" step="0.5" value="${tier.cashback || 3}" 
                            onchange="updateTierConfig(${idx}, 'cashback', parseFloat(this.value))" 
                            class="config-input">
+                    <small style="display: block; margin-top: 4px; color: #666;">Процент от суммы покупки, который начисляется бонусами</small>
                 </div>
             </div>
             
             <div class="tier-preview">
                 <div style="background: ${tier.color}; padding: 8px 12px; border-radius: 12px; color: white;">
-                    ${tier.icon} ${escapeHtml(tier.name)}: x${tier.multiplier} бонусов • ${tier.cashback || tier.multiplier * 5}% кешбэк
+                    ${tier.icon} ${escapeHtml(tier.name)}: кешбэк ${tier.cashback || 3}% • порог ${tier.threshold.toLocaleString()}
                 </div>
             </div>
         </div>
     `).join('');
 }
+
 
 function getIconOptions(selectedIcon) {
     const icons = ['🌱', '🥉', '🥈', '🥇', '💎', '⭐', '🏆', '👑', '🔥', '⚡', '🎯'];
@@ -796,13 +793,13 @@ function addTierConfig() {
     const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
     const lastTier = sortedTiers[sortedTiers.length - 1];
     const newThreshold = lastTier ? lastTier.threshold + 5000 : 1000;
-    const newMultiplier = lastTier ? Math.min(5, lastTier.multiplier + 0.3) : 1;
+    // ИСПРАВЛЕНО: убрали multiplier
+    const newCashback = lastTier ? Math.min(30, lastTier.cashback + 2) : 3;
     
     tiers.push({
         name: `Уровень ${tiers.length + 1}`,
         threshold: newThreshold,
-        multiplier: newMultiplier,
-        cashback: Math.min(25, newMultiplier * 5),
+        cashback: newCashback,
         color: getNextColor(tiers.length),
         icon: getNextIcon(tiers.length)
     });
@@ -2176,6 +2173,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+async function loadTimezone() {
+  if (!currentBusiness) return;
+  try {
+    const resp = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/timezone`);
+    const data = await resp.json();
+    if (data.success) {
+      const select = document.getElementById('timezoneSelect');
+      if (select) select.value = data.timezoneOffset;
+    }
+  } catch (err) {
+    console.error('Ошибка загрузки часового пояса:', err);
+  }
+}
+
+async function saveTimezone() {
+  if (!currentBusiness) return;
+  const select = document.getElementById('timezoneSelect');
+  const offset = parseInt(select.value);
+  try {
+    await fetch(`${API_URL}/api/companies/${currentBusiness.id}/timezone`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timezoneOffset: offset })
+    });
+    showSaveIndicator();
+  } catch (err) {
+    console.error('Ошибка сохранения часового пояса:', err);
+  }
+}
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -3576,8 +3603,8 @@ function renderBonusSettings() {
             <h3>💰 Настройки бонусной системы</h3>
             <div class="bonus-settings-description" style="margin-bottom: 20px; padding: 12px; background: #e8f5e9; border-radius: 12px;">
                 <p style="margin: 0; font-size: 13px; color: #2e7d32;">
-                    💡 Настройте параметры начисления и использования бонусов в вашей программе лояльности.
-                    Эти настройки влияют на работу POS-терминала и отображение в мини-приложении.
+                    💡 Настройте параметры использования бонусов в вашей программе лояльности.
+                    Процент начисления бонусов (кешбэк) настраивается в <strong>уровнях программы лояльности</strong>.
                 </p>
             </div>
             
@@ -3594,7 +3621,7 @@ function renderBonusSettings() {
             
             <div class="bonus-setting-row">
                 <div class="setting-info">
-                    <label>📊 Максимальный % оплаты бонусами</label>
+                    <label>📊 Максимальный процент оплаты бонусами</label>
                     <div class="setting-description">Какую часть стоимости заказа можно оплатить бонусами (0-100%)</div>
                 </div>
                 <div class="setting-control">
@@ -3614,19 +3641,8 @@ function renderBonusSettings() {
                 </div>
             </div>
             
-            <div class="bonus-setting-row">
-                <div class="setting-info">
-                    <label>⭐ Бонусов за 1000₽ (базовый)</label>
-                    <div class="setting-description">Сколько бонусов получает пользователь за каждые 1000₽ (до умножения на уровень)</div>
-                </div>
-                <div class="setting-control">
-                    <input type="number" id="bonusRatePerThousand" value="${bonusSettings.bonusRatePerThousand}" min="0" max="1000" step="5" style="width: 120px; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
-                    <span class="setting-unit">бонусов</span>
-                </div>
-            </div>
-            
             <div class="bonus-preview" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 12px;">
-                <h4 style="margin-bottom: 12px;">📱 Предпросмотр в POS-терминале:</h4>
+                <h4 style="margin-bottom: 12px;">📱 Предпросмотр на странице кассира:</h4>
                 <div style="background: white; padding: 16px; border-radius: 8px;">
                     <div style="margin-bottom: 8px;">
                         <span style="color: #666;">💰 Списание бонусов:</span>
@@ -3643,14 +3659,16 @@ function renderBonusSettings() {
                             (${Math.floor(1000 * bonusSettings.maxBonusPaymentPercent / 100 * bonusSettings.rubToBonus)} бонусов)
                         </div>
                     </div>
-                    <div style="margin-top: 8px; font-size: 12px; color: #f39c12;">
-                        ⭐ Базовое начисление: ${bonusSettings.bonusRatePerThousand} бонусов за 1000₽ 
-                        (с учетом уровня x множитель)
+                    <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #eee; font-size: 12px; color: #9b59b6;">
+                        ⭐ <strong>Кешбэк (начисление):</strong> настраивается в уровнях лояльности
+                        <div style="font-size: 11px; color: #888; margin-top: 4px;">
+                            Пример: при кешбэке 10% и покупке на 1000₽ → начисляется 100 бонусов
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <button class="btn-save" onclick="saveBonusSettings()" style="margin-top: 20px; width: 100%;">💾 Сохранить настройки бонусов</button>
+            <button class="btn-save" onclick="saveBonusSettings()" style="margin-top: 20px; width: 100%;">💾 Сохранить настройки</button>
         </div>
     `;
     
@@ -3693,7 +3711,6 @@ async function saveBonusSettings() {
     const rubToBonus = parseInt(document.getElementById('rubToBonus').value);
     const maxBonusPaymentPercent = parseInt(document.getElementById('maxBonusPaymentPercent').value);
     const minPurchaseForBonus = parseInt(document.getElementById('minPurchaseForBonus').value);
-    const bonusRatePerThousand = parseInt(document.getElementById('bonusRatePerThousand').value);
     
     // Валидация
     if (isNaN(rubToBonus) || rubToBonus < 1 || rubToBonus > 1000) {
@@ -3711,25 +3728,20 @@ async function saveBonusSettings() {
         return;
     }
     
-    if (isNaN(bonusRatePerThousand) || bonusRatePerThousand < 0 || bonusRatePerThousand > 1000) {
-        alert('❌ Количество бонусов за 1000₽ должно быть от 0 до 1000');
-        return;
-    }
-    
     const saveBtn = event.target;
     const originalText = saveBtn.textContent;
     saveBtn.textContent = '💾 Сохранение...';
     saveBtn.disabled = true;
     
     try {
+        // ИСПРАВЛЕНО: убрали bonusRatePerThousand
         const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/bonus-settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 rubToBonus,
                 maxBonusPaymentPercent,
-                minPurchaseForBonus,
-                bonusRatePerThousand
+                minPurchaseForBonus
             })
         });
         
