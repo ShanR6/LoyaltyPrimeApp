@@ -9,6 +9,15 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
   const [purchasingId, setPurchasingId] = useState(null);
   const [purchasedGiveaways, setPurchasedGiveaways] = useState({});
 
+  const getUserOffset = () => -(new Date().getTimezoneOffset());
+const adjustDateToLocal = (dateString) => {
+    if (!dateString) return null;
+    const parsed = new Date(dateString);
+    const userOffset = getUserOffset();
+    const correctedTime = parsed.getTime() + (userOffset - (companyTimezoneOffset || 0)) * 60000;
+    return new Date(correctedTime);
+};
+
   useEffect(() => {
     if (selectedGroupId) {
       loadGiveaways();
@@ -134,7 +143,7 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
     if (!giveaway.active) return false;
     
     // Проверяем дату окончания
-    if (giveaway.end_date && new Date(giveaway.end_date) < getNow()) {
+    if (giveaway.end_date && adjustDateToLocal(giveaway.end_date) < new Date()) {
       return false;
     }
     
@@ -160,7 +169,7 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
   // Функция для получения оставшегося времени
   const getTimeLeft = (endDate) => {
     if (!endDate) return null;
-    const now = getNow();
+    const now = new Date();
     const end = new Date(endDate);
     const diffMs = end - now;
     
@@ -287,8 +296,8 @@ export function Giveaways({ selectedGroupId, userId, userBalance, onBalanceUpdat
         {giveaways.map(giveaway => {
           const isAvailable = isGiveawayAvailable(giveaway);
           const isPurchased = purchasedGiveaways[giveaway.id];
-          const endDate = giveaway.end_date ? new Date(giveaway.end_date) : null;
-          const isExpired = endDate && endDate < getNow();
+          const endDate = giveaway.end_date ? adjustDateToLocal(giveaway.end_date) : null;
+          const isExpired = endDate && endDate < new Date();
           const timeLeftText = getTimeLeft(giveaway.end_date);
           const formattedEndDate = formatEndDate(giveaway.end_date);
           
