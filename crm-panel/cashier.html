@@ -410,6 +410,16 @@
             <h3>📊 Информация о пользователе</h3>
             <div id="userInfo"></div>
         </div>
+		<!-- Selection Address Card -->
+<div class="card" id="addressSection" style="display:none;">
+    <h3>📍 Выберите адрес заведения</h3>
+    <div id="addressList" style="max-height: 200px; overflow-y: auto;">
+        <div class="info">Загрузка адресов...</div>
+    </div>
+    <div id="selectedAddressInfo" class="info" style="display: none; margin-top: 12px;">
+        ✅ Выбран адрес: <strong id="selectedAddressText"></strong>
+    </div>
+</div>
 
         <!-- Order Section -->
         <div class="card" id="orderSection" style="display:none;">
@@ -431,15 +441,15 @@
         
         <!-- ВЫБОР ТИПА СКИДКИ -->
         <div class="radio-group">
-            <label style="background:#fff3e0; border:1px solid #e74c3c;">
-                <input type="radio" name="discountType" value="spend" checked onchange="onDiscountTypeChange()">
-                💸 Списать бонусы
-            </label>
-            <label style="background:#e8f5e9; border:1px solid #27ae60;">
-                <input type="radio" name="discountType" value="promotion" onchange="onDiscountTypeChange()">
-                🎁 Использовать акцию
-            </label>
-        </div>
+    <label style="background:#f8f9fa; border:1px solid #ddd; cursor: pointer;" id="spendLabel" onclick="selectDiscountType('spend')">
+        <input type="radio" name="discountType" value="spend" onchange="onDiscountTypeChange()" style="display: none;">
+        💸 Списать бонусы
+    </label>
+    <label style="background:#f8f9fa; border:1px solid #ddd; cursor: pointer;" id="promotionLabel" onclick="selectDiscountType('promotion')">
+        <input type="radio" name="discountType" value="promotion" onchange="onDiscountTypeChange()" style="display: none;">
+        🎁 Использовать акцию
+    </label>
+</div>
         
         <!-- СЕКЦИЯ СПИСАНИЯ БОНУСОВ -->
         <div class="bonus-spend-section" id="spendSection">
@@ -561,73 +571,196 @@
         }
         
         function showScannerScreen() {
-            document.getElementById('loginScreen').classList.add('hidden');
-            document.getElementById('mainContent').classList.remove('hidden');
-            document.getElementById('scannerScreen').classList.remove('hidden');
-            document.getElementById('mainHeader').style.display = 'flex';
-            document.getElementById('pageTitle').style.display = 'none';
-        }
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('mainContent').classList.remove('hidden');
+    document.getElementById('scannerScreen').classList.remove('hidden');
+    document.getElementById('mainHeader').style.display = 'flex';
+    document.getElementById('pageTitle').style.display = 'none';
+    
+    // ✅ СБРАСЫВАЕМ АДРЕС ПРИ ВХОДЕ
+    selectedAddress = null;
+    availableAddresses = [];
+    
+    // Скрываем блоки адресов
+    const addressSection = document.getElementById('addressSection');
+    if (addressSection) {
+        addressSection.style.display = 'none';
+    }
+    
+    const selectedAddressInfo = document.getElementById('selectedAddressInfo');
+    if (selectedAddressInfo) {
+        selectedAddressInfo.style.display = 'none';
+    }
+}
         
         function cashierLogout() {
-            if (confirm('Вы уверены, что хотите выйти?')) {
-                localStorage.removeItem('cashierSession');
-                cashierSession = null;
-                currentUser = null;
-                currentQrData = null;
-                currentCompanyId = null;
-                
-                // Reset all UI
-                document.getElementById('mainContent').classList.add('hidden');
-                document.getElementById('mainHeader').style.display = 'none';
-                document.getElementById('pageTitle').style.display = 'block';
-                document.getElementById('loginScreen').classList.remove('hidden');
-                document.getElementById('scannerScreen').classList.add('hidden');
-                document.getElementById('userInfoCard').style.display = 'none';
-                document.getElementById('orderSection').style.display = 'none';
-                document.getElementById('historySection').style.display = 'none';
-                document.getElementById('cashierLogin').value = '';
-                document.getElementById('cashierPassword').value = '';
-                
-                // Stop scanner if running
-                if (qrScanner && isScanning) {
-                    stopCameraScan();
-                }
-            }
+    if (confirm('Вы уверены, что хотите выйти?')) {
+        localStorage.removeItem('cashierSession');
+        cashierSession = null;
+        currentUser = null;
+        currentQrData = null;
+        currentCompanyId = null;
+        
+        // ✅ ОЧИЩАЕМ ВЫБРАННЫЙ АДРЕС
+        selectedAddress = null;
+        availableAddresses = [];
+        
+        // ✅ СБРАСЫВАЕМ ВЫБОР ТИПА СКИДКИ
+        currentDiscountType = null;
+        
+        // Reset all UI
+        document.getElementById('mainContent').classList.add('hidden');
+        document.getElementById('mainHeader').style.display = 'none';
+        document.getElementById('pageTitle').style.display = 'block';
+        document.getElementById('loginScreen').classList.remove('hidden');
+        document.getElementById('scannerScreen').classList.add('hidden');
+        document.getElementById('userInfoCard').style.display = 'none';
+        document.getElementById('orderSection').style.display = 'none';
+        document.getElementById('historySection').style.display = 'none';
+        
+        // ✅ СКРЫВАЕМ БЛОК ВЫБОРА АДРЕСА
+        const addressSection = document.getElementById('addressSection');
+        if (addressSection) {
+            addressSection.style.display = 'none';
         }
+        
+        const selectedAddressInfo = document.getElementById('selectedAddressInfo');
+        if (selectedAddressInfo) {
+            selectedAddressInfo.style.display = 'none';
+        }
+        
+        // Очищаем список адресов
+        const addressList = document.getElementById('addressList');
+        if (addressList) {
+            addressList.innerHTML = '<div class="info">Загрузка адресов...</div>';
+        }
+        
+        // Очищаем поля ввода
+        document.getElementById('cashierLogin').value = '';
+        document.getElementById('cashierPassword').value = '';
+        
+        // Очищаем другие поля
+        const orderAmount = document.getElementById('orderAmount');
+        if (orderAmount) orderAmount.value = '';
+        
+        const spendAmount = document.getElementById('spendAmount');
+        if (spendAmount) spendAmount.value = '';
+        
+        const finalOrderCard = document.getElementById('finalOrderCard');
+        if (finalOrderCard) finalOrderCard.style.display = 'none';
+        
+        const applyResult = document.getElementById('applyResult');
+        if (applyResult) applyResult.innerHTML = '';
+        
+        const scanResult = document.getElementById('scanResult');
+        if (scanResult) scanResult.innerHTML = '';
+        
+        const bonusResult = document.getElementById('bonusResult');
+        if (bonusResult) bonusResult.innerHTML = '';
+        
+        // Stop scanner if running
+        if (qrScanner && isScanning) {
+            stopCameraScan();
+        }
+        
+        // ✅ СБРАСЫВАЕМ RADIO-КНОПКИ И СТИЛИ
+        const spendRadio = document.querySelector('input[value="spend"]');
+        const promoRadio = document.querySelector('input[value="promotion"]');
+        if (spendRadio) spendRadio.checked = false;
+        if (promoRadio) promoRadio.checked = false;
+        
+        // Сбрасываем стили кнопок
+        const spendLabel = document.getElementById('spendLabel');
+        const promotionLabel = document.getElementById('promotionLabel');
+        if (spendLabel) {
+            spendLabel.style.background = '#f8f9fa';
+            spendLabel.style.borderColor = '#ddd';
+        }
+        if (promotionLabel) {
+            promotionLabel.style.background = '#f8f9fa';
+            promotionLabel.style.borderColor = '#ddd';
+        }
+        
+        // Блокируем секции
+        document.getElementById('spendSection').classList.add('disabled-section');
+        document.getElementById('promotionSection').classList.add('disabled-section');
+        document.getElementById('spendAmount').disabled = true;
+        
+        console.log('✅ Выход выполнен, все данные очищены');
+    }
+}
+       
         
         
         function backToScanner() {
-            // Reset all data
-            currentUser = null;
-            currentQrData = null;
-            currentCompanyId = null;
-            currentMultiplier = 1;
-            currentOrderAmount = 0;
-            currentSpendBonuses = 0;
-            currentBonusToEarn = 0;
-            selectedPromotion = null;
-            availablePromotions = [];
-            
-            // Reset UI
-            document.getElementById('userInfoCard').style.display = 'none';
-            document.getElementById('orderSection').style.display = 'none';
-            document.getElementById('historySection').style.display = 'none';
-            document.getElementById('scanResult').innerHTML = '';
-            document.getElementById('imageUploadResult').innerHTML = '';
-            document.getElementById('bonusResult').innerHTML = '';
-            document.getElementById('applyResult').innerHTML = '';
-            document.getElementById('orderAmount').value = '';
-            document.getElementById('spendAmount').value = '';
-            document.getElementById('finalOrderCard').style.display = 'none';
-            document.getElementById('selectedPromotionInfo').style.display = 'none';
-            
-            // Reset discount type to spend
-            const spendRadio = document.querySelector('input[value="spend"]');
-            if (spendRadio) {
-                spendRadio.checked = true;
-                onDiscountTypeChange();
-            }
-        }
+    // Reset all data
+    currentUser = null;
+    currentQrData = null;
+    currentCompanyId = null;
+    currentMultiplier = 1;
+    currentOrderAmount = 0;
+    currentSpendBonuses = 0;
+    currentBonusToEarn = 0;
+    selectedPromotion = null;
+    availablePromotions = [];
+    
+    // ✅ ОЧИЩАЕМ ВЫБРАННЫЙ АДРЕС
+    selectedAddress = null;
+    
+    // ✅ СБРАСЫВАЕМ ВЫБОР ТИПА СКИДКИ
+    currentDiscountType = null;
+    
+    // Reset UI
+    document.getElementById('userInfoCard').style.display = 'none';
+    document.getElementById('orderSection').style.display = 'none';
+    document.getElementById('historySection').style.display = 'none';
+    document.getElementById('scanResult').innerHTML = '';
+    document.getElementById('imageUploadResult').innerHTML = '';
+    document.getElementById('bonusResult').innerHTML = '';
+    document.getElementById('applyResult').innerHTML = '';
+    document.getElementById('orderAmount').value = '';
+    document.getElementById('spendAmount').value = '';
+    document.getElementById('finalOrderCard').style.display = 'none';
+    document.getElementById('selectedPromotionInfo').style.display = 'none';
+    
+    // ✅ СКРЫВАЕМ БЛОК ВЫБОРА АДРЕСА
+    document.getElementById('addressSection').style.display = 'none';
+    document.getElementById('selectedAddressInfo').style.display = 'none';
+    
+    // Очищаем список адресов
+    const addressList = document.getElementById('addressList');
+    if (addressList) {
+        addressList.innerHTML = '<div class="info">Загрузка адресов...</div>';
+    }
+    
+    // ✅ СБРАСЫВАЕМ RADIO-КНОПКИ И СТИЛИ
+    const spendRadio = document.querySelector('input[value="spend"]');
+    const promoRadio = document.querySelector('input[value="promotion"]');
+    if (spendRadio) spendRadio.checked = false;
+    if (promoRadio) promoRadio.checked = false;
+    
+    // Сбрасываем стили кнопок
+    const spendLabel = document.getElementById('spendLabel');
+    const promotionLabel = document.getElementById('promotionLabel');
+    if (spendLabel) {
+        spendLabel.style.background = '#f8f9fa';
+        spendLabel.style.borderColor = '#ddd';
+    }
+    if (promotionLabel) {
+        promotionLabel.style.background = '#f8f9fa';
+        promotionLabel.style.borderColor = '#ddd';
+    }
+    
+    // Блокируем секции
+    document.getElementById('spendSection').classList.add('disabled-section');
+    document.getElementById('promotionSection').classList.add('disabled-section');
+    document.getElementById('spendAmount').disabled = true;
+    
+    // ✅ ОБНОВЛЯЕМ СОСТОЯНИЕ КНОПКИ (если есть)
+    if (typeof updateConfirmButtonState === 'function') {
+        updateConfirmButtonState();
+    }
+}
         
         // Check session on load
         window.onload = function() {
@@ -1159,133 +1292,211 @@
         }
         
         async function processQrCode(qrText) {
-            console.log('🔍 Processing QR code:', qrText);
+    console.log('🔍 Processing QR code:', qrText);
+    
+    try {
+        let qrData;
+        try {
+            qrData = JSON.parse(qrText);
+            console.log('✅ Parsed QR data:', qrData);
+        } catch (parseError) {
+            console.error('❌ JSON parse error:', parseError);
+            throw new Error('Неверный формат JSON. QR-код должен содержать JSON данные.');
+        }
+        
+        if (!qrData.vkId && qrData.vkId !== 0) {
+            throw new Error('Отсутствует поле vkId в QR-коде');
+        }
+        
+        if (!qrData.companyId && qrData.companyId !== 0) {
+            throw new Error('Отсутствует поле companyId в QR-коде');
+        }
+        
+        if (qrData.timestamp) {
+            const age = (Date.now() - qrData.timestamp) / 1000;
+            if (age > 300) {
+                throw new Error('QR-код истек (старше 5 минут)');
+            }
+        }
+        
+        currentQrData = qrData;
+        currentCompanyId = qrData.companyId;
+        
+        // ✅ СБРАСЫВАЕМ ПРЕДЫДУЩИЙ ВЫБРАННЫЙ АДРЕС ПРИ НОВОМ СКАНИРОВАНИИ
+        selectedAddress = null;
+        availableAddresses = [];
+        
+        // ✅ СБРАСЫВАЕМ ВЫБОР ТИПА СКИДКИ
+        currentDiscountType = null;
+        const spendRadio = document.querySelector('input[value="spend"]');
+        const promoRadio = document.querySelector('input[value="promotion"]');
+        if (spendRadio) spendRadio.checked = false;
+        if (promoRadio) promoRadio.checked = false;
+        
+        // Сбрасываем стили кнопок
+        const spendLabel = document.getElementById('spendLabel');
+        const promotionLabel = document.getElementById('promotionLabel');
+        if (spendLabel) {
+            spendLabel.style.background = '#f8f9fa';
+            spendLabel.style.borderColor = '#ddd';
+        }
+        if (promotionLabel) {
+            promotionLabel.style.background = '#f8f9fa';
+            promotionLabel.style.borderColor = '#ddd';
+        }
+        
+        // Блокируем секции
+        document.getElementById('spendSection').classList.add('disabled-section');
+        document.getElementById('promotionSection').classList.add('disabled-section');
+        document.getElementById('spendAmount').disabled = true;
+        
+        console.log('📡 Verifying QR with backend...');
+        
+        // Load bonus settings
+        await loadBonusSettings();
+        
+        const response = await fetch(`${API_URL}/api/cashier/verify-qr`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                vkId: qrData.vkId,
+                companyId: qrData.companyId,
+                timestamp: qrData.timestamp,
+                signature: qrData.signature || null
+            })
+        });
+        
+        const data = await response.json();
+        console.log('📨 Backend response:', data);
+        
+        if (data.success) {
+            currentUser = data.user;
+            currentCashbackPercent = data.cashbackPercent || 3;
             
-            try {
-                let qrData;
-                try {
-                    qrData = JSON.parse(qrText);
-                    console.log('✅ Parsed QR data:', qrData);
-                } catch (parseError) {
-                    console.error('❌ JSON parse error:', parseError);
-                    throw new Error('Неверный формат JSON. QR-код должен содержать JSON данные.');
-                }
-                
-                if (!qrData.vkId && qrData.vkId !== 0) {
-                    throw new Error('Отсутствует поле vkId в QR-коде');
-                }
-                
-                if (!qrData.companyId && qrData.companyId !== 0) {
-                    throw new Error('Отсутствует поле companyId в QR-коде');
-                }
-                
-                if (qrData.timestamp) {
-                    const age = (Date.now() - qrData.timestamp) / 1000;
-                    if (age > 300) {
-                        throw new Error('QR-код истек (старше 5 минут)');
-                    }
-                }
-                
-                currentQrData = qrData;
-                currentCompanyId = qrData.companyId;
-                
-                console.log('📡 Verifying QR with backend...');
-                
-                // Load bonus settings
-                await loadBonusSettings();
-                
-                const response = await fetch(`${API_URL}/api/cashier/verify-qr`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        vkId: qrData.vkId,
-                        companyId: qrData.companyId,
-                        timestamp: qrData.timestamp,
-                        signature: qrData.signature || null
-                    })
-                });
-                
-                const data = await response.json();
-                console.log('📨 Backend response:', data);
-                
-                if (data.success) {
-                    currentUser = data.user;
-                    currentCashbackPercent = data.cashbackPercent || 3;
-                    
-                    // Show user info
-                    document.getElementById('userInfo').innerHTML = `
+            // Show user info
+            document.getElementById('userInfo').innerHTML = `
     <div class="user-info">
         <strong>👤 ${data.user.name || 'Пользователь'}</strong><br>
         💰 Баланс: <span class="balance">${data.user.bonus_balance || 0}</span> бонусов<br>
         🏆 Уровень: ${data.tier || 'Новичок'} (кешбэк ${data.cashbackPercent || 3}%)
     </div>
 `;
-                    
-                    document.getElementById('availableBonuses').innerText = data.user.bonus_balance || 0;
-                    document.getElementById('userInfoCard').style.display = 'block';
-                    document.getElementById('orderSection').style.display = 'block';
-                    document.getElementById('promotionSection').style.display = 'block';
-                    
-                    // Load promotions and history
-                    await loadAvailablePromotions();
-                    await loadUserHistory();
-                    
-                    // If no promotions available, disable the promotion radio
-                    if (availablePromotions.length === 0) {
-                        const promoRadio = document.querySelector('input[value="promotion"]');
-                        if (promoRadio) {
-                            promoRadio.disabled = true;
-                            promoRadio.parentElement.style.opacity = '0.5';
-                        }
-                    } else {
-                        const promoRadio = document.querySelector('input[value="promotion"]');
-                        if (promoRadio) promoRadio.disabled = false;
-                    }
-                    
-                    // Stop scanner if running
-                    if (qrScanner && isScanning) {
-                        stopCameraScan();
-                    }
-                    
-                    document.getElementById('scanResult').innerHTML = 
-                        '<div class="success">✅ QR-код проверен успешно</div>';
-                } else {
-                    throw new Error(data.message || 'Ошибка проверки QR-кода');
-                }
-            } catch (error) {
-                console.error('❌ QR processing error:', error);
-                document.getElementById('scanResult').innerHTML = 
-                    `<div class="error">❌ ${error.message}</div>`;
+            
+            document.getElementById('availableBonuses').innerText = data.user.bonus_balance || 0;
+            document.getElementById('userInfoCard').style.display = 'block';
+            document.getElementById('orderSection').style.display = 'block';
+            document.getElementById('promotionSection').style.display = 'block';
+            
+            // Load promotions and history
+            await loadAvailablePromotions();
+            await loadUserHistory();
+            await loadAddressesForCashier();
+            
+            // ✅ СКРЫВАЕМ ИНФОРМАЦИЮ О ПРЕДЫДУЩЕМ ВЫБРАННОМ АДРЕСЕ
+            const selectedAddressInfo = document.getElementById('selectedAddressInfo');
+            if (selectedAddressInfo) {
+                selectedAddressInfo.style.display = 'none';
             }
+            
+            // ✅ ОБНОВЛЯЕМ СОСТОЯНИЕ КНОПКИ (она будет заблокирована, пока адрес и тип скидки не выбраны)
+            if (typeof updateConfirmButtonState === 'function') {
+                updateConfirmButtonState();
+            }
+            
+            // If no promotions available, disable the promotion radio
+            if (availablePromotions.length === 0) {
+                const promoRadio = document.querySelector('input[value="promotion"]');
+                if (promoRadio) {
+                    promoRadio.disabled = true;
+                    promoRadio.parentElement.style.opacity = '0.5';
+                }
+            } else {
+                const promoRadio = document.querySelector('input[value="promotion"]');
+                if (promoRadio) promoRadio.disabled = false;
+            }
+            
+            // Stop scanner if running
+            if (qrScanner && isScanning) {
+                stopCameraScan();
+            }
+            
+            document.getElementById('scanResult').innerHTML = 
+                '<div class="success">✅ QR-код проверен успешно</div>';
+        } else {
+            throw new Error(data.message || 'Ошибка проверки QR-кода');
         }
+    } catch (error) {
+        console.error('❌ QR processing error:', error);
+        document.getElementById('scanResult').innerHTML = 
+            `<div class="error">❌ ${error.message}</div>`;
+    }
+}
 
         // ============ ОБРАБОТЧИКИ ИЗМЕНЕНИЙ ============
-        function onDiscountTypeChange() {
-            const radios = document.getElementsByName('discountType');
-            for (let radio of radios) {
-                if (radio.checked) {
-                    currentDiscountType = radio.value;
-                    break;
-                }
-            }
-            
-            if (currentDiscountType === 'spend') {
-                document.getElementById('spendSection').classList.remove('disabled-section');
-                document.getElementById('promotionSection').classList.add('disabled-section');
-                document.getElementById('spendAmount').disabled = false;
-                // Сбрасываем выбранную акцию
-                selectedPromotion = null;
-                document.getElementById('selectedPromotionInfo').style.display = 'none';
-            } else {
-                document.getElementById('spendSection').classList.add('disabled-section');
-                document.getElementById('promotionSection').classList.remove('disabled-section');
-                document.getElementById('spendAmount').disabled = true;
-                currentSpendBonuses = 0;
-                document.getElementById('spendAmount').value = '';
-            }
-            
-            updateFinalOrderSummary();
+function onDiscountTypeChange() {
+    const radios = document.getElementsByName('discountType');
+    let selectedType = null;
+    
+    for (let radio of radios) {
+        if (radio.checked) {
+            selectedType = radio.value;
+            break;
         }
+    }
+    
+    // Если ничего не выбрано - выходим
+    if (!selectedType) {
+        currentDiscountType = null;
+        updateFinalOrderSummary();
+        updateConfirmButtonState();
+        return;
+    }
+    
+    currentDiscountType = selectedType;
+    
+    // Обновляем стили кнопок
+    const spendLabel = document.getElementById('spendLabel');
+    const promotionLabel = document.getElementById('promotionLabel');
+    
+    if (currentDiscountType === 'spend') {
+        // Стиль для выбранной кнопки "Списать бонусы"
+        if (spendLabel) {
+            spendLabel.style.background = '#fff3e0';
+            spendLabel.style.borderColor = '#e74c3c';
+        }
+        if (promotionLabel) {
+            promotionLabel.style.background = '#f8f9fa';
+            promotionLabel.style.borderColor = '#ddd';
+        }
+        
+        document.getElementById('spendSection').classList.remove('disabled-section');
+        document.getElementById('promotionSection').classList.add('disabled-section');
+        document.getElementById('spendAmount').disabled = false;
+        // Сбрасываем выбранную акцию
+        selectedPromotion = null;
+        document.getElementById('selectedPromotionInfo').style.display = 'none';
+        
+    } else if (currentDiscountType === 'promotion') {
+        // Стиль для выбранной кнопки "Использовать акцию"
+        if (promotionLabel) {
+            promotionLabel.style.background = '#e8f5e9';
+            promotionLabel.style.borderColor = '#27ae60';
+        }
+        if (spendLabel) {
+            spendLabel.style.background = '#f8f9fa';
+            spendLabel.style.borderColor = '#ddd';
+        }
+        
+        document.getElementById('spendSection').classList.add('disabled-section');
+        document.getElementById('promotionSection').classList.remove('disabled-section');
+        document.getElementById('spendAmount').disabled = true;
+        currentSpendBonuses = 0;
+        document.getElementById('spendAmount').value = '';
+    }
+    
+    updateFinalOrderSummary();
+    updateConfirmButtonState();
+}
         
         function onOrderAmountChange() {
             const amount = parseInt(document.getElementById('orderAmount').value) || 0;
@@ -1344,11 +1555,12 @@
         }
         
         // ============ ОБНОВЛЕНИЕ ИТОГОВОЙ СУММЫ ============
-        function updateFinalOrderSummary() {
+function updateFinalOrderSummary() {
     const orderAmount = currentOrderAmount;
     
     if (!orderAmount || orderAmount <= 0) {
         document.getElementById('finalOrderCard').style.display = 'none';
+        updateConfirmButtonState(); // ✅ ДОБАВИТЬ
         return;
     }
     
@@ -1405,8 +1617,38 @@
         confirmBtn.disabled = false;
         confirmBtn.style.opacity = '1';
     }
+    
+    // ✅ ДОБАВИТЬ ВЫЗОВ В КОНЦЕ
+    updateConfirmButtonState();
 }
+// ============ УПРАВЛЕНИЕ КНОПКОЙ ПОДТВЕРЖДЕНИЯ ============
+function updateConfirmButtonState() {
+    const confirmBtn = document.getElementById('confirmBtn');
+    const orderAmount = currentOrderAmount;
+    const hasAddress = selectedAddress !== null;
+    const hasDiscountTypeSelected = currentDiscountType !== null; // Добавить переменную
+    
+    if (!confirmBtn) return;
+    
+    if (!orderAmount || orderAmount <= 0 || !hasAddress || !hasDiscountTypeSelected) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.cursor = 'not-allowed';
         
+        if (!hasDiscountTypeSelected) {
+            confirmBtn.title = '🎯 Сначала выберите тип скидки';
+        } else if (!hasAddress) {
+            confirmBtn.title = '📍 Сначала выберите адрес заведения';
+        } else if (!orderAmount || orderAmount <= 0) {
+            confirmBtn.title = '💰 Введите сумму заказа';
+        }
+    } else {
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+        confirmBtn.style.cursor = 'pointer';
+        confirmBtn.title = '✅ Подтвердить заказ';
+    }
+}     
 
         // ============ ЗАГРУЗКА ДОСТУПНЫХ АКЦИЙ (ПЛАТНЫХ И БЕСПЛАТНЫХ) ============
 async function loadAvailablePromotions() {
@@ -1684,6 +1926,10 @@ async function loadAvailablePromotions() {
         alert('Введите сумму заказа');
         return;
     }
+	// ПРОВЕРКА 2: Обязательный выбор адреса
+    if (!checkAddressSelected()) {
+        return;
+    }
     
     const confirmBtn = document.getElementById('confirmBtn');
     const originalText = confirmBtn.innerText;
@@ -1737,16 +1983,19 @@ async function loadAvailablePromotions() {
         }
         
         // 2. Начисляем бонусы за покупку
-        const earnResponse = await fetch(`${API_URL}/api/pos/apply-bonus-v2`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                qrData: JSON.stringify(currentQrData),
-                amount: currentOrderAmount,
-                storeId: 'Касса',
-                cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6)
-            })
-        });
+const earnResponse = await fetch(`${API_URL}/api/pos/apply-bonus-v2`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+        qrData: JSON.stringify(currentQrData),
+        amount: currentOrderAmount,
+        storeId: selectedAddress ? `${selectedAddress.address}${selectedAddress.city_name ? ` (${selectedAddress.city_name})` : ''}` : 'Касса',
+        cashierId: 'cashier_' + Math.random().toString(36).substr(2, 6),
+        addressId: selectedAddress ? selectedAddress.id : null,
+        address: selectedAddress ? selectedAddress.address : null,
+        cityName: selectedAddress ? selectedAddress.city_name : null  // ✅ ДОБАВИТЬ город
+    })
+});
         
         const earnResult = await earnResponse.json();
         
@@ -1805,7 +2054,8 @@ async function loadAvailablePromotions() {
 }
         
         // ============ ИСТОРИЯ ============
-       async function loadUserHistory() {
+       // ============ ИСТОРИЯ ============
+async function loadUserHistory() {
     if (!currentUser || !currentCompanyId) return;
     
     try {
@@ -1815,10 +2065,12 @@ async function loadAvailablePromotions() {
         if (result.success) {
             let totalEarned = 0, totalSpent = 0;
             
-            // Фильтруем транзакции (убираем дубли)
-            const filteredTransactions = result.transactions; // больше не фильтруем
+            // ✅ СОРТИРУЕМ ТРАНЗАКЦИИ ПО ДАТЕ (новые сверху)
+            const sortedTransactions = [...result.transactions].sort((a, b) => 
+                new Date(b.createdAt) - new Date(a.createdAt)
+            );
             
-            const historyHtml = filteredTransactions.map(t => {
+            const historyHtml = sortedTransactions.map(t => {
                 // Определяем тип транзакции через metadata или описание
                 let metadata = {};
                 try {
@@ -1829,7 +2081,6 @@ async function loadAvailablePromotions() {
                                            t.description.includes('Покупка акции') || 
                                            t.description.includes('Бесплатная акция');
                 const isEarn = t.bonusChange > 0 && !isPromotionPurchase;
-                const isSpend = t.bonusChange < 0 || isPromotionPurchase;
                 
                 let actualBonusChange = t.bonusChange;
                 
@@ -1851,7 +2102,6 @@ async function loadAvailablePromotions() {
                 
                 if (isPromotionPurchase) {
                     icon = '🎁';
-                    // Используем описание с бэкенда (уже содержит название акции)
                     title = t.description || 'Покупка акции';
                     borderColor = '#9b59b6';
                     const spentAmount = Math.abs(actualBonusChange);
@@ -1966,6 +2216,252 @@ async function loadAvailablePromotions() {
                 finalAmount: orderAmount
             };
         }
+		
+		// ========== ВЫБОР АДРЕСА ДЛЯ ЗАКАЗА (ОБЯЗАТЕЛЬНО) ==========
+
+let selectedAddress = null;
+let availableAddresses = [];
+
+// Функция для экранирования HTML
+function escapeHtmlForCashier(text) {
+    if (!text) return '';
+    return text.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
+// Загрузка доступных адресов компании
+async function loadAddressesForCashier() {
+    if (!currentCompanyId) {
+        console.log('Нет companyId, пропускаем загрузку адресов');
+        return;
+    }
+    
+    console.log('Загрузка адресов для компании:', currentCompanyId);
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentCompanyId}/addresses`);
+        const data = await response.json();
+        
+        console.log('Ответ от сервера по адресам:', data);
+        
+        if (data.success && data.addresses && data.addresses.length > 0) {
+            availableAddresses = data.addresses;
+            renderAddressList();
+            document.getElementById('addressSection').style.display = 'block';
+            
+            // Скрываем предупреждение
+            hideAddressWarning();
+            
+            // ✅ УБИРАЕМ АВТОМАТИЧЕСКИЙ ВЫБОР АДРЕСА
+            // Кассир должен выбрать адрес самостоятельно
+            // const mainAddress = availableAddresses.find(a => a.is_main === true);
+            // if (mainAddress) {
+            //     selectAddressForOrder(mainAddress.id);
+            // }
+            
+            // ✅ СБРАСЫВАЕМ ВЫБРАННЫЙ АДРЕС (на случай, если он остался от предыдущей сессии)
+            selectedAddress = null;
+            
+            // ✅ ОБНОВЛЯЕМ СОСТОЯНИЕ КНОПКИ (она будет заблокирована, пока адрес не выбран)
+            if (typeof updateConfirmButtonState === 'function') {
+                updateConfirmButtonState();
+            }
+            
+        } else {
+            console.warn('Нет доступных адресов для компании');
+            document.getElementById('addressSection').style.display = 'block';
+            document.getElementById('addressList').innerHTML = '<div class="error">❌ Нет доступных адресов. Обратитесь к администратору.</div>';
+            showAddressRequiredWarning();
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки адресов:', error);
+        document.getElementById('addressSection').style.display = 'block';
+        document.getElementById('addressList').innerHTML = '<div class="error">❌ Ошибка загрузки адресов</div>';
+        showAddressRequiredWarning();
+    }
+}
+
+// Отображение списка адресов
+function renderAddressList() {
+    const container = document.getElementById('addressList');
+    if (!container) return;
+    
+    if (availableAddresses.length === 0) {
+        container.innerHTML = '<div class="warning">⚠️ Нет доступных адресов. Обратитесь к администратору.</div>';
+        return;
+    }
+    
+    container.innerHTML = availableAddresses.map(addr => `
+        <div class="address-option ${selectedAddress?.id === addr.id ? 'selected' : ''}" 
+             onclick="selectAddressForOrder(${addr.id})"
+             data-address-id="${addr.id}"
+             data-address="${escapeHtmlForCashier(addr.address)}"
+             data-city="${escapeHtmlForCashier(addr.city_name || '')}"
+             data-phone="${escapeHtmlForCashier(addr.phone || '')}"
+             data-hours="${escapeHtmlForCashier(addr.working_hours || '')}"
+             data-is-main="${addr.is_main}"
+             style="
+                padding: 12px;
+                margin-bottom: 8px;
+                border: 2px solid ${selectedAddress?.id === addr.id ? '#27ae60' : '#ddd'};
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.2s;
+                background: ${selectedAddress?.id === addr.id ? '#e8f5e9' : 'white'};
+             "
+             onmouseenter="this.style.borderColor='#667eea'"
+             onmouseleave="this.style.borderColor='${selectedAddress?.id === addr.id ? '#27ae60' : '#ddd'}'">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="font-size: 24px;">${addr.is_main ? '⭐' : '📍'}</div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600;">${escapeHtmlForCashier(addr.address)}</div>
+                    <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                        ${addr.city_name ? `🏙️ ${escapeHtmlForCashier(addr.city_name)}` : ''}
+                        ${addr.phone ? ` • 📞 ${addr.phone}` : ''}
+                        ${addr.is_main ? '<span style="color: #f39c12; margin-left: 8px;">Основной</span>' : ''}
+                    </div>
+                    ${addr.working_hours ? `<div style="font-size: 11px; color: #888; margin-top: 4px;">⏰ ${escapeHtmlForCashier(addr.working_hours)}</div>` : ''}
+                </div>
+                ${selectedAddress?.id === addr.id ? '<div style="font-size: 20px; color: #27ae60;">✓</div>' : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+// Выбор адреса для заказа
+function selectAddressForOrder(addressId) {
+    const address = availableAddresses.find(a => a.id === addressId);
+    if (!address) return;
+    
+    // Сохраняем полную информацию об адресе
+    selectedAddress = {
+        id: address.id,
+        address: address.address,
+        city_name: address.city_name || null,
+        is_main: address.is_main,
+        phone: address.phone,
+        working_hours: address.working_hours
+    };
+    
+    // Обновляем стили списка
+    document.querySelectorAll('.address-option').forEach(el => {
+        el.style.borderColor = '#ddd';
+        el.style.background = 'white';
+    });
+    const selectedEl = document.querySelector(`.address-option[onclick="selectAddressForOrder(${addressId})"]`);
+    if (selectedEl) {
+        selectedEl.style.borderColor = '#27ae60';
+        selectedEl.style.background = '#e8f5e9';
+    }
+    
+    // Показываем информацию о выбранном адресе
+    const addressInfo = document.getElementById('selectedAddressInfo');
+    const addressText = document.getElementById('selectedAddressText');
+    if (addressInfo && addressText) {
+        const displayText = `${selectedAddress.address}${selectedAddress.city_name ? ` (${selectedAddress.city_name})` : ''}`;
+        addressText.innerHTML = escapeHtmlForCashier(displayText);
+        addressInfo.style.display = 'block';
+    }
+    
+    // Скрываем предупреждение
+    hideAddressWarning();
+    
+    // Обновляем состояние кнопки
+    updateConfirmButtonState();
+    
+    console.log('✅ Выбран адрес:', selectedAddress.address, selectedAddress.city_name ? `(${selectedAddress.city_name})` : '');
+}
+
+// Показать предупреждение о необходимости выбора адреса
+function showAddressRequiredWarning() {
+    const warning = document.getElementById('addressRequiredWarning');
+    if (warning) {
+        warning.style.display = 'block';
+    }
+}
+
+// Скрыть предупреждение
+function hideAddressWarning() {
+    const warning = document.getElementById('addressRequiredWarning');
+    if (warning) {
+        warning.style.display = 'none';
+    }
+}
+
+// Проверка выбран ли адрес перед подтверждением заказа (ОБЯЗАТЕЛЬНО)
+function checkAddressSelected() {
+    if (!selectedAddress) {
+        showAddressRequiredWarning();
+        showNotification('❌ Пожалуйста, выберите адрес заведения!', 'error');
+        document.getElementById('addressSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Анимируем предупреждение
+        const warning = document.getElementById('addressRequiredWarning');
+        if (warning) {
+            warning.style.animation = 'shake 0.5s ease';
+            setTimeout(() => {
+                if (warning) warning.style.animation = '';
+            }, 500);
+        }
+        return false;
+    }
+    return true;
+}
+
+// Добавляем CSS анимацию для предупреждения
+const shakeStyle = document.createElement('style');
+shakeStyle.textContent = `
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+    }
+`;
+document.head.appendChild(shakeStyle);
+
+// Выбор типа скидки (должен быть явный выбор)
+function selectDiscountType(type) {
+    // Снимаем активное состояние со всех
+    document.getElementById('spendLabel').style.background = '#f8f9fa';
+    document.getElementById('spendLabel').style.borderColor = '#ddd';
+    document.getElementById('promotionLabel').style.background = '#f8f9fa';
+    document.getElementById('promotionLabel').style.borderColor = '#ddd';
+    
+    // Устанавливаем активное состояние для выбранного
+    if (type === 'spend') {
+        document.getElementById('spendLabel').style.background = '#fff3e0';
+        document.getElementById('spendLabel').style.borderColor = '#e74c3c';
+        document.querySelector('input[value="spend"]').checked = true;
+    } else {
+        document.getElementById('promotionLabel').style.background = '#e8f5e9';
+        document.getElementById('promotionLabel').style.borderColor = '#27ae60';
+        document.querySelector('input[value="promotion"]').checked = true;
+    }
+    
+    currentDiscountType = type;
+    
+    if (type === 'spend') {
+        document.getElementById('spendSection').classList.remove('disabled-section');
+        document.getElementById('promotionSection').classList.add('disabled-section');
+        document.getElementById('spendAmount').disabled = false;
+        selectedPromotion = null;
+        document.getElementById('selectedPromotionInfo').style.display = 'none';
+    } else {
+        document.getElementById('spendSection').classList.add('disabled-section');
+        document.getElementById('promotionSection').classList.remove('disabled-section');
+        document.getElementById('spendAmount').disabled = true;
+        currentSpendBonuses = 0;
+        document.getElementById('spendAmount').value = '';
+    }
+    
+    updateFinalOrderSummary();
+    updateConfirmButtonState();
+}
+
     </script>
 </body>
 </html>

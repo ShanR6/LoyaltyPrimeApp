@@ -147,7 +147,7 @@ useEffect(() => {
         const response = await fetch(`${API_URL}/api/promotions/${selectedGroup.id}`);
         if (response.ok) {
           const allPromos = await response.json();
-          const now = new Date(Date.now() + (selectedGroup?.timezoneOffset || 0) * 60000);
+          const now = new Date();
           
 		  const companyOffset = selectedGroup?.timezoneOffset || 0;
           const activePromotions = allPromos.filter(promo => {
@@ -418,7 +418,7 @@ const loadUserData = async (companyId, vkUserId, userName) => {
     saveAllGroupsData(userInfo.id, updated);
   };
   
-  const addHistory = (desc, pointsChange, type) => {
+const addHistory = (desc, pointsChange, type) => {
     if (!selectedGroup) return;
     const cur = getCurrentGroupData();
     const sign = type === 'earn' ? '+' : '-';
@@ -514,15 +514,69 @@ const syncBalanceFromDB = async () => {
     if (data.success) {
       const cur = getCurrentGroupData();
       
-      // ✅ ОБНОВЛЯЕМ: totalSpent берем из БД (теперь игры увеличивают его)
+      // Загружаем историю транзакций с сервера
+      let serverHistory = [];
+      try {
+        const historyResponse = await fetch(`${API_URL}/api/users/${userId}/transactions/${selectedGroup.id}?limit=50`);
+        const historyData = await historyResponse.json();
+        
+        if (historyData.success && historyData.transactions.length > 0) {
+          // ✅ СОРТИРУЕМ ТРАНЗАКЦИИ (новые сверху)
+          const sortedTransactions = [...historyData.transactions].sort((a, b) => 
+            new Date(b.createdAt) - new Date(a.createdAt)
+          );
+          
+          // Преобразуем в формат истории
+          serverHistory = sortedTransactions.map(t => {
+            let icon = '';
+            let desc = t.description || '';
+            
+            // Определяем иконку для истории
+            if (t.type === 'earn') {
+              if (desc.includes('Покупка') || t.source === 'pos') {
+                icon = '🛒';
+              } else if (desc.includes('Задание')) {
+                icon = '✅';
+              } else if (desc.includes('Ежедневный')) {
+                icon = '📅';
+              } else {
+                icon = '➕';
+              }
+            } else {
+              if (desc.includes('акци') || desc.includes('promotion')) {
+                icon = '🎯';
+              } else if (desc.includes('Списание')) {
+                icon = '💸';
+              } else {
+                icon = '➖';
+              }
+            }
+            
+            return {
+              id: t.id,
+              desc: desc,
+              points: t.bonusChange > 0 ? `+${t.bonusChange}` : `${t.bonusChange}`,
+              date: new Date(t.createdAt).toLocaleString('ru-RU'),
+              type: t.type,
+              icon: icon
+            };
+          });
+        }
+      } catch (historyError) {
+        console.error('Ошибка загрузки истории:', historyError);
+      }
+      
+      // ✅ ОБНОВЛЯЕМ: баланс и история из БД
       const newData = {
         ...cur,
         bonusBalance: data.user.bonus_balance || 0,
         totalEarned: data.user.total_earned || 0,
-        totalSpent: data.user.total_spent || 0  // Теперь игры обновляют total_spent на сервере
+        totalSpent: data.user.total_spent || 0,
+        history: serverHistory.length > 0 ? serverHistory : cur.history || []
       };
+      
       saveCurrentGroupData(newData);
-      console.log('Баланс синхронизирован из БД:', newData.bonusBalance, 'totalSpent:', newData.totalSpent);
+      console.log('Баланс синхронизирован из БД:', newData.bonusBalance, 'totalSpent:', newData.totalSpent, 'history length:', newData.history.length);
     }
   } catch (error) {
     console.error('Ошибка синхронизации баланса:', error);
@@ -694,6 +748,12 @@ useEffect(() => {
         loadUserSelectedLocation();
     }
 }, [selectedGroup?.id, userId]);
+
+useEffect(() => {
+  if (activeTab === 'history' && userId && selectedGroup) {
+    syncBalanceFromDB();
+  }
+}, [activeTab, userId, selectedGroup]);
 
   const handleSelectGroup = async (company) => {
     // Извлекаем цвет бренда из компании (поддерживаем оба формата)
@@ -1253,6 +1313,27 @@ const progressToNext = getProgressToNextTier(currentSpent);
         <span>Дата регистрации:</span>
         <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.regDate}</span>
       </div>
+	      <div style={{ marginTop: 16, textAlign: 'center' }}>
+      <button
+        onClick={() => {
+          // Замените 12345678 на ID сообщества вашего бота
+          vkBridge.send('VKWebAppOpenCommunity', { communityId: 54517632 })
+            .catch(err => console.error('Ошибка открытия сообщества:', err));
+        }}
+        style={{
+          background: 'linear-gradient(135deg, #4a76a8, #3b5998)',
+          border: 'none',
+          padding: '10px 20px',
+          borderRadius: 20,
+          color: 'white',
+          fontWeight: 600,
+          cursor: 'pointer',
+          fontSize: 14
+        }}
+      >
+        💬 Перейти в бота
+      </button>
+    </div>
     </div>
 	{/* Блок с выбранным адресом */}
     {selectedLocation && (
@@ -1295,7 +1376,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
         <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>🎁 Активные акции</h3>
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {promotions.slice(0, 3).map(offer => {
-            const endDate = offer.end_date ? new Date(offer.end_date) : null;
+            const endDate = adjustDateToLocal(offer.end_date, selectedGroup?.timezoneOffset || 0);
             const now = currentTime;
             
             const timeLeftMs = endDate ? endDate - now : 0;
@@ -1495,8 +1576,8 @@ const progressToNext = getProgressToNextTier(currentSpent);
           const rewardValue = offer.reward_value || 0;
           const rewardText = rewardType === 'bonus' ? `+${rewardValue} бонусов` : `${rewardValue}% скидка`;
           
-          const startDate = offer.start_date ? new Date(offer.start_date) : null;
-          const endDate = offer.end_date ? new Date(offer.end_date) : null;
+          const startDate = adjustDateToLocal(offer.start_date, selectedGroup?.timezoneOffset || 0);
+          const endDate = adjustDateToLocal(offer.end_date, selectedGroup?.timezoneOffset || 0);
           const now = currentTime;
           
           // Вычисляем оставшееся время
@@ -1734,8 +1815,8 @@ const progressToNext = getProgressToNextTier(currentSpent);
     <div style={{ display:'flex', flexDirection:'column', gap:12 }} id="history-container">
       {currentGroupData?.history?.length > 0 ? (
         <>
-          {/* Показываем покупки из транзакций, если они есть */}
-          {currentGroupData.history.map(item => {
+          {/* ✅ СОРТИРУЕМ ИСТОРИЮ ПО ДАТЕ (новые сверху) */}
+          {[...currentGroupData.history].sort((a, b) => new Date(b.date) - new Date(a.date)).map(item => {
             // Определяем тип операции для отображения иконки
             let icon = '';
             let itemColor = '';
@@ -1800,8 +1881,13 @@ const progressToNext = getProgressToNextTier(currentSpent);
               const response = await fetch(`${API_URL}/api/users/${userId}/transactions/${selectedGroup.id}?limit=100`);
               const data = await response.json();
               if (data.success && data.transactions.length > 0) {
+                // ✅ СОРТИРУЕМ ТРАНЗАКЦИИ ПО ДАТЕ (новые сверху)
+                const sortedTransactions = [...data.transactions].sort((a, b) => 
+                  new Date(b.createdAt) - new Date(a.createdAt)
+                );
+                
                 // Преобразуем транзакции с сервера в формат истории
-                const serverHistory = data.transactions.map(t => {
+                const serverHistory = sortedTransactions.map(t => {
                   const date = new Date(t.createdAt);
                   const formattedDate = date.toLocaleString('ru-RU');
                   
@@ -1818,13 +1904,13 @@ const progressToNext = getProgressToNextTier(currentSpent);
                   const isPromotionPurchase = metadata.promotion_id || displayDesc.includes('Покупка акции') || displayDesc.includes('Бесплатная акция');
                   
                   if (t.type === 'earn') {
-                    if (t.description.includes('Покупка') || t.source === 'pos') {
+                    if (t.description?.includes('Покупка') || t.source === 'pos') {
                       icon = '🛒';
                       itemColor = '#2ecc71';
-                    } else if (t.description.includes('Задание')) {
+                    } else if (t.description?.includes('Задание')) {
                       icon = '✅';
                       itemColor = '#3498db';
-                    } else if (t.description.includes('Ежедневный')) {
+                    } else if (t.description?.includes('Ежедневный')) {
                       icon = '📅';
                       itemColor = '#f39c12';
                     } else {
@@ -1833,12 +1919,10 @@ const progressToNext = getProgressToNextTier(currentSpent);
                     }
                   } else {
                     if (isPromotionPurchase) {
-                      // Покупка акции - показываем название из описания или метаданных
                       icon = '🎯';
                       itemColor = '#9b59b6';
-                      // Описание уже содержит название акции с бэкенда
                       displayDesc = t.description;
-                    } else if (t.description.includes('Списание')) {
+                    } else if (t.description?.includes('Списание')) {
                       icon = '💸';
                       itemColor = '#e74c3c';
                     } else {
@@ -1870,7 +1954,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
                   const existingItems = historyContainer.querySelectorAll('div[style*="background:rgba(0,0,0,0.3)"]');
                   existingItems.forEach(item => item.remove());
                   
-                  // Добавляем новые транзакции
+                  // Добавляем новые транзакции (уже отсортированные)
                   const transactionsHtml = serverHistory.slice(0, 50).map(item => `
                     <div style="background:rgba(0,0,0,0.3); border-radius:20px; padding:14px 16px; margin-bottom:12px; border-left: 4px solid ${item.color};">
                       <div style="display:flex; align-items:center; gap:10px;">
@@ -1910,7 +1994,6 @@ const progressToNext = getProgressToNextTier(currentSpent);
     </div>
   </div>
 )}
-
       {showTiersModal && (
   <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => setShowTiersModal(false)}>
     <div style={{ background:'linear-gradient(135deg,#1e2538,#131825)', borderRadius:32, maxWidth:400, width:'100%', maxHeight:'80vh', overflow:'auto', position:'relative' }} onClick={e=>e.stopPropagation()}>

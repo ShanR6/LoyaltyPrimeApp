@@ -423,6 +423,11 @@ function escapeHtml(text) {
 }
 
 // ========== МОДУЛЬ 1: АНАЛИТИКА ==========
+
+// Переменная для хранения текущего периода графика активности
+let currentActivityPeriod = 'week';
+let cachedAnalytics = null; // Кэш для данных аналитики
+
 async function loadAnalytics(period = 'month') {
     if (!currentBusiness) return;
     
@@ -431,59 +436,19 @@ async function loadAnalytics(period = 'month') {
         const data = await response.json();
         
         if (data.success && data.analytics) {
-            const analytics = data.analytics;
+            cachedAnalytics = data.analytics;
             
-            // Update stats grid with REAL data
-            const statsGrid = document.getElementById('statsGrid');
-            if (statsGrid) {
-                const revenue = analytics.revenue || 0;
-                const activeUsers = analytics.activeUsers || 0;
-                const newUsers = analytics.newUsers || 0;
-                const trend = analytics.revenueTrend || 0;
-                
-                const trendIcon = trend >= 0 ? '↑' : '↓';
-                const trendClass = trend >= 0 ? 'up' : 'down';
-                const trendValue = Math.abs(trend);
-                
-                statsGrid.innerHTML = `
-                    <div class="stat-card">
-                        <div class="stat-icon">💰</div>
-                        <div class="stat-info">
-                            <div class="stat-value">${revenue.toLocaleString()} ₽</div>
-                            <div class="stat-label">Выручка за период</div>
-                            <div class="stat-trend ${trendClass}">${trendIcon} ${trendValue}%</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">👥</div>
-                        <div class="stat-info">
-                            <div class="stat-value">${activeUsers}</div>
-                            <div class="stat-label">Активных покупателей</div>
-                            <div class="stat-trend up">Совершили покупки</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🆕</div>
-                        <div class="stat-info">
-                            <div class="stat-value">${newUsers}</div>
-                            <div class="stat-label">Новых пользователей</div>
-                            <div class="stat-trend up">Зарегистрировались</div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            // Update user segmentation with REAL classification data
+            // Обновляем сегментацию пользователей
             const segmentsList = document.getElementById('segmentsList');
             if (segmentsList) {
-                const classif = analytics.classification || { new: 0, active: 0, regular: 0, dormant: 0, total: 0 };
+                const classif = data.analytics.classification || { new: 0, active: 0, regular: 0, dormant: 0, total: 0 };
                 const total = classif.total || 0;
                 
                 const segments = [
-                    { name: '🌱 Новичок', desc: '1 покупка, ≤14 дней', count: classif.new || 0, percent: total > 0 ? Math.round((classif.new / total) * 100) : 0, color: '#3498db' },
-                    { name: '🔥 Активный', desc: '2+ покупок, ≤7 дней между', count: classif.active || 0, percent: total > 0 ? Math.round((classif.active / total) * 100) : 0, color: '#2ecc71' },
-                    { name: '⭐ Постоянный', desc: '2+ покупок, ≤3 дней между', count: classif.regular || 0, percent: total > 0 ? Math.round((classif.regular / total) * 100) : 0, color: '#f39c12' },
-                    { name: '😴 Спящий', desc: '1+ покупок, ≥20 дней', count: classif.dormant || 0, percent: total > 0 ? Math.round((classif.dormant / total) * 100) : 0, color: '#e74c3c' }
+                    { name: 'Новичок', desc: '1 покупка, ≤14 дней', count: classif.new || 0, percent: total > 0 ? Math.round((classif.new / total) * 100) : 0, color: '#3498db' },
+                    { name: 'Активный', desc: '2+ покупок, ≤7 дней между', count: classif.active || 0, percent: total > 0 ? Math.round((classif.active / total) * 100) : 0, color: '#2ecc71' },
+                    { name: 'Постоянный', desc: '2+ покупок, ≤3 дней между', count: classif.regular || 0, percent: total > 0 ? Math.round((classif.regular / total) * 100) : 0, color: '#f39c12' },
+                    { name: 'Спящий', desc: '1+ покупок, ≥20 дней', count: classif.dormant || 0, percent: total > 0 ? Math.round((classif.dormant / total) * 100) : 0, color: '#e74c3c' }
                 ];
                 
                 segmentsList.innerHTML = segments.map(seg => `
@@ -504,42 +469,17 @@ async function loadAnalytics(period = 'month') {
                 `).join('');
             }
             
-            // Update daily activity chart
-            const activityChart = document.getElementById('activityChart');
-            if (activityChart) {
-                const dailyActivity = analytics.dailyActivity || [];
-                
-                if (dailyActivity.length > 0) {
-                    const maxValue = Math.max(...dailyActivity.map(d => parseInt(d.transactions) || 0));
-                    activityChart.innerHTML = `
-                        <div class="activity-chart">
-                            ${dailyActivity.slice(-14).map((day, i) => `
-                                <div class="bar-container">
-                                    <div class="bar" style="height: ${maxValue > 0 ? (parseInt(day.transactions) / maxValue) * 150 : 0}px">
-                                        <span class="bar-value">${day.transactions}</span>
-                                    </div>
-                                    <div class="bar-label">${new Date(day.date).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short'})}</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                } else {
-                    // Показываем сообщение при отсутствии данных
-                    activityChart.innerHTML = `
-                        <div style="text-align: center; padding: 40px; color: #999;">
-                            <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
-                            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет данных активности</div>
-                            <div style="font-size: 13px;">Покупки через страницу кассира появятся здесь</div>
-                        </div>
-                    `;
-                }
-            }
+            // Обновляем график активности (с учетом выбранного периода)
+            renderActivityChart(currentActivityPeriod);
             
-            // Update top products
+            // Загружаем выручку по адресам
+            await loadAddressesRevenue(currentRevenuePeriod);
+            
+            // Обновляем топ продуктов
             const topProducts = document.getElementById('topProducts');
             if (topProducts) {
-                const products = analytics.topProducts || [];
-                const totalRevenue = analytics.revenue || 0;
+                const products = data.analytics.topProducts || [];
+                const totalRevenue = data.analytics.revenue || 0;
                 
                 if (products.length > 0) {
                     topProducts.innerHTML = `
@@ -577,7 +517,6 @@ async function loadAnalytics(period = 'month') {
                         </div>
                     `;
                 } else {
-                    // Показываем сообщение при отсутствии данных
                     topProducts.innerHTML = `
                         <div style="text-align: center; padding: 40px; color: #999;">
                             <div style="font-size: 48px; margin-bottom: 16px;">🛒</div>
@@ -589,46 +528,203 @@ async function loadAnalytics(period = 'month') {
             }
         } else {
             console.warn('Аналитика не получена:', data);
+            showEmptyAnalytics();
         }
     } catch (error) {
         console.error('Ошибка загрузки аналитики:', error);
-        // При ошибке показываем нули
         showEmptyAnalytics();
     }
 }
 
-// Показать пустую аналитику с нулями
-function showEmptyAnalytics() {
-    const statsGrid = document.getElementById('statsGrid');
-    if (statsGrid) {
-        statsGrid.innerHTML = `
-            <div class="stat-card">
-                <div class="stat-icon">💰</div>
-                <div class="stat-info">
-                    <div class="stat-value">0 ₽</div>
-                    <div class="stat-label">Выручка за период</div>
-                    <div class="stat-trend up">↑ 0%</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">👥</div>
-                <div class="stat-info">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">Активных покупателей</div>
-                    <div class="stat-trend up">Совершили покупки</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">🆕</div>
-                <div class="stat-info">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">Новых пользователей</div>
-                    <div class="stat-trend up">Зарегистрировались</div>
-                </div>
+// Функция для отображения графика активности
+function renderActivityChart(period) {
+    const activityChart = document.getElementById('activityChart');
+    if (!activityChart) return;
+    
+    // Сначала добавляем кнопки, если их нет
+    ensureActivityButtons();
+    
+    // Обновляем активные кнопки
+    document.querySelectorAll('.activity-period-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.period === period) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Получаем данные из кэша
+    if (!cachedAnalytics || !cachedAnalytics.dailyActivity || cachedAnalytics.dailyActivity.length === 0) {
+        activityChart.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #999;">
+                <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет данных активности</div>
+                <div style="font-size: 13px;">Покупки через страницу кассира появятся здесь</div>
             </div>
         `;
+        return;
     }
     
+    let activity = [...cachedAnalytics.dailyActivity];
+    
+    if (period === 'week') {
+        // Последние 7 дней
+        activity = activity.slice(-7);
+    } else if (period === 'month') {
+        // Последние 30 дней
+        activity = activity.slice(-30);
+    } else if (period === 'year') {
+        // Группируем по месяцам
+        const monthlyData = {};
+        activity.forEach(item => {
+            const date = new Date(item.date);
+            const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+            const monthName = date.toLocaleDateString('ru-RU', { month: 'short' });
+            
+            if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = {
+                    month: monthName,
+                    transactions: 0,
+                    fullDate: date
+                };
+            }
+            monthlyData[monthKey].transactions += parseInt(item.transactions) || 0;
+        });
+        
+        activity = Object.values(monthlyData).slice(-12);
+        const maxValue = Math.max(...activity.map(d => d.transactions), 1);
+        
+        activityChart.innerHTML = `
+            <div class="activity-chart">
+                ${activity.map((item, i) => {
+                    const height = (item.transactions / maxValue) * 150;
+                    return `
+                        <div class="bar-container">
+                            <div class="bar" style="height: ${height}px">
+                                <span class="bar-value">${item.transactions}</span>
+                            </div>
+                            <div class="bar-label">${item.month}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+        return;
+    }
+    
+    // Для недели и месяца
+    if (activity.length === 0) {
+        activityChart.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #999;">
+                <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет данных за выбранный период</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const maxValue = Math.max(...activity.map(d => parseInt(d.transactions) || 0), 1);
+    let dateFormat = { day: 'numeric', month: 'short' };
+    if (period === 'week') {
+        dateFormat = { weekday: 'short', day: 'numeric' };
+    }
+    
+    activityChart.innerHTML = `
+        <div class="activity-chart">
+            ${activity.map((item, i) => {
+                const date = new Date(item.date);
+                let label = date.toLocaleDateString('ru-RU', dateFormat);
+                const height = (parseInt(item.transactions) / maxValue) * 150;
+                return `
+                    <div class="bar-container">
+                        <div class="bar" style="height: ${height}px">
+                            <span class="bar-value">${item.transactions}</span>
+                        </div>
+                        <div class="bar-label">${label}</div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+// Функция для добавления кнопок переключения периода (без иконок, с улучшенным стилем)
+function ensureActivityButtons() {
+    // Проверяем, есть ли уже кнопки
+    if (document.querySelector('.activity-period-buttons')) {
+        return;
+    }
+    
+    const activityChart = document.getElementById('activityChart');
+    if (!activityChart) return;
+    
+    // Находим родительский контейнер (chart-card)
+    let chartCard = activityChart.closest('.chart-card');
+    if (!chartCard) {
+        chartCard = activityChart.parentElement;
+    }
+    
+    // Создаем контейнер с кнопками - все кнопки одинаковые, без активного состояния
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'activity-period-buttons';
+    buttonContainer.style.cssText = 'display: flex; gap: 12px; margin-bottom: 24px; justify-content: center; padding: 8px 0;';
+    buttonContainer.innerHTML = `
+        <button class="activity-period-btn" data-period="week" style="padding: 8px 24px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; background: white; color: #495057; font-family: inherit; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            Неделя
+        </button>
+        <button class="activity-period-btn" data-period="month" style="padding: 8px 24px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; background: white; color: #495057; font-family: inherit; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            Месяц
+        </button>
+        <button class="activity-period-btn" data-period="year" style="padding: 8px 24px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; background: white; color: #495057; font-family: inherit; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            Год
+        </button>
+    `;
+    
+    // Добавляем стили
+    const style = document.createElement('style');
+    style.textContent = `
+        .activity-period-btn {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .activity-period-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            background: #f8f9fa !important;
+        }
+        .activity-period-btn.active {
+            background: #667eea !important;
+            color: white !important;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+        }
+        .activity-period-btn.active:hover {
+            background: #5a67d8 !important;
+            transform: translateY(-2px);
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Вставляем кнопки перед графиком
+    if (chartCard.firstChild) {
+        chartCard.insertBefore(buttonContainer, chartCard.firstChild);
+    } else {
+        chartCard.appendChild(buttonContainer);
+    }
+    
+    // Добавляем обработчики
+    document.querySelectorAll('.activity-period-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const period = btn.dataset.period;
+            currentActivityPeriod = period;
+            renderActivityChart(period);
+        });
+    });
+    
+    // НЕ активируем никакую кнопку по умолчанию - все остаются белыми
+}
+
+// Показать пустую аналитику
+function showEmptyAnalytics() {
+    // Сегментация
     const segmentsList = document.getElementById('segmentsList');
     if (segmentsList) {
         segmentsList.innerHTML = `
@@ -636,7 +732,7 @@ function showEmptyAnalytics() {
                 <div class="segment-header">
                     <div class="segment-color" style="background-color: #3498db"></div>
                     <div>
-                        <div class="segment-name">🌱 Новичок</div>
+                        <div class="segment-name">Новичок</div>
                         <div style="font-size: 11px; color: #999; margin-top: 2px;">1 покупка, ≤14 дней</div>
                     </div>
                     <div class="segment-count">0 чел.</div>
@@ -650,7 +746,7 @@ function showEmptyAnalytics() {
                 <div class="segment-header">
                     <div class="segment-color" style="background-color: #2ecc71"></div>
                     <div>
-                        <div class="segment-name">🔥 Активный</div>
+                        <div class="segment-name">Активный</div>
                         <div style="font-size: 11px; color: #999; margin-top: 2px;">2+ покупок, ≤7 дней между</div>
                     </div>
                     <div class="segment-count">0 чел.</div>
@@ -664,7 +760,7 @@ function showEmptyAnalytics() {
                 <div class="segment-header">
                     <div class="segment-color" style="background-color: #f39c12"></div>
                     <div>
-                        <div class="segment-name">⭐ Постоянный</div>
+                        <div class="segment-name">Постоянный</div>
                         <div style="font-size: 11px; color: #999; margin-top: 2px;">2+ покупок, ≤3 дней между</div>
                     </div>
                     <div class="segment-count">0 чел.</div>
@@ -678,7 +774,7 @@ function showEmptyAnalytics() {
                 <div class="segment-header">
                     <div class="segment-color" style="background-color: #e74c3c"></div>
                     <div>
-                        <div class="segment-name">😴 Спящий</div>
+                        <div class="segment-name">Спящий</div>
                         <div style="font-size: 11px; color: #999; margin-top: 2px;">1+ покупок, ≥20 дней</div>
                     </div>
                     <div class="segment-count">0 чел.</div>
@@ -690,8 +786,187 @@ function showEmptyAnalytics() {
             </div>
         `;
     }
+    
+    // График активности
+    const activityChart = document.getElementById('activityChart');
+    if (activityChart) {
+        ensureActivityButtons();
+        activityChart.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #999;">
+                <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет данных активности</div>
+                <div style="font-size: 13px;">Покупки через страницу кассира появятся здесь</div>
+            </div>
+        `;
+    }
+    
+    // Топ продуктов
+    const topProducts = document.getElementById('topProducts');
+    if (topProducts) {
+        topProducts.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #999;">
+                <div style="font-size: 48px; margin-bottom: 16px;">🛒</div>
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет продаж</div>
+                <div style="font-size: 13px;">Продажи через страницу кассира появятся здесь</div>
+            </div>
+        `;
+    }
+}
+// ========== МОДУЛЬ АНАЛИТИКИ ПО АДРЕСАМ ==========
+
+let currentRevenuePeriod = 'month';
+let addressesRevenueData = [];
+let revenueButtonsCreated = false;
+
+async function loadAddressesRevenue(period = 'month') {
+    if (!currentBusiness) return;
+    
+    currentRevenuePeriod = period;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/${currentBusiness.id}/addresses-revenue?period=${period}`);
+        const data = await response.json();
+        
+        const container = document.getElementById('addressesRevenueList');
+        if (!container) {
+            console.error('Контейнер addressesRevenueList не найден');
+            return;
+        }
+        
+        // Создаем или обновляем кнопки
+        if (!revenueButtonsCreated) {
+            createRevenueButtons(container);
+            revenueButtonsCreated = true;
+        }
+        
+        // Обновляем активный класс на кнопках
+        const buttons = container.querySelectorAll('.revenue-period-btn');
+        buttons.forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.period === period) {
+                btn.classList.add('active');
+            }
+        });
+        
+        // Получаем контейнер для данных (без кнопок)
+        let dataContainer = container.querySelector('.revenue-data-container');
+        if (!dataContainer) {
+            dataContainer = document.createElement('div');
+            dataContainer.className = 'revenue-data-container';
+            container.appendChild(dataContainer);
+        }
+        
+        if (data.success && data.addresses && data.addresses.length > 0) {
+            addressesRevenueData = data.addresses;
+            const totalRevenue = data.totalRevenue || 0;
+            
+            dataContainer.innerHTML = `
+                <div class="revenue-header" style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #667eea15, #764ba215); border-radius: 16px;">
+                    <div class="revenue-total" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <span class="total-label" style="font-size: 16px; color: #555;">📊 Общая выручка за ${period === 'month' ? 'месяц' : 'год'}:</span>
+                    </div>
+                </div>
+                <div class="revenue-table">
+                    <div class="revenue-table-header" style="display: grid; grid-template-columns: 3fr 1.5fr 2fr; background: #f8f9fa; padding: 12px 16px; border-radius: 12px; font-weight: 600; font-size: 13px; color: #495057; margin-bottom: 8px;">
+                        <div>📍 Адрес</div>
+                        <div>🏙️ Город</div>
+                        <div>💰 Выручка</div>
+                    </div>
+                    ${addressesRevenueData.map(addr => `
+                        <div class="revenue-table-row" style="display: grid; grid-template-columns: 3fr 1.5fr 2fr; padding: 12px 16px; border-bottom: 1px solid #e9ecef; font-size: 14px; align-items: center;">
+                            <div class="address-name" style="font-weight: 500; color: #212529; word-break: break-word;" title="${escapeHtml(addr.address)}">
+                                ${escapeHtml(addr.address.substring(0, 45))}${addr.address.length > 45 ? '...' : ''}
+                            </div>
+                            <div class="city-name" style="color: #6c757d;">${escapeHtml(addr.city_name || '—')}</div>
+                            <div class="revenue-amount" style="font-weight: 600; color: #28a745;">${addr.revenue.toLocaleString()} ₽</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            dataContainer.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #999;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📍</div>
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Нет данных по адресам</div>
+                    <div style="font-size: 13px;">Добавьте адреса в настройках и совершайте продажи через кассу с выбором адреса</div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки выручки по адресам:', error);
+        const container = document.getElementById('addressesRevenueList');
+        if (container) {
+            let dataContainer = container.querySelector('.revenue-data-container');
+            if (!dataContainer) {
+                dataContainer = document.createElement('div');
+                dataContainer.className = 'revenue-data-container';
+                container.appendChild(dataContainer);
+            }
+            dataContainer.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #999;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Ошибка загрузки данных</div>
+                    <div style="font-size: 13px;">Проверьте подключение к серверу</div>
+                </div>
+            `;
+        }
+    }
 }
 
+// Функция для создания кнопок переключения периода (вызывается один раз)
+function createRevenueButtons(container) {
+    // Проверяем, не созданы ли уже кнопки
+    if (container.querySelector('.revenue-period-buttons')) {
+        return;
+    }
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'revenue-period-buttons';
+    buttonContainer.style.cssText = 'display: flex; gap: 12px; margin-bottom: 20px; justify-content: flex-end; padding: 8px 0;';
+    buttonContainer.innerHTML = `
+        <button class="revenue-period-btn" data-period="month" style="padding: 8px 24px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; background: white; color: #495057; font-family: inherit; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            Месяц
+        </button>
+        <button class="revenue-period-btn" data-period="year" style="padding: 8px 24px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; background: white; color: #495057; font-family: inherit; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            Год
+        </button>
+    `;
+    
+    // Добавляем стили
+    const style = document.createElement('style');
+    style.textContent = `
+        .revenue-period-btn {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .revenue-period-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            background: #f8f9fa !important;
+        }
+        .revenue-period-btn.active {
+            background: #667eea !important;
+            color: white !important;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+        }
+        .revenue-period-btn.active:hover {
+            background: #5a67d8 !important;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Добавляем обработчики
+    buttonContainer.querySelectorAll('.revenue-period-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const period = btn.dataset.period;
+            console.log('Кнопка нажата:', period);
+            loadAddressesRevenue(period);
+        });
+    });
+    
+    container.appendChild(buttonContainer);
+}
 // ========== МОДУЛЬ 2: ЛОЯЛЬНОСТЬ (УРОВНИ) ==========
 async function loadTiersSettings() {
     if (!currentBusiness) return;
@@ -2314,6 +2589,7 @@ async function loadWheelSettings() {
                 sectors: data.settings.sectors || wheelSettings.sectors,
                 maxSpinsPerDay: data.settings.maxSpinsPerDay || 10,
                 freeSpinDaily: data.settings.freeSpinDaily || false
+				maxPlaysPerDay: data.settings.maxPlaysPerDay || 0
             };
             wheelSettings.active = data.active;
         }
@@ -2346,6 +2622,10 @@ function renderWheelSettings() {
                     <label>💰 Стоимость вращения (бонусов)</label>
                     <input type="number" id="wheelSpinCost" value="${wheelSettings.spinCost}" min="1" max="1000" onchange="updateWheelSpinCost(this.value)">
                 </div>
+				<div class="wheel-setting-group">
+    <label>🔢 Максимум игр в день (0 – без ограничений)</label>
+    <input type="number" id="wheelMaxPlays" value="${wheelSettings.maxPlaysPerDay || 0}" min="0" max="100" onchange="updateWheelMaxPlays(this.value)">
+</div>
                 <div class="wheel-setting-group">
                     <label>🔄 Максимум вращений в день</label>
                     <input type="number" id="wheelMaxSpins" value="${wheelSettings.maxSpinsPerDay}" min="1" max="100" onchange="updateWheelMaxSpins(this.value)">
@@ -2509,6 +2789,11 @@ function updateWheelSpinCost(value) {
     saveWheelSettingsDebounced();
 }
 
+function updateWheelMaxPlays(value) {
+    wheelSettings.maxPlaysPerDay = parseInt(value) || 0;
+    saveWheelSettingsDebounced();
+}
+
 function updateWheelMaxSpins(value) {
     wheelSettings.maxSpinsPerDay = parseInt(value) || 10;
     saveWheelSettingsDebounced();
@@ -2608,6 +2893,7 @@ async function loadScratchSettings() {
                 symbols: data.settings.symbols || scratchSettings.symbols,
                 hintCost: data.settings.hintCost || 15,
                 freeHintDaily: data.settings.freeHintDaily || false
+				maxPlaysPerDay: data.settings.maxPlaysPerDay || 0
             };
             scratchSettings.active = data.active;
         }
@@ -2640,6 +2926,10 @@ function renderScratchSettings() {
                     <label>💰 Стоимость игры (бонусов)</label>
                     <input type="number" id="scratchCost" value="${scratchSettings.cost}" min="1" max="500" onchange="updateScratchCost(this.value)">
                 </div>
+				<div class="scratch-setting-group">
+    <label>🔢 Максимум игр в день (0 – без ограничений)</label>
+    <input type="number" id="scratchMaxPlays" value="${scratchSettings.maxPlaysPerDay || 0}" min="0" max="100" onchange="updateScratchMaxPlays(this.value)">
+</div>
                 <div class="scratch-setting-group">
                     <label>🖱️ Максимум попыток</label>
                     <input type="number" id="scratchMaxAttempts" value="${scratchSettings.maxAttempts}" min="1" max="10" onchange="updateScratchMaxAttempts(this.value)">
@@ -2792,6 +3082,11 @@ function updateScratchCost(value) {
     saveScratchSettingsDebounced();
 }
 
+function updateScratchMaxPlays(value) {
+    scratchSettings.maxPlaysPerDay = parseInt(value) || 0;
+    saveScratchSettingsDebounced();
+}
+
 function updateScratchMaxAttempts(value) {
     scratchSettings.maxAttempts = parseInt(value) || 3;
     saveScratchSettingsDebounced();
@@ -2899,6 +3194,7 @@ async function loadDiceSettings() {
                 combinations: data.settings.combinations || diceSettings.combinations,
                 jackpotChance: data.settings.jackpotChance || 1,
                 jackpotContribution: data.settings.jackpotContribution || 10
+				maxPlaysPerDay: data.settings.maxPlaysPerDay || 0
             };
             diceSettings.active = data.active;
         }
@@ -2929,6 +3225,10 @@ function renderDiceSettings() {
                     <label>💰 Стоимость игры (бонусов)</label>
                     <input type="number" id="diceCost" value="${diceSettings.cost}" min="1" max="500" onchange="updateDiceCost(this.value)">
                 </div>
+				<div class="dice-setting-group">
+    <label>🔢 Максимум игр в день (0 – без ограничений)</label>
+    <input type="number" id="diceMaxPlays" value="${diceSettings.maxPlaysPerDay || 0}" min="0" max="100" onchange="updateDiceMaxPlays(this.value)">
+</div>
                 <div class="dice-setting-group">
                     <label>💎 Базовый джекпот</label>
                     <input type="number" id="diceJackpotBase" value="${diceSettings.jackpotBase}" min="100" max="10000" onchange="updateDiceJackpotBase(this.value)">
@@ -3221,6 +3521,11 @@ function updateDiceCombo(key, field, value) {
 function updateDiceCost(value) {
     diceSettings.cost = parseInt(value) || 25;
     renderDiceStatsInfo();
+    saveDiceSettingsDebounced();
+}
+
+function updateDiceMaxPlays(value) {
+    diceSettings.maxPlaysPerDay = parseInt(value) || 0;
     saveDiceSettingsDebounced();
 }
 
