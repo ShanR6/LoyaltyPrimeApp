@@ -1,4 +1,4 @@
-// DiceRoll.js - Исправленная версия с загрузкой настроек из CRM
+// DiceRoll.js - Полностью исправленная версия
 import { useState, useEffect } from 'react';
 import './DiceRoll.css';
 
@@ -22,7 +22,7 @@ const DEFAULT_COMBINATIONS = {
     'odd': { name: 'Нечетная сумма', multiplier: 1.2, icon: '🎯', color: '#1abc9c', description: 'Неплохо!', enabled: true }
 };
 
-export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
+export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, companyTimezoneOffset = 0 }) {
     const [dice1, setDice1] = useState(3);
     const [dice2, setDice2] = useState(4);
     const [isRolling, setIsRolling] = useState(false);
@@ -33,6 +33,9 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
     const [showCombinations, setShowCombinations] = useState(false);
     const [comboHistory, setComboHistory] = useState([]);
     const [particles, setParticles] = useState([]);
+    const [playsToday, setPlaysToday] = useState(null);
+	const [playsLoaded, setPlaysLoaded] = useState(false);
+    const [settingsLoaded, setSettingsLoaded] = useState(false);
     
     // Настройки игры (загружаются с сервера)
     const [settings, setSettings] = useState({
@@ -42,11 +45,11 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
         combinations: DEFAULT_COMBINATIONS,
         jackpotChance: 1,
         jackpotContribution: 10,
+        maxPlaysPerDay: 0,
         active: true
     });
-    const [settingsLoaded, setSettingsLoaded] = useState(false);
     
-    // Загрузка настроек с сервера
+    // ✅ ЗАГРУЗКА НАСТРОЕК С СЕРВЕРА
     useEffect(() => {
         const loadSettings = async () => {
             if (!companyId) return;
@@ -55,19 +58,25 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
                 const response = await fetch(`${API_URL}/api/games/${companyId}/dice`);
                 const data = await response.json();
                 
-                if (data.success && data.active !== false) {
-                    setSettings({
+                console.log('🎲 Dice API response:', data);
+                
+                if (data.success) {
+                    const newSettings = {
                         cost: data.settings.cost || 25,
                         jackpotBase: data.settings.jackpotBase || 1000,
                         betMultipliers: data.settings.betMultipliers || [1, 2, 3, 5, 10],
                         combinations: data.settings.combinations || DEFAULT_COMBINATIONS,
                         jackpotChance: data.settings.jackpotChance || 1,
                         jackpotContribution: data.settings.jackpotContribution || 10,
-                        active: data.active
-                    });
+                        maxPlaysPerDay: data.settings.maxPlaysPerDay || 0,
+                        active: data.active !== false
+                    };
                     
-                    // Устанавливаем джекпот из настроек
+                    console.log('🎲 Loaded maxPlaysPerDay:', newSettings.maxPlaysPerDay);
+                    setSettings(newSettings);
                     setJackpot(data.settings.jackpotBase || 1000);
+                } else {
+                    console.error('Failed to load dice settings:', data);
                 }
             } catch (error) {
                 console.error('Ошибка загрузки настроек костей:', error);
@@ -77,6 +86,39 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
         
         loadSettings();
     }, [companyId]);
+    
+    // ✅ ЗАГРУЗКА КОЛИЧЕСТВА СЫГРАННЫХ ИГР СЕГОДНЯ
+    useEffect(() => {
+    if (!userId || !companyId) return;
+    const loadPlaysToday = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}`);
+            const data = await response.json();
+            if (data.success) {
+                setPlaysToday(data.plays.dice);
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки количества игр для Dice:', error);
+        } finally {
+            setPlaysLoaded(true);
+        }
+    };
+    loadPlaysToday();
+}, [userId, companyId]);
+    
+    // ✅ ПРОВЕРКА ЛИМИТА ИГР
+    const isLimitReached = () => {
+    if (playsToday === null) return true; // ещё не загружено — блокируем
+    const maxPlays = settings.maxPlaysPerDay || 0;
+    if (maxPlays === 0) return false;
+    return playsToday >= maxPlays;
+};
+    
+    const getRemainingPlays = () => {
+        const maxPlays = settings.maxPlaysPerDay || 0;
+        if (maxPlays === 0) return null;
+        return Math.max(0, maxPlays - playsToday);
+    };
     
     // Создание частиц для эффекта выигрыша
     const createParticles = () => {
@@ -159,7 +201,6 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
             winAmount = Math.floor(settings.cost * combo.multiplier * betMultiplier);
         }
         
-        // Шанс на джекпот
         const jackpotChance = Math.random() < (settings.jackpotChance / 100);
         let isJackpot = false;
         
@@ -183,14 +224,34 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
         return;
     }
     
+    if (isLimitReached()) {
+        alert(`❌ Вы исчерпали лимит игр на сегодня (${settings.maxPlaysPerDay}/${settings.maxPlaysPerDay}). Завтра будет новый лимит!`);
+        return;
+    }
+    
     const totalCost = settings.cost * betMultiplier;
     if (userBalance < totalCost) {
         alert(`❌ Недостаточно бонусов! Нужно ${totalCost} бонусов.`);
         return;
     }
     
-    
     await onBalanceUpdate(-totalCost, 'spend', { source: 'game', gameType: 'dice' });
+    
+    // ✅ СОХРАНЯЕМ СЧЁТЧИК В БД
+    try {
+        const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyId, gameType: 'dice' })
+        });
+        const data = await response.json();
+        if (data.success) {
+            setPlaysToday(data.playsToday);
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения счетчика игр:', error);
+        setPlaysToday(prev => prev + 1);
+    }
     
     setIsRolling(true);
     setResult(null);
@@ -212,10 +273,8 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
             
             const { winAmount, combo, isJackpot } = evaluateRoll(final1, final2);
             
-            // ✅ Используем async функцию внутри setTimeout
             setTimeout(async () => {
                 if (winAmount > 0) {
-                    // ✅ Дожидаемся начисления выигрыша
                     await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'dice' });
                     setLastWin(winAmount);
                     createParticles();
@@ -252,12 +311,9 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
                 
                 setIsRolling(false);
                 
-                // ✅ Обновляем прогресс задания (даже при проигрыше, за саму игру)
                 if (typeof window.updateQuestProgress === 'function') {
-                    console.log('🎲 Вызов updateQuestProgress для play_dice');
                     window.updateQuestProgress('play_dice', 1);
                 } else {
-                    console.error('❌ window.updateQuestProgress не функция!');
                     window.dispatchEvent(new CustomEvent('questProgress', { 
                         detail: { type: 'play_dice', increment: 1 } 
                     }));
@@ -315,11 +371,33 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
         );
     }
     
-    // Фильтруем активные комбинации для отображения
+    const remainingPlays = getRemainingPlays();
+    const limitReached = isLimitReached();
+    const showLimitWarning = settings.maxPlaysPerDay > 0 && remainingPlays !== null && remainingPlays <= 3;
+    
     const activeCombinations = Object.entries(settings.combinations).filter(([_, combo]) => combo.enabled !== false);
     
     return (
         <div className="dice-roll-container">
+            {/* ✅ БАННЕР ЛИМИТА ИГР */}
+            {showLimitWarning && (
+                <div className="limit-warning" style={{
+                    background: limitReached ? '#e74c3c' : '#f39c12',
+                    borderRadius: '30px',
+                    padding: '8px 16px',
+                    marginBottom: '16px',
+                    textAlign: 'center',
+                    color: 'white',
+                    fontSize: '13px',
+                    fontWeight: 'bold'
+                }}>
+                    {limitReached 
+                        ? `❌ Лимит игр на сегодня исчерпан! (${settings.maxPlaysPerDay}/${settings.maxPlaysPerDay})`
+                        : `⚠️ Осталось ${remainingPlays} игр на сегодня из ${settings.maxPlaysPerDay}`
+                    }
+                </div>
+            )}
+            
             {particles.map(p => (
                 <div
                     key={p.id}
@@ -371,6 +449,11 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
                 <div className="total-cost">
                     Стоимость: <span className="cost-value">{settings.cost * betMultiplier}</span> бонусов
                 </div>
+                {settings.maxPlaysPerDay > 0 && remainingPlays !== null && (
+                    <div className="remaining-plays" style={{ fontSize: '11px', color: '#aaa', marginTop: '8px', textAlign: 'center' }}>
+                        🎲 Игр сегодня: {playsToday} / {settings.maxPlaysPerDay}
+                    </div>
+                )}
             </div>
             
             {/* Игровая область с костями */}
@@ -395,7 +478,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId }) {
                 <button
                     className={`roll-btn ${isRolling ? 'spinning' : ''}`}
                     onClick={rollDice}
-                    disabled={isRolling || userBalance < settings.cost * betMultiplier}
+                    disabled={playsToday === null || isRolling || userBalance < settings.cost * betMultiplier || limitReached}
                 >
                     {isRolling ? (
                         <><span className="spinner-icon">🎲</span> Бросаем...</>

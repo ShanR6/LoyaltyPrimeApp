@@ -3118,6 +3118,121 @@ app.get('/api/companies/:companyId/addresses-revenue', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
+
+// ============ API ДЛЯ ОГРАНИЧЕНИЯ ИГР ============
+
+// Получение количества сыгранных игр сегодня для пользователя
+app.get('/api/users/:userId/games/plays/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const result = await query(
+            `SELECT 
+                COUNT(CASE WHEN metadata->>'gameType' = 'wheel' THEN 1 END) as wheel_plays,
+                COUNT(CASE WHEN metadata->>'gameType' = 'scratch' THEN 1 END) as scratch_plays,
+                COUNT(CASE WHEN metadata->>'gameType' = 'dice' THEN 1 END) as dice_plays
+             FROM transactions 
+             WHERE user_id = $1 
+             AND company_id = $2
+             AND source = 'game'
+             AND type = 'spend'
+             AND created_at >= $3`,
+            [userId, companyId, today]
+        );
+        
+        res.json({ 
+            success: true, 
+            plays: {
+                wheel: parseInt(result.rows[0].wheel_plays) || 0,
+                scratch: parseInt(result.rows[0].scratch_plays) || 0,
+                dice: parseInt(result.rows[0].dice_plays) || 0
+            }
+        });
+    } catch (error) {
+        console.error('Ошибка получения количества игр:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение настроек игр с лимитами
+app.get('/api/users/:userId/games/settings/:companyId', async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        
+        const wheelSettings = await getGameSettings(parseInt(companyId), 'wheel');
+        const scratchSettings = await getGameSettings(parseInt(companyId), 'scratch');
+        const diceSettings = await getGameSettings(parseInt(companyId), 'dice');
+        
+        res.json({ 
+            success: true, 
+            settings: {
+                wheel: {
+                    maxPlaysPerDay: wheelSettings.settings.maxPlaysPerDay || 0,
+                    freeSpinDaily: wheelSettings.settings.freeSpinDaily || false
+                },
+                scratch: {
+                    maxPlaysPerDay: scratchSettings.settings.maxPlaysPerDay || 0,
+                    freeHintDaily: scratchSettings.settings.freeHintDaily || false
+                },
+                dice: {
+                    maxPlaysPerDay: diceSettings.settings.maxPlaysPerDay || 0
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Ошибка получения настроек игр:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Получение количества сыгранных игр сегодня для пользователя
+app.get('/api/users/:userId/games/plays/:companyId', async (req, res) => {
+    try {
+        const { userId, companyId } = req.params;
+        const { gameType } = req.query; // опционально - можно получить конкретную игру
+        
+        if (gameType) {
+            const plays = await getUserGamePlaysToday(userId, companyId, gameType);
+            res.json({ success: true, plays: { [gameType]: plays } });
+        } else {
+            // Получаем все игры
+            const wheel = await getUserGamePlaysToday(userId, companyId, 'wheel');
+            const scratch = await getUserGamePlaysToday(userId, companyId, 'scratch');
+            const dice = await getUserGamePlaysToday(userId, companyId, 'dice');
+            
+            res.json({ 
+                success: true, 
+                plays: { wheel, scratch, dice }
+            });
+        }
+    } catch (error) {
+        console.error('Ошибка получения количества игр:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Увеличение счетчика игр (вызывается после каждой игры)
+app.post('/api/users/:userId/games/increment', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { companyId, gameType } = req.body;
+        
+        if (!companyId || !gameType) {
+            return res.status(400).json({ success: false, message: 'companyId и gameType обязательны' });
+        }
+        
+        const playsToday = await incrementUserGamePlays(userId, companyId, gameType);
+        
+        res.json({ success: true, playsToday });
+    } catch (error) {
+        console.error('Ошибка увеличения счетчика игр:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`✅ Backend running on http://localhost:${PORT}`);

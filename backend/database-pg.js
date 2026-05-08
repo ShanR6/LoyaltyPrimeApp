@@ -256,6 +256,7 @@ async function initDatabase() {
 		await addBonusSettingsColumn();
 		await addNotificationCampaignColumns();
 		await addUserProgressSpentColumn();
+		await createUserGamePlaysTable();
         await insertTestData();
 
     } catch (error) {
@@ -579,7 +580,9 @@ async function saveGameSettings(companyId, gameType, settings, active) {
              RETURNING *`,
             [companyId, gameType, settingsJson, active]
         );
-        
+		
+        console.log(`✅ Game settings saved for ${gameType}:`, settings);
+		
         let savedSettings = result.rows[0].settings;
         if (typeof savedSettings === 'string') {
             savedSettings = JSON.parse(savedSettings);
@@ -1085,6 +1088,7 @@ if (startDate && endDate) {
          RETURNING *`,
         [name, emoji, description, startDate || null, endDate || null, active, reward_type || 'discount', reward_value || 0, products || '', is_free || false, price || 100, promotionId]
     );
+	
 	// Удаляем все предыдущие покупки этой акции, чтобы требовалась новая покупка
 await query('DELETE FROM user_purchased_promotions WHERE promotion_id = $1', [promotionId]);
     return result.rows[0];
@@ -3852,6 +3856,87 @@ async function getUserFullData(userId, companyId) {
     }
 }
 
+// Добавьте эту функцию в database-pg.js
+async function createUserGamePlaysTable() {
+    try {
+        await query(`
+            CREATE TABLE IF NOT EXISTS user_game_plays (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+                game_type VARCHAR(50) NOT NULL,
+                plays_today INTEGER DEFAULT 0,
+                last_play_date DATE DEFAULT CURRENT_DATE,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, company_id, game_type)
+            )
+        `);
+        console.log('✅ Таблица user_game_plays создана/проверена');
+    } catch (error) {
+        console.error('❌ Ошибка создания user_game_plays:', error);
+    }
+}
+
+// Функция для получения количества игр сегодня
+async function getUserGamePlaysToday(userId, companyId, gameType) {
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        
+        const result = await query(
+            `SELECT plays_today, last_play_date 
+             FROM user_game_plays 
+             WHERE user_id = $1 AND company_id = $2 AND game_type = $3`,
+            [userId, companyId, gameType]
+        );
+        
+        if (result.rows.length > 0) {
+            const lastDate = result.rows[0].last_play_date;
+            const lastDateStr = lastDate instanceof Date ? lastDate.toISOString().slice(0, 10) : lastDate;
+            
+            // Если последняя игра была не сегодня, сбрасываем счетчик
+            if (lastDateStr !== today) {
+                await query(
+                    `UPDATE user_game_plays 
+                     SET plays_today = 0, last_play_date = $4, updated_at = NOW()
+                     WHERE user_id = $1 AND company_id = $2 AND game_type = $3`,
+                    [userId, companyId, gameType, today]
+                );
+                return 0;
+            }
+            
+            return result.rows[0].plays_today || 0;
+        }
+        
+        return 0;
+    } catch (error) {
+        console.error('Ошибка получения количества игр:', error);
+        return 0;
+    }
+}
+
+// Функция для увеличения счетчика игр сегодня
+async function incrementUserGamePlays(userId, companyId, gameType) {
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        
+        const result = await query(
+            `INSERT INTO user_game_plays (user_id, company_id, game_type, plays_today, last_play_date, updated_at)
+             VALUES ($1, $2, $3, 1, $4, NOW())
+             ON CONFLICT (user_id, company_id, game_type) 
+             DO UPDATE SET 
+                plays_today = user_game_plays.plays_today + 1,
+                last_play_date = $4,
+                updated_at = NOW()
+             RETURNING plays_today`,
+            [userId, companyId, gameType, today]
+        );
+        
+        return result.rows[0].plays_today;
+    } catch (error) {
+        console.error('Ошибка увеличения счетчика игр:', error);
+        return 0;
+    }
+}
 
 
 module.exports = {
@@ -3965,5 +4050,8 @@ module.exports = {
 	getUserFullData,
     // Greeting settings
     saveGreetingSettings,
-    getGreetingSettings
+    getGreetingSettings,
+	createUserGamePlaysTable,
+	getUserGamePlaysToday,
+	incrementUserGamePlays
 };

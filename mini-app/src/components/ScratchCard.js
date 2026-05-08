@@ -1,10 +1,10 @@
-// ScratchCard.js - 3x3, 3 попытки, найди 3 одинаковых (с бесплатной подсказкой)
+// ScratchCard.js - Добавляем maxPlaysPerDay
 import { useState, useEffect } from 'react';
 import './ScratchCard.css';
 
 const API_URL = 'http://localhost:3001';
 
-// Символы по умолчанию
+// Символы по умолчанию (оставляем без изменений)
 const DEFAULT_SYMBOLS = [
     { id: '🍒', name: 'Вишня', value: 10, multiplier: 1, color: '#e74c3c', prob: 15 },
     { id: '🍋', name: 'Лимон', value: 15, multiplier: 1.5, color: '#f1c40f', prob: 14 },
@@ -76,7 +76,7 @@ const createBoard = (symbols, winningSymbolParam = null) => {
     return board;
 };
 
-export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId }) {
+export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId, companyTimezoneOffset = 0 }) {
     const [board, setBoard] = useState([]);
     const [gameActive, setGameActive] = useState(true);
     const [isRevealing, setIsRevealing] = useState(false);
@@ -86,6 +86,8 @@ export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId })
     const [attemptsLeft, setAttemptsLeft] = useState(3);
     const [foundWinning, setFoundWinning] = useState(0);
     const [selectedSymbol, setSelectedSymbol] = useState(null);
+    const [playsToday, setPlaysToday] = useState(null);
+	const [playsLoaded, setPlaysLoaded] = useState(false);
     
     // Состояние для бесплатной подсказки
     const [freeHintAvailable, setFreeHintAvailable] = useState(false);
@@ -98,9 +100,37 @@ export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId })
         symbols: DEFAULT_SYMBOLS,
         hintCost: 15,
         freeHintDaily: false,
+        maxPlaysPerDay: 0,  // ← ДОБАВЛЕНО
         active: true
     });
     const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+    // Загрузка количества сыгранных игр сегодня
+    useEffect(() => {
+    if (!userId || !companyId) return;
+    const loadPlaysToday = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}`);
+            const data = await response.json();
+            if (data.success) {
+                setPlaysToday(data.plays.scratch);
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки количества игр:', error);
+        } finally {
+            setPlaysLoaded(true);
+        }
+    };
+    loadPlaysToday();
+}, [userId, companyId]);
+    
+    // Проверка лимита игр
+    const getRemainingPlays = () => {
+    if (playsToday === null) return null;
+    const maxPlays = settings.maxPlaysPerDay || 0;
+    if (maxPlays === 0) return Infinity;
+    return Math.max(0, maxPlays - playsToday);
+};
 
     // Загрузка настроек с сервера
     useEffect(() => {
@@ -118,6 +148,7 @@ export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId })
                         symbols: data.settings.symbols || DEFAULT_SYMBOLS,
                         hintCost: data.settings.hintCost || 15,
                         freeHintDaily: data.settings.freeHintDaily || false,
+                        maxPlaysPerDay: data.settings.maxPlaysPerDay || 0,  // ← ДОБАВЛЕНО
                         active: data.active
                     });
                 }
@@ -169,10 +200,16 @@ export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId })
     };
 
     // Новая игра
-const newGame = async () => {
+    const newGame = async () => {
     if (isRevealing) return;
     if (!settings.active) {
         alert('Игра временно недоступна');
+        return;
+    }
+    
+    const maxPlays = settings.maxPlaysPerDay || 0;
+    if (maxPlays > 0 && playsToday >= maxPlays) {
+        alert(`❌ Вы исчерпали лимит игр на сегодня (${maxPlays}/${maxPlays}). Завтра будет новый лимит!`);
         return;
     }
     
@@ -181,8 +218,24 @@ const newGame = async () => {
         return;
     }
     
-    
     await onBalanceUpdate(-settings.cost, 'spend', { source: 'game', gameType: 'scratch', action: 'newGame' });
+    
+    // ✅ СОХРАНЯЕМ СЧЁТЧИК В БД
+    try {
+        const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyId, gameType: 'scratch' })
+        });
+        const data = await response.json();
+        if (data.success) {
+            setPlaysToday(data.playsToday);
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения счетчика игр:', error);
+        // Fallback
+        setPlaysToday(prev => prev + 1);
+    }
     
     const newBoard = createBoard(settings.symbols);
     const winningSym = newBoard.find(cell => cell.isWinning)?.symbol;
@@ -196,115 +249,103 @@ const newGame = async () => {
     setAttemptsLeft(settings.maxAttempts);
     setFoundWinning(0);
 };
-
-// Открыть ячейку
-const revealCell = (index, isFreeHint = false) => {
-    if (!gameActive) return;
-    if (isRevealing) return;
-    if (board[index].revealed) return;
-    if (attemptsLeft <= 0) return;
-    
-    setIsRevealing(true);
-    
-    // ✅ Сохраняем текущие значения
-    const currentAttemptsLeft = attemptsLeft;
-    const currentFoundWinning = foundWinning;
-    
-    setTimeout(async () => {
-        const newBoard = [...board];
-        newBoard[index].revealed = true;
-        setBoard(newBoard);
+    // Открыть ячейку
+    const revealCell = (index, isFreeHint = false) => {
+        if (!gameActive) return;
+        if (isRevealing) return;
+        if (board[index].revealed) return;
+        if (attemptsLeft <= 0) return;
         
-        let newAttemptsLeft = currentAttemptsLeft;
-        let newFoundWinning = currentFoundWinning;
+        setIsRevealing(true);
         
-        // Если это не бесплатная подсказка, тратим попытку
-        if (!isFreeHint) {
-            newAttemptsLeft = currentAttemptsLeft - 1;
-            setAttemptsLeft(newAttemptsLeft);
-        }
+        const currentAttemptsLeft = attemptsLeft;
+        const currentFoundWinning = foundWinning;
         
-        if (newBoard[index].isWinning) {
-            newFoundWinning = currentFoundWinning + 1;
-            setFoundWinning(newFoundWinning);
+        setTimeout(async () => {
+            const newBoard = [...board];
+            newBoard[index].revealed = true;
+            setBoard(newBoard);
             
-            if (newFoundWinning === 3) {
-                const winAmount = newBoard[index].symbol.value * newBoard[index].symbol.multiplier;
-                // ✅ Дожидаемся начисления выигрыша
-                await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'scratch', action: 'win' });
-                setLastWin(winAmount);
-                setShowConfetti(true);
-                setTimeout(() => setShowConfetti(false), 3000);
-                setResult({
-                    type: 'win',
-                    value: winAmount,
-                    message: `🎉 ПОБЕДА! Вы нашли 3 ${newBoard[index].symbol.name} и выиграли ${winAmount} бонусов! 🎉`
-                });
-                setGameActive(false);
-                try { navigator.vibrate?.(200); } catch(e) {}
+            let newAttemptsLeft = currentAttemptsLeft;
+            let newFoundWinning = currentFoundWinning;
+            
+            if (!isFreeHint) {
+                newAttemptsLeft = currentAttemptsLeft - 1;
+                setAttemptsLeft(newAttemptsLeft);
+            }
+            
+            if (newBoard[index].isWinning) {
+                newFoundWinning = currentFoundWinning + 1;
+                setFoundWinning(newFoundWinning);
                 
-                // ✅ Обновляем прогресс задания при победе
-                if (typeof window.updateQuestProgress === 'function') {
-                    console.log('🎫 Вызов updateQuestProgress для scratch_card (победа)');
-                    window.updateQuestProgress('scratch_card', 1);
+                if (newFoundWinning === 3) {
+                    const winAmount = newBoard[index].symbol.value * newBoard[index].symbol.multiplier;
+                    await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'scratch', action: 'win' });
+                    setLastWin(winAmount);
+                    setShowConfetti(true);
+                    setTimeout(() => setShowConfetti(false), 3000);
+                    setResult({
+                        type: 'win',
+                        value: winAmount,
+                        message: `🎉 ПОБЕДА! Вы нашли 3 ${newBoard[index].symbol.name} и выиграли ${winAmount} бонусов! 🎉`
+                    });
+                    setGameActive(false);
+                    try { navigator.vibrate?.(200); } catch(e) {}
+                    
+                    if (typeof window.updateQuestProgress === 'function') {
+                        window.updateQuestProgress('scratch_card', 1);
+                    }
                 }
             }
+            
+            if (!isFreeHint && newAttemptsLeft === 0 && newFoundWinning < 3) {
+                setResult({
+                    type: 'lose',
+                    value: 0,
+                    message: `😢 Вы не нашли 3 одинаковых символа за ${settings.maxAttempts} попыток. Попробуйте ещё раз!`
+                });
+                setGameActive(false);
+            }
+            
+            setIsRevealing(false);
+            
+            if (!isFreeHint && typeof window.updateQuestProgress === 'function') {
+                window.updateQuestProgress('scratch_card', 1);
+            }
+        }, 200);
+    };
+
+    // Подсказка - показать одну выигрышную ячейку
+    const showHint = async () => {
+        if (!gameActive) return;
+        if (isRevealing) return;
+        if (attemptsLeft <= 0) return;
+        
+        const unrevealedWinning = board.findIndex(cell => cell.isWinning && !cell.revealed);
+        
+        if (unrevealedWinning === -1) {
+            alert('❌ Нет доступных подсказок!');
+            return;
         }
         
-        // ✅ Используем сохранённые значения для проверки проигрыша
-        if (!isFreeHint && newAttemptsLeft === 0 && newFoundWinning < 3) {
+        if (settings.freeHintDaily && freeHintAvailable && !freeHintUsed) {
+            saveFreeHintState(true);
+            revealCell(unrevealedWinning, true);
             setResult({
-                type: 'lose',
-                value: 0,
-                message: `😢 Вы не нашли 3 одинаковых символа за ${settings.maxAttempts} попыток. Попробуйте ещё раз!`
+                type: 'info',
+                message: '🎁 Использована бесплатная подсказка!'
             });
-            setGameActive(false);
+            setTimeout(() => setResult(null), 2000);
+        } 
+        else if (userBalance >= settings.hintCost) {
+            await onBalanceUpdate(-settings.hintCost, 'spend', { source: 'game', gameType: 'scratch', action: 'hint' });
+            revealCell(unrevealedWinning, false);
+        } 
+        else {
+            alert(`❌ Недостаточно бонусов! Нужно ${settings.hintCost} бонусов за подсказку.`);
         }
-        
-        setIsRevealing(false);
-        
-        // ✅ Обновляем прогресс задания за саму игру (если не бесплатная подсказка)
-        if (!isFreeHint && typeof window.updateQuestProgress === 'function') {
-            console.log('🎫 Вызов updateQuestProgress для scratch_card (игра)');
-            window.updateQuestProgress('scratch_card', 1);
-        }
-    }, 200);
-};
-
-// Подсказка - показать одну выигрышную ячейку
-const showHint = async () => {
-    if (!gameActive) return;
-    if (isRevealing) return;
-    if (attemptsLeft <= 0) return;
+    };
     
-    const unrevealedWinning = board.findIndex(cell => cell.isWinning && !cell.revealed);
-    
-    if (unrevealedWinning === -1) {
-        alert('❌ Нет доступных подсказок!');
-        return;
-    }
-    
-    // Проверяем, есть ли бесплатная подсказка
-    if (settings.freeHintDaily && freeHintAvailable && !freeHintUsed) {
-        // Используем бесплатную подсказку
-        saveFreeHintState(true);
-        revealCell(unrevealedWinning, true);
-        setResult({
-            type: 'info',
-            message: '🎁 Использована бесплатная подсказка!'
-        });
-        setTimeout(() => setResult(null), 2000);
-    } 
-    else if (userBalance >= settings.hintCost) {
-        // ✅ Дожидаемся списания за подсказку
-        await onBalanceUpdate(-settings.hintCost, 'spend', { source: 'game', gameType: 'scratch', action: 'hint' });
-        revealCell(unrevealedWinning, false);
-    } 
-    else {
-        alert(`❌ Недостаточно бонусов! Нужно ${settings.hintCost} бонусов за подсказку.`);
-    }
-};
-
     if (!settingsLoaded) {
         return (
             <div className="scratch-card-3x3" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
@@ -322,9 +363,30 @@ const showHint = async () => {
             </div>
         );
     }
+    
+    const remainingPlays = getRemainingPlays();
+    const remainingPlaysText = settings.maxPlaysPerDay > 0 
+        ? `Осталось игр сегодня: ${remainingPlays === Infinity ? settings.maxPlaysPerDay : remainingPlays}/${settings.maxPlaysPerDay}`
+        : null;
 
     return (
         <div className="scratch-card-3x3">
+            {/* Баннер лимита игр */}
+            {settings.maxPlaysPerDay > 0 && remainingPlays <= 3 && remainingPlays > 0 && playsToday !== null (
+                <div className="limit-warning" style={{
+                    background: remainingPlays === 0 ? '#e74c3c' : '#f39c12',
+                    borderRadius: '30px',
+                    padding: '8px 16px',
+                    marginBottom: '16px',
+                    textAlign: 'center',
+                    color: 'white',
+                    fontSize: '13px',
+                    fontWeight: 'bold'
+                }}>
+                    ⚠️ {remainingPlays === 0 ? 'Лимит игр на сегодня исчерпан!' : `Осталось ${remainingPlays} игр на сегодня`}
+                </div>
+            )}
+            
             {showConfetti && (
                 <div className="confetti-overlay">
                     {Array.from({ length: 100 }).map((_, i) => (
@@ -349,6 +411,12 @@ const showHint = async () => {
                     <span className="cost-value">{settings.cost}</span>
                 </div>
             </div>
+            
+            {remainingPlaysText && (
+                <div className="remaining-plays" style={{ fontSize: '11px', color: '#aaa', textAlign: 'center', marginBottom: '8px' }}>
+                    {remainingPlaysText}
+                </div>
+            )}
             
             {/* Баннер бесплатной подсказки */}
             {settings.freeHintDaily && freeHintAvailable && !freeHintUsed && (
@@ -469,7 +537,7 @@ const showHint = async () => {
                 <button
                     className="new-game-btn"
                     onClick={newGame}
-                    disabled={isRevealing}
+                    disabled={isRevealing || !playsLoaded || (settings.maxPlaysPerDay > 0 && playsToday >= settings.maxPlaysPerDay)}
                 >
                     🎲 НОВАЯ ИГРА
                 </button>

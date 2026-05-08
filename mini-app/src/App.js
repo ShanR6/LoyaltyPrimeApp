@@ -1313,27 +1313,62 @@ const progressToNext = getProgressToNextTier(currentSpent);
         <span>Дата регистрации:</span>
         <span style={{ fontWeight:700, color:'#ffd966' }}>{currentGroupData?.regDate}</span>
       </div>
-	      <div style={{ marginTop: 16, textAlign: 'center' }}>
+	      {/* Блок с уведомлением о боте */}
+<div style={{ 
+  marginTop: 16, 
+  background: 'rgba(52, 152, 219, 0.15)', 
+  borderRadius: 20, 
+  padding: '16px',
+  border: `1px solid ${selectedGroup?.color || '#3498db'}40`
+}}>
+  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+    <span style={{ fontSize: 28 }}>🤖</span>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#ffd966', marginBottom: 6 }}>
+        💡 Важно для получения уведомлений!
+      </div>
+      <div style={{ fontSize: 13, color: 'white', opacity: 0.85, marginBottom: 16, lineHeight: 1.5 }}>
+        Если вы зашли в приложение не через бота, но при этом хотите получать уведомления или персонализированные скидки — необходимо перейти в бота и начать диалог.
+      </div>
       <button
         onClick={() => {
-          // Замените 12345678 на ID сообщества вашего бота
-          vkBridge.send('VKWebAppOpenCommunity', { communityId: 54517632 })
-            .catch(err => console.error('Ошибка открытия сообщества:', err));
+          // Открывает диалог с ботом (сообществом)
+          // ID сообщества: 237231570
+          // Формат ссылки: https://vk.com/im?sel=-237231570
+          vkBridge.send('VKWebAppOpenLink', { 
+            url: 'https://vk.com/im?sel=-237231570'
+          }).catch(err => {
+            console.error('Ошибка открытия диалога:', err);
+            // Fallback: открыть в новой вкладке если VK Bridge не сработал
+            window.open('https://vk.com/im?sel=-237231570', '_blank');
+          });
         }}
         style={{
           background: 'linear-gradient(135deg, #4a76a8, #3b5998)',
           border: 'none',
-          padding: '10px 20px',
-          borderRadius: 20,
+          padding: '12px 20px',
+          borderRadius: 24,
           color: 'white',
           fontWeight: 600,
           cursor: 'pointer',
-          fontSize: 14
+          fontSize: 14,
+          width: '100%',
+          transition: 'transform 0.2s, box-shadow 0.2s'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(74,118,168,0.4)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = 'none';
         }}
       >
-        💬 Перейти в бота
+        📨 Перейти в бота
       </button>
     </div>
+  </div>
+</div>
     </div>
 	{/* Блок с выбранным адресом */}
     {selectedLocation && (
