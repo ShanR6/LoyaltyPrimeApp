@@ -1661,23 +1661,23 @@ async function loadAvailablePromotions() {
         
         const now = new Date();
         
-        // Фильтруем активные акции (и бесплатные, и платные)
+        // Фильтруем активные акции (и бесплатные, и платные) - ТОЛЬКО ТЕ, У КОТОРЫХ НЕ ИСТЕК СРОК
         const activePromotions = allPromotions.filter(promo => {
             if (!promo.active) return false;
             if (!promo.start_date || !promo.end_date) return false;
             const startDate = new Date(promo.start_date);
             const endDate = new Date(promo.end_date);
-            return now >= startDate && now <= endDate;
+            return now >= startDate && now <= endDate; // ← ТОЛЬКО АКТУАЛЬНЫЕ ПО ДАТАМ
         });
         
-        // Загружаем КУПЛЕННЫЕ акции пользователя (платные)
+        // Загружаем КУПЛЕННЫЕ акции пользователя (платные) - бэкенд уже вернёт только непросроченные
         const purchasedResponse = await fetch(`${API_URL}/api/users/${currentUser.id}/promotions/purchased/${currentCompanyId}`);
         const purchasedResult = await purchasedResponse.json();
         
         // Формируем список доступных акций: бесплатные + купленные платные
         availablePromotions = [];
         
-        // Бесплатные акции (is_free = true)
+        // Бесплатные акции (is_free = true) - только активные по датам
         const freePromos = activePromotions.filter(p => p.is_free === true);
         availablePromotions.push(...freePromos.map(p => ({
             id: p.id,
@@ -1687,10 +1687,11 @@ async function loadAvailablePromotions() {
             type: 'free',
             is_purchased: false,
             is_free: true,
-            price: p.price || 0
+            price: p.price || 0,
+            end_date: p.end_date
         })));
         
-        // Купленные платные акции (неиспользованные)
+        // Купленные платные акции (бэкенд уже вернул только непросроченные, неиспользованные)
         if (purchasedResult.success && purchasedResult.purchased) {
             const purchasedPromos = purchasedResult.purchased.filter(p => !p.used);
             availablePromotions.push(...purchasedPromos.map(p => ({
@@ -1701,7 +1702,8 @@ async function loadAvailablePromotions() {
                 type: 'paid',
                 is_purchased: true,
                 is_free: false,
-                promotion_cycle_start: p.promotion_cycle_start
+                promotion_cycle_start: p.promotion_cycle_start,
+                end_date: p.end_date
             })));
         }
         
@@ -2054,7 +2056,6 @@ const earnResponse = await fetch(`${API_URL}/api/pos/apply-bonus-v2`, {
 }
         
         // ============ ИСТОРИЯ ============
-       // ============ ИСТОРИЯ ============
 async function loadUserHistory() {
     if (!currentUser || !currentCompanyId) return;
     
@@ -2087,6 +2088,8 @@ async function loadUserHistory() {
                 // Для покупки акции: если пришло положительное значение, делаем его отрицательным для отображения
                 if (isPromotionPurchase && t.bonusChange > 0) {
                     actualBonusChange = -t.bonusChange;
+                } else if (isPromotionPurchase && t.bonusChange < 0) {
+                    actualBonusChange = t.bonusChange;
                 }
                 
                 if (actualBonusChange > 0) totalEarned += actualBonusChange;
@@ -2105,22 +2108,36 @@ async function loadUserHistory() {
                     title = t.description || 'Покупка акции';
                     borderColor = '#9b59b6';
                     const spentAmount = Math.abs(actualBonusChange);
-                    if (spentAmount > 0) {
+                    if (spentAmount > 0 && actualBonusChange < 0) {
                         amountText = `<div style="font-size: 12px; color: #9b59b6;">💎 Потрачено: ${spentAmount} бонусов</div>`;
-                    } else {
+                        bonusText = `<span style="color: #e74c3c; font-weight: bold;">-${spentAmount} бонусов</span>`;
+                    } else if (spentAmount === 0 || actualBonusChange === 0) {
                         amountText = `<div style="font-size: 12px; color: #3498db;">🎁 Бесплатная акция</div>`;
+                        bonusText = `<span style="color: #3498db; font-weight: bold;">Бесплатно</span>`;
+                    } else {
+                        // Покупка акции (списание)
+                        amountText = `<div style="font-size: 12px; color: #9b59b6;">💎 Потрачено: ${spentAmount} бонусов</div>`;
+                        bonusText = `<span style="color: #e74c3c; font-weight: bold;">-${spentAmount} бонусов</span>`;
                     }
-                    bonusText = `<span style="color: ${metadata.is_free ? '#3498db' : '#e74c3c'}; font-weight: bold;">${metadata.is_free ? 'Бесплатно' : `-${spentAmount} бонусов`}</span>`;
                 } else if (isEarn) {
                     icon = '🛒';
                     title = t.description || 'Начисление бонусов';
                     borderColor = '#27ae60';
-                    amountText = t.amount > 0 ? `<div style="font-size: 12px; color: #27ae60;">💰 ${t.amount} ₽</div>` : '';
+                    if (t.amount > 0) {
+                        amountText = `<div style="font-size: 12px; color: #27ae60;">💰 Сумма: ${t.amount.toLocaleString()} ₽</div>`;
+                    }
                     bonusText = `<span style="color: #27ae60; font-weight: bold;">+${actualBonusChange} бонусов</span>`;
                 } else {
-                    // Обычное списание
+                    // Обычное списание (игры, обмен)
                     const spentAmount = Math.abs(actualBonusChange);
                     bonusText = `<span style="color: #e74c3c; font-weight: bold;">-${spentAmount} бонусов</span>`;
+                    
+                    // Дополнительная информация для игр
+                    if (t.source === 'game') {
+                        icon = '🎮';
+                        title = t.description || 'Игровая активность';
+                        borderColor = '#f39c12';
+                    }
                 }
                 
                 return `
@@ -2137,14 +2154,16 @@ async function loadUserHistory() {
                 `;
             }).join('');
             
-            document.getElementById('historyList').innerHTML = historyHtml || '<div class="loading">Нет операций</div>';
-            document.getElementById('totalEarned').innerText = totalEarned;
-            document.getElementById('totalSpent').innerText = totalSpent;
+            document.getElementById('historyList').innerHTML = historyHtml || '<div class="info">📭 Нет операций</div>';
+            document.getElementById('totalEarned').innerText = totalEarned.toLocaleString();
+            document.getElementById('totalSpent').innerText = totalSpent.toLocaleString();
             document.getElementById('historySection').style.display = 'block';
+        } else {
+            document.getElementById('historyList').innerHTML = '<div class="error">❌ Ошибка загрузки истории</div>';
         }
     } catch (error) {
         console.error('Ошибка загрузки истории:', error);
-        document.getElementById('historyList').innerHTML = '<div class="error">❌ Ошибка загрузки истории</div>';
+        document.getElementById('historyList').innerHTML = '<div class="error">❌ Ошибка загрузки истории: ' + error.message + '</div>';
     }
 }
         

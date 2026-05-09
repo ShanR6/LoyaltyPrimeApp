@@ -257,6 +257,7 @@ async function initDatabase() {
 		await addNotificationCampaignColumns();
 		await addUserProgressSpentColumn();
 		await createUserGamePlaysTable();
+		await addPromotionCycleStartColumn();
         await insertTestData();
 
     } catch (error) {
@@ -742,7 +743,6 @@ async function addMissingColumns() {
         
         if (checkTiers.rows.length === 0) {
             console.log('📝 Добавляем колонку tiers_settings в таблицу companies...');
-            // ИСПРАВЛЕНО: убрали multiplier, оставили только cashback
             const defaultTiers = JSON.stringify([
                 {"name": "🌱 Новичок", "threshold": 0, "cashback": 3, "color": "#95a5a6", "icon": "🌱"},
                 {"name": "🥉 Бронза", "threshold": 500, "cashback": 5, "color": "#cd7f32", "icon": "🥉"},
@@ -756,7 +756,6 @@ async function addMissingColumns() {
             `, [defaultTiers]);
             console.log('✅ Колонка tiers_settings добавлена');
         } else {
-            // Обновляем существующие записи: удаляем multiplier, оставляем cashback
             console.log('📝 Обновляем существующие tiers_settings, удаляем multiplier...');
             const companies = await query('SELECT id, tiers_settings FROM companies WHERE tiers_settings IS NOT NULL');
             for (const company of companies.rows) {
@@ -770,7 +769,6 @@ async function addMissingColumns() {
                         if (tier.multiplier !== undefined) {
                             updated = true;
                             const { multiplier, ...rest } = tier;
-                            // Если cashback не задан, используем multiplier * 5 как fallback
                             if (rest.cashback === undefined) {
                                 rest.cashback = Math.min(30, (multiplier || 1) * 5);
                             }
@@ -838,7 +836,6 @@ async function addMissingColumns() {
             console.log('✅ Колонка emoji добавлена');
         }
         
-        // Добавляем колонки reward_type и reward_value
         const checkRewardType = await query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -852,7 +849,6 @@ async function addMissingColumns() {
             console.log('✅ Колонки reward_type и reward_value добавлены');
         }
         
-        // Добавляем колонку birthday_date
         const checkBirthday = await query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -865,7 +861,7 @@ async function addMissingColumns() {
             console.log('✅ Колонка birthday_date добавлена');
         }
         
-        // Создаем таблицу user_purchased_promotions если не существует
+        // ========== ОБНОВЛЕННАЯ ТАБЛИЦА user_purchased_promotions ==========
         const checkPurchasedTable = await query(`
             SELECT table_name 
             FROM information_schema.tables 
@@ -873,7 +869,7 @@ async function addMissingColumns() {
         `);
         
         if (checkPurchasedTable.rows.length === 0) {
-            console.log('📝 Создаем таблицу user_purchased_promotions...');
+            console.log('📝 Создаем таблицу user_purchased_promotions (НОВАЯ СТРУКТУРА)...');
             await query(`
                 CREATE TABLE user_purchased_promotions (
                     id SERIAL PRIMARY KEY,
@@ -881,16 +877,54 @@ async function addMissingColumns() {
                     promotion_id INTEGER REFERENCES promotions(id) ON DELETE CASCADE,
                     company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                     purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    promotion_cycle_start TIMESTAMP NOT NULL,
                     used BOOLEAN DEFAULT FALSE,
                     used_at TIMESTAMP,
-                    UNIQUE(user_id, promotion_id, promotion_cycle_start)
+                    UNIQUE(user_id, promotion_id)
                 )
             `);
-            console.log('✅ Таблица user_purchased_promotions создана');
+            console.log('✅ Таблица user_purchased_promotions создана с новой структурой');
+        } else {
+            // МИГРАЦИЯ: обновляем существующую таблицу
+            console.log('📝 Обновляем существующую таблицу user_purchased_promotions...');
+            
+            // Проверяем и удаляем колонку promotion_cycle_start если она есть
+            const checkCycleStart = await query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'user_purchased_promotions' AND column_name = 'promotion_cycle_start'
+            `);
+            
+            if (checkCycleStart.rows.length > 0) {
+                console.log('📝 Удаляем колонку promotion_cycle_start...');
+                await query(`ALTER TABLE user_purchased_promotions DROP COLUMN promotion_cycle_start`);
+                console.log('✅ Колонка promotion_cycle_start удалена');
+            }
+            
+            // Удаляем старое уникальное ограничение если оно было
+            try {
+                await query(`ALTER TABLE user_purchased_promotions DROP CONSTRAINT IF EXISTS user_purchased_promotions_user_id_promotion_id_promotion_cycle_start_key`);
+                console.log('✅ Старое ограничение удалено');
+            } catch (e) {
+                console.log('⚠️ Старое ограничение не найдено');
+            }
+            
+            // Добавляем новое уникальное ограничение
+            try {
+                await query(`
+                    ALTER TABLE user_purchased_promotions 
+                    ADD CONSTRAINT unique_user_promotion 
+                    UNIQUE (user_id, promotion_id)
+                `);
+                console.log('✅ Новое уникальное ограничение добавлено');
+            } catch (e) {
+                if (!e.message.includes('already exists')) {
+                    console.error('Ошибка добавления ограничения:', e.message);
+                } else {
+                    console.log('⚠️ Уникальное ограничение уже существует');
+                }
+            }
         }
         
-        // Добавляем колонку products
         const checkProducts = await query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -903,7 +937,6 @@ async function addMissingColumns() {
             console.log('✅ Колонка products добавлена');
         }
         
-        // Добавляем колонку is_free (вместо requires_purchase)
         const checkIsFree = await query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -916,7 +949,6 @@ async function addMissingColumns() {
             console.log('✅ Колонка is_free добавлена');
         }
         
-        // Добавляем колонку price
         const checkPrice = await query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -929,7 +961,6 @@ async function addMissingColumns() {
             console.log('✅ Колонка price добавлена');
         }
         
-        // Удаляем устаревшую колонку requires_purchase если она есть
         const checkRequiresPurchase = await query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -1050,16 +1081,18 @@ async function getPromotions(companyId) {
 
 async function addPromotion(companyId, promotionData) {
     const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, is_free, price } = promotionData;
-	// Проверка минимальной длительности акции (12 часов)
-if (startDate && endDate) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffMs = end - start;
-    const diffHours = diffMs / (1000 * 60 * 60);
-    if (diffHours < 12) {
-        throw new Error('Акция должна длиться минимум 12 часов');
+    
+    // Проверка минимальной длительности акции (12 часов) - для НОВЫХ акций
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const diffMs = end - start;
+        const diffHours = diffMs / (1000 * 60 * 60);
+        if (diffHours < 12) {
+            throw new Error('Акция должна длиться минимум 12 часов');
+        }
     }
-}
+    
     const result = await query(
         `INSERT INTO promotions (company_id, name, emoji, description, start_date, end_date, active, reward_type, reward_value, products, is_free, price, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) 
@@ -1071,26 +1104,59 @@ if (startDate && endDate) {
 
 async function updatePromotion(promotionId, promotionData) {
     const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, is_free, price } = promotionData;
-	// Проверка минимальной длительности акции (12 часов)
-if (startDate && endDate) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffMs = end - start;
-    const diffHours = diffMs / (1000 * 60 * 60);
-    if (diffHours < 12) {
-        throw new Error('Акция должна длиться минимум 12 часов');
+    
+    // Получаем старые данные для сравнения
+    const oldResult = await query('SELECT start_date, end_date FROM promotions WHERE id = $1', [promotionId]);
+    const oldStartDate = oldResult.rows[0]?.start_date ? new Date(oldResult.rows[0].start_date) : null;
+    const oldEndDate = oldResult.rows[0]?.end_date ? new Date(oldResult.rows[0].end_date) : null;
+    
+    // Проверка минимальной длительности акции (12 часов) - для ОБНОВЛЕНИЯ
+    if (startDate && endDate) {
+        const newStart = new Date(startDate);
+        const newEnd = new Date(endDate);
+        
+        // Базовая проверка: дата начала должна быть раньше даты окончания
+        if (newStart >= newEnd) {
+            throw new Error('Дата начала должна быть раньше даты окончания');
+        }
+        
+        const diffMs = newEnd - newStart;
+        const diffHours = diffMs / (1000 * 60 * 60);
+        
+        // Определяем, является ли это ПРОДЛЕНИЕМ уже существующей активной акции
+        const now = new Date();
+        const isActiveNow = oldStartDate && oldEndDate && 
+                            oldStartDate <= now && oldEndDate >= now;
+        const isExtendingEndDate = oldEndDate && newEnd > oldEndDate;
+        const isExtendingStartDate = oldStartDate && newStart < oldStartDate;
+        
+        // Если это просто продление (акция активна и мы увеличиваем дату окончания) - пропускаем проверку 12 часов
+        const isJustExtension = isActiveNow && isExtendingEndDate && !isExtendingStartDate;
+        
+        if (!isJustExtension && diffHours < 12) {
+            throw new Error('Акция должна длиться минимум 12 часов');
+        }
+        
+        // Дополнительная проверка: если акция ещё не началась, но мы её сокращаем - тоже проверяем
+        const notStartedYet = oldStartDate && oldStartDate > now;
+        if (notStartedYet && diffHours < 12) {
+            throw new Error('Акция должна длиться минимум 12 часов');
+        }
     }
-}
+    
     const result = await query(
         `UPDATE promotions 
-         SET name = $1, emoji = $2, description = $3, start_date = $4, end_date = $5, active = $6, reward_type = $7, reward_value = $8, products = $9, is_free = $10, price = $11, updated_at = NOW()
+         SET name = $1, emoji = $2, description = $3, start_date = $4, end_date = $5, 
+             active = $6, reward_type = $7, reward_value = $8, products = $9, 
+             is_free = $10, price = $11, updated_at = NOW()
          WHERE id = $12
          RETURNING *`,
-        [name, emoji, description, startDate || null, endDate || null, active, reward_type || 'discount', reward_value || 0, products || '', is_free || false, price || 100, promotionId]
+        [name, emoji, description, startDate || null, endDate || null, active, 
+         reward_type || 'discount', reward_value || 0, products || '', 
+         is_free || false, price || 100, promotionId]
     );
-	
-	// Удаляем все предыдущие покупки этой акции, чтобы требовалась новая покупка
-await query('DELETE FROM user_purchased_promotions WHERE promotion_id = $1', [promotionId]);
+    
+    
     return result.rows[0];
 }
 
@@ -2022,42 +2088,55 @@ async function getUserBirthday(userId) {
 }
 
 // ============ Функции для купленных акций ============
-async function purchasePromotion(userId, promotionId, companyId, promotionCycleStart, bonusCost, isFree, promotionName) {
+async function purchasePromotion(userId, promotionId, companyId, bonusCost, isFree, promotionName, promotionCycleStart) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         
+        // Проверяем, покупал ли пользователь эту акцию в ТЕКУЩЕМ цикле
+        const existing = await client.query(
+            'SELECT id FROM user_purchased_promotions WHERE user_id = $1 AND promotion_id = $2 AND promotion_cycle_start = $3',
+            [userId, promotionId, promotionCycleStart]
+        );
+        
+        if (existing.rows.length > 0) {
+            throw new Error('Вы уже покупали эту акцию в текущем периоде');
+        }
+        
         // Для бесплатных акций не списываем бонусы
         if (!isFree && bonusCost > 0) {
-            // Проверяем баланс
             const user = await client.query('SELECT bonus_balance FROM users WHERE id = $1', [userId]);
             if (user.rows[0].bonus_balance < bonusCost) {
                 throw new Error('Недостаточно бонусов');
             }
             
-            // Списываем бонусы
             await client.query(
                 'UPDATE users SET bonus_balance = bonus_balance - $1, total_spent = total_spent + $1 WHERE id = $2',
                 [bonusCost, userId]
             );
         }
         
-        // Записываем покупку
+        // ✅ ЗАПИСЫВАЕМ ПОКУПКУ С promotion_cycle_start
         const result = await client.query(
-            `INSERT INTO user_purchased_promotions (user_id, promotion_id, company_id, promotion_cycle_start) 
-             VALUES ($1, $2, $3, $4) 
+            `INSERT INTO user_purchased_promotions (user_id, promotion_id, company_id, purchased_at, promotion_cycle_start) 
+             VALUES ($1, $2, $3, NOW(), $4) 
              RETURNING *`,
             [userId, promotionId, companyId, promotionCycleStart]
         );
         
-        // Добавляем транзакцию (только одну!) с названием акции
+        // Добавляем транзакцию
         const description = isFree ? `Бесплатная акция: ${promotionName}` : `Покупка акции: ${promotionName}`;
         const transactionBonusSpent = isFree ? 0 : bonusCost;
         
         await client.query(
             `INSERT INTO transactions (user_id, company_id, bonus_spent, description, source, created_at, metadata) 
              VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
-            [userId, companyId, transactionBonusSpent, description, 'app', JSON.stringify({ promotion_id: promotionId, promotion_name: promotionName, is_free: isFree })]
+            [userId, companyId, transactionBonusSpent, description, 'app', JSON.stringify({ 
+                promotion_id: promotionId, 
+                promotion_name: promotionName, 
+                is_free: isFree,
+                promotion_cycle_start: promotionCycleStart 
+            })]
         );
         
         await client.query('COMMIT');
@@ -2075,7 +2154,11 @@ async function getUserPurchasedPromotions(userId, companyId) {
         `SELECT upp.*, p.name, p.reward_value, p.start_date, p.end_date, p.active
          FROM user_purchased_promotions upp
          JOIN promotions p ON upp.promotion_id = p.id
-         WHERE upp.user_id = $1 AND upp.company_id = $2
+         WHERE upp.user_id = $1 
+           AND upp.company_id = $2 
+           AND upp.used = false
+           AND p.active = true
+           AND (p.end_date IS NULL OR p.end_date > NOW())
          ORDER BY upp.purchased_at DESC`,
         [userId, companyId]
     );
@@ -3867,10 +3950,26 @@ async function createUserGamePlaysTable() {
                 game_type VARCHAR(50) NOT NULL,
                 plays_today INTEGER DEFAULT 0,
                 last_play_date DATE DEFAULT CURRENT_DATE,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, company_id, game_type)
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        
+        // Добавляем уникальное ограничение, если его нет
+        try {
+            await query(`
+                ALTER TABLE user_game_plays 
+                ADD CONSTRAINT unique_user_game_play 
+                UNIQUE (user_id, company_id, game_type)
+            `);
+            console.log('✅ Уникальное ограничение добавлено для user_game_plays');
+        } catch (e) {
+            if (e.code === '42P07' || e.message.includes('already exists')) {
+                console.log('⚠️ Уникальное ограничение уже существует');
+            } else {
+                console.error('Ошибка добавления ограничения:', e.message);
+            }
+        }
+        
         console.log('✅ Таблица user_game_plays создана/проверена');
     } catch (error) {
         console.error('❌ Ошибка создания user_game_plays:', error);
@@ -3878,9 +3977,11 @@ async function createUserGamePlaysTable() {
 }
 
 // Функция для получения количества игр сегодня
-async function getUserGamePlaysToday(userId, companyId, gameType) {
+async function getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset = 0) {
     try {
-        const today = new Date().toISOString().slice(0, 10);
+        // Вычисляем "сегодня" по часовому поясу компании
+        const now = new Date(Date.now() + timezoneOffset * 60000);
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
         
         const result = await query(
             `SELECT plays_today, last_play_date 
@@ -3893,7 +3994,6 @@ async function getUserGamePlaysToday(userId, companyId, gameType) {
             const lastDate = result.rows[0].last_play_date;
             const lastDateStr = lastDate instanceof Date ? lastDate.toISOString().slice(0, 10) : lastDate;
             
-            // Если последняя игра была не сегодня, сбрасываем счетчик
             if (lastDateStr !== today) {
                 await query(
                     `UPDATE user_game_plays 
@@ -3915,9 +4015,10 @@ async function getUserGamePlaysToday(userId, companyId, gameType) {
 }
 
 // Функция для увеличения счетчика игр сегодня
-async function incrementUserGamePlays(userId, companyId, gameType) {
+async function incrementUserGamePlays(userId, companyId, gameType, timezoneOffset = 0) {
     try {
-        const today = new Date().toISOString().slice(0, 10);
+        const now = new Date(Date.now() + timezoneOffset * 60000);
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
         
         const result = await query(
             `INSERT INTO user_game_plays (user_id, company_id, game_type, plays_today, last_play_date, updated_at)
@@ -3937,6 +4038,117 @@ async function incrementUserGamePlays(userId, companyId, gameType) {
         return 0;
     }
 }
+// Добавьте эту функцию после функции updatePromotion
+async function clearPromotionPurchases(promotionId) {
+    try {
+        console.log(`🗑️ Очищаем покупки для акции ${promotionId}`);
+        
+        // Проверяем, есть ли записи
+        const checkResult = await query('SELECT COUNT(*) FROM user_purchased_promotions WHERE promotion_id = $1', [promotionId]);
+        console.log(`Найдено записей: ${checkResult.rows[0].count}`);
+        
+        // Удаляем записи
+        const result = await query('DELETE FROM user_purchased_promotions WHERE promotion_id = $1 RETURNING id', [promotionId]);
+        console.log(`Удалено ${result.rowCount} записей`);
+        
+        return { success: true, deletedCount: result.rowCount };
+    } catch (error) {
+        console.error('❌ Ошибка очистки покупок:', error);
+        throw error;
+    }
+}
+
+// Добавьте эту функцию в database-pg.js
+async function shouldClearPurchasesForPromotion(promotionId, newData) {
+    const oldResult = await query('SELECT * FROM promotions WHERE id = $1', [promotionId]);
+    
+    if (oldResult.rows.length === 0) {
+        return { shouldClear: false, reasons: [] };
+    }
+    
+    const old = oldResult.rows[0];
+    const now = new Date();
+    const oldEndDate = old.end_date ? new Date(old.end_date) : null;
+    const newEndDate = newData.endDate ? new Date(newData.endDate) : null;
+    const oldStartDate = old.start_date ? new Date(old.start_date) : null;
+    const newStartDate = newData.startDate ? new Date(newData.startDate) : null;
+    
+    const reasons = [];
+    let shouldClear = false;
+    
+    // Проверяем, была ли акция истекшей
+    const wasExpired = oldEndDate && oldEndDate < now;
+    const willBeActive = newEndDate && newEndDate > now;
+    
+    // 1. Акция была истекшей и снова становится активной
+    if (wasExpired && willBeActive) {
+        shouldClear = true;
+        reasons.push(`акция была истекшей (до ${oldEndDate.toLocaleDateString()}), теперь активна до ${newEndDate.toLocaleDateString()}`);
+    }
+    
+    // 2. Изменение скидки
+    if (newData.reward_value !== undefined && old.reward_value !== newData.reward_value) {
+        shouldClear = true;
+        reasons.push(`скидка (${old.reward_value}% → ${newData.reward_value}%)`);
+    }
+    
+    // 3. Изменение цены
+    if (newData.price !== undefined && old.price !== newData.price) {
+        shouldClear = true;
+        reasons.push(`цена (${old.price} → ${newData.price} баллов)`);
+    }
+    
+    // 4. Изменение типа (бесплатная/платная)
+    if (newData.is_free !== undefined && old.is_free !== newData.is_free) {
+        shouldClear = true;
+        reasons.push(`тип (${old.is_free ? 'бесплатная' : 'платная'} → ${newData.is_free ? 'бесплатная' : 'платная'})`);
+    }
+    
+    // 5. Укорочение даты окончания (активная акция стала короче)
+    if (newEndDate && oldEndDate && !wasExpired && newEndDate < oldEndDate) {
+        shouldClear = true;
+        reasons.push(`дата окончания укорочена (${oldEndDate.toLocaleDateString()} → ${newEndDate.toLocaleDateString()})`);
+    }
+    
+    // 6. Изменение даты начала ДО старта акции
+    if (newStartDate && oldStartDate && now < oldStartDate && newStartDate.getTime() !== oldStartDate.getTime()) {
+        shouldClear = true;
+        reasons.push(`дата начала изменена (${oldStartDate.toLocaleDateString()} → ${newStartDate.toLocaleDateString()})`);
+    }
+    
+    // 7. ПРОДЛЕНИЕ — НЕ ОЧИЩАЕМ
+    if (newEndDate && oldEndDate && !wasExpired && newEndDate > oldEndDate) {
+        console.log(`✅ Продление акции: покупки НЕ очищаются`);
+        // Не добавляем reasons
+    }
+    
+    return { shouldClear, reasons };
+}
+
+// Добавьте эту функцию в database-pg.js
+async function addPromotionCycleStartColumn() {
+    try {
+        const checkColumn = await query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'user_purchased_promotions' AND column_name = 'promotion_cycle_start'
+        `);
+        
+        if (checkColumn.rows.length === 0) {
+            console.log('📝 Добавляем колонку promotion_cycle_start в таблицу user_purchased_promotions...');
+            await query(`
+                ALTER TABLE user_purchased_promotions 
+                ADD COLUMN promotion_cycle_start TIMESTAMP NOT NULL DEFAULT NOW()
+            `);
+            console.log('✅ Колонка promotion_cycle_start добавлена');
+        } else {
+            console.log('✅ Колонка promotion_cycle_start уже существует');
+        }
+    } catch (error) {
+        console.error('❌ Ошибка добавления promotion_cycle_start:', error);
+    }
+}
+
 
 
 module.exports = {
@@ -4053,5 +4265,8 @@ module.exports = {
     getGreetingSettings,
 	createUserGamePlaysTable,
 	getUserGamePlaysToday,
-	incrementUserGamePlays
+	incrementUserGamePlays,
+	clearPromotionPurchases,
+	shouldClearPurchasesForPromotion,
+	addPromotionCycleStartColumn
 };

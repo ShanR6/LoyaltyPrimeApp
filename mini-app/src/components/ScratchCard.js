@@ -372,7 +372,7 @@ export function ScratchCard({ onBalanceUpdate, userBalance, companyId, userId, c
     return (
         <div className="scratch-card-3x3">
             {/* Баннер лимита игр */}
-            {settings.maxPlaysPerDay > 0 && remainingPlays <= 3 && remainingPlays > 0 && playsToday !== null (
+            {settings.maxPlaysPerDay > 0 && playsToday !== null && remainingPlays <= 3 && (
                 <div className="limit-warning" style={{
                     background: remainingPlays === 0 ? '#e74c3c' : '#f39c12',
                     borderRadius: '30px',

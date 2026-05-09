@@ -2052,6 +2052,12 @@ async function savePromotion() {
         return;
     }
     
+    // Сохраняем кнопку для восстановления состояния
+    const saveBtn = document.getElementById('savePromotionBtn');
+    const originalText = saveBtn.textContent;
+    saveBtn.textContent = '💾 Сохранение...';
+    saveBtn.disabled = true;
+    
     try {
         const promotionData = {
             name,
@@ -2095,7 +2101,15 @@ async function savePromotion() {
             const formattedStart = start.toLocaleString('ru-RU');
             const formattedEnd = end.toLocaleString('ru-RU');
             const durationHours = Math.round(diffHours * 10) / 10;
-            alert(`✅ Акция ${currentEditingPromotionId ? 'обновлена' : 'создана'}!\n📅 ${formattedStart} → ${formattedEnd}\n⏱️ Длительность: ${durationHours} часов`);
+            
+            // Показываем разное сообщение в зависимости от того, были ли очищены покупки
+            if (data.purchasesCleared) {
+                alert(`✅ Акция ${currentEditingPromotionId ? 'обновлена' : 'создана'}!\n\n⚠️ ВНИМАНИЕ: ${data.message}\n\n📅 ${formattedStart} → ${formattedEnd}\n⏱️ Длительность: ${durationHours} часов\n\n💡 Пользователям потребуется купить акцию заново.`);
+            } else if (currentEditingPromotionId) {
+                alert(`✅ Акция обновлена!\n📅 ${formattedStart} → ${formattedEnd}\n⏱️ Длительность: ${durationHours} часов`);
+            } else {
+                alert(`✅ Акция создана!\n📅 ${formattedStart} → ${formattedEnd}\n⏱️ Длительность: ${durationHours} часов`);
+            }
         } else {
             errorElement.textContent = data.message || 'Ошибка сохранения';
             errorElement.style.display = 'block';
@@ -2106,6 +2120,9 @@ async function savePromotion() {
         errorElement.textContent = 'Ошибка подключения к серверу: ' + error.message;
         errorElement.style.display = 'block';
         setTimeout(() => errorElement.style.display = 'none', 5000);
+    } finally {
+        saveBtn.textContent = originalText;
+        saveBtn.disabled = false;
     }
 }
 

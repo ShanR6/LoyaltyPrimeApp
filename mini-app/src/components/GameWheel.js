@@ -26,6 +26,8 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
     const [spinCount, setSpinCount] = useState(0);
     const [bestWin, setBestWin] = useState(0);
     const [particles, setParticles] = useState([]);
+	const [playsToday, setPlaysToday] = useState(null);
+	const [playsLoaded, setPlaysLoaded] = useState(false);
     
     // Настройки игры (загружаются с сервера)
     const [settings, setSettings] = useState({
@@ -57,6 +59,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
                         sectors: data.settings.sectors || DEFAULT_SECTORS,
                         maxSpinsPerDay: data.settings.maxSpinsPerDay || 10,
                         freeSpinDaily: data.settings.freeSpinDaily || false,
+						maxPlaysPerDay: data.settings.maxPlaysPerDay || 0,
                         active: data.active
                     });
                 }
@@ -110,7 +113,25 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
             } catch(e) {}
         }
     }, []);
-
+	
+	useEffect(() => {
+    if (!userId || !companyId) return;
+    const loadPlaysToday = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}`);
+            const data = await response.json();
+            if (data.success) {
+                setPlaysToday(data.plays.wheel);
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки количества игр:', error);
+        } finally {
+            setPlaysLoaded(true);
+        }
+    };
+    loadPlaysToday();
+}, [userId, companyId]);
+	
     const saveStats = (winAmount) => {
         const newSpinCount = spinCount + 1;
         const newBestWin = Math.max(bestWin, winAmount);
@@ -171,7 +192,24 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
         }
     };
 
+	const isLimitReached = () => {
+    if (playsToday === null) return true;  // ещё загружается – блокируем
+    const maxPlays = settings.maxPlaysPerDay || 0;
+    if (maxPlays === 0) return false;
+    return playsToday >= maxPlays;
+};
+
+const getRemainingPlays = () => {
+    const maxPlays = settings.maxPlaysPerDay || 0;
+    if (maxPlays === 0) return null;
+    return Math.max(0, maxPlays - (playsToday || 0));
+};
+
     const spin = async (useFreeSpin = false) => {
+	if (isLimitReached()) {
+    alert(`❌ Достигнут лимит вращений на сегодня (${settings.maxPlaysPerDay}/${settings.maxPlaysPerDay}).`);
+    return;
+}
     if (isSpinning) return;
     if (!settings.active) {
         alert('Игра временно недоступна');
@@ -196,6 +234,20 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
     }
     
     setIsSpinning(true);
+	try {
+    const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId, gameType: 'wheel' })
+    });
+    const data = await response.json();
+    if (data.success) {
+        setPlaysToday(data.playsToday);
+    }
+} catch (error) {
+    console.error('Ошибка сохранения счетчика игр:', error);
+    setPlaysToday(prev => (prev || 0) + 1);
+}
     setResult(null);
     setShowConfetti(false);
     setShowGlow(true);
@@ -401,6 +453,12 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
                 </div>
             )}
             
+			{settings.maxPlaysPerDay > 0 && playsToday !== null && (
+    <div style={{ fontSize: '11px', color: '#aaa', textAlign: 'center', marginBottom: '8px' }}>
+        🎡 Игр сегодня: {playsToday} / {settings.maxPlaysPerDay}
+    </div>
+)}
+			
             <div className="classic-wheel-container">
                 <div className="classic-wheel-wrapper">
                     <div className={`classic-wheel ${isSpinning ? 'spinning' : ''}`}
@@ -463,7 +521,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
                 <button
                     className={`classic-spin-btn ${isSpinning ? 'spinning' : ''}`}
                     onClick={() => spin(false)}
-                    disabled={isSpinning || (!freeSpinAvailable && userBalance < settings.spinCost)}
+                    disabled={isSpinning || (!freeSpinAvailable && userBalance < settings.spinCost) || (settings.maxPlaysPerDay > 0 && playsToday >= settings.maxPlaysPerDay)}
                 >
                     <span className="btn-text">{isSpinning ? 'ВРАЩЕНИЕ...' : 'КРУТИТЬ'}</span>
                     {!isSpinning && <span className="btn-icon">🎲</span>}

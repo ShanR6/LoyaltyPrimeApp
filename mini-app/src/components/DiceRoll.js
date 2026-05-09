@@ -449,7 +449,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
                 <div className="total-cost">
                     Стоимость: <span className="cost-value">{settings.cost * betMultiplier}</span> бонусов
                 </div>
-                {settings.maxPlaysPerDay > 0 && remainingPlays !== null && (
+                {settings.maxPlaysPerDay > 0 && playsToday !== null && (
                     <div className="remaining-plays" style={{ fontSize: '11px', color: '#aaa', marginTop: '8px', textAlign: 'center' }}>
                         🎲 Игр сегодня: {playsToday} / {settings.maxPlaysPerDay}
                     </div>

@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import vkBridge from '@vkontakte/vk-bridge';
 import './App.css';
 import { GameWheel } from './components/GameWheel';
-import { DailyQuests } from './components/DailyQuests';
-import { ReferralSystem } from './components/ReferralSystem';
+import { DailyQuests } from './components/DailyQuests';	
 import { LoyaltyCard } from './components/LoyaltyCard';
 import { DiceRoll } from './components/DiceRoll';
 import { ScratchCard } from './components/ScratchCard';
@@ -140,38 +139,51 @@ const getNextTierBySpent = (spent) => {
   
 
 useEffect(() => {
-  // Обновляем акции при переключении на вкладку offers или при изменении userId/selectedGroup
+  // Обновляем акции при переключении на вкладку offers или home
   if ((activeTab === 'offers' || activeTab === 'home') && userId && selectedGroup?.id) {
-    const refreshActivePromotions = async () => {
+    
+    const refreshData = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/promotions/${selectedGroup.id}`);
-        if (response.ok) {
-          const allPromos = await response.json();
+        // 1. Обновляем список акций
+        const promotionsResponse = await fetch(`${API_URL}/api/promotions/${selectedGroup.id}`);
+        if (promotionsResponse.ok) {
+          const allPromos = await promotionsResponse.json();
           const now = new Date();
+          const companyOffset = selectedGroup?.timezoneOffset || 0;
           
-		  const companyOffset = selectedGroup?.timezoneOffset || 0;
           const activePromotions = allPromos.filter(promo => {
             if (!promo.active) return false;
             if (!promo.start_date || !promo.end_date) return false;
-            
             const startDate = adjustDateToLocal(promo.start_date, companyOffset);
             const endDate = adjustDateToLocal(promo.end_date, companyOffset);
-            
-            // Проверяем с учетом времени
             return now >= startDate && now <= endDate;
           });
           
           setPromotions(activePromotions);
         }
+        
+        // 2. ✅ ОБНОВЛЯЕМ КУПЛЕННЫЕ АКЦИИ (ВАЖНО!)
+        const purchasedResponse = await fetch(`${API_URL}/api/users/${userId}/promotions/purchased/${selectedGroup.id}`);
+        if (purchasedResponse.ok) {
+          const purchasedData = await purchasedResponse.json();
+          if (purchasedData.success) {
+            setPurchasedPromotions(purchasedData.purchased || []);
+            console.log('🔄 Обновлены купленные акции:', purchasedData.purchased?.length);
+          }
+        }
+        
+        // 3. ✅ СИНХРОНИЗИРУЕМ БАЛАНС (на случай если бонусы были списаны)
+        await syncBalanceFromDB();
+        
       } catch (error) {
-        console.error('Ошибка обновления акций:', error);
+        console.error('Ошибка обновления данных:', error);
       }
     };
     
-    refreshActivePromotions();
+    refreshData();
     
-    // Добавляем интервал для автоматического обновления каждую минуту
-    const interval = setInterval(refreshActivePromotions, 60000);
+    // Интервал для автоматического обновления каждые 30 секунд (опционально)
+    const interval = setInterval(refreshData, 30000);
     
     return () => clearInterval(interval);
   }
@@ -1259,7 +1271,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
 </header>
 
       <nav style={{ display:'flex', gap:8, background:'rgba(0,0,0,0.3)', padding:6, borderRadius:60, marginBottom:24, flexWrap:'wrap', justifyContent:'center' }}>
-        {['home','card','offers','giveaways','games','quests','referral','history'].map(tab => (
+        {['home','card','offers','giveaways','games','quests','history'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex:'0 1 auto', background:activeTab===tab ? brandColor : 'transparent', border:'none', padding:'10px 12px', borderRadius:40, fontSize:12, fontWeight:600, color:activeTab===tab ? 'white' : '#aaa', cursor:'pointer', whiteSpace:'nowrap' }}>
             {tab==='home'?'🏠 Главная':tab==='card'?'🎫 Карта':tab==='offers'?'🎁 Акции':tab==='giveaways'?'🎰 Розыгрыши':tab==='games'?'🎮 Игры':tab==='quests'?'📋 Задания':tab==='referral'?'👥 Друзья':'📜 История'}
           </button>
@@ -1705,54 +1717,57 @@ const progressToNext = getProgressToNextTier(currentSpent);
                   )}
                   
                   {/* Кнопка покупки акции */}
-                  {isCurrentlyActive && (
-                    <div style={{ marginTop:12 }}>
-                      {(() => {
-                        const isFree = offer.is_free === true;
-                        const bonusCost = isFree ? 0 : (offer.price || offer.reward_value * 10);
-                        const alreadyPurchased = purchasedPromotions.some(
-                          p => p.promotion_id === offer.id && 
-                               new Date(p.promotion_cycle_start).getTime() === new Date(offer.start_date).getTime()
-                        );
-                        
-                        if (alreadyPurchased) {
-                          return (
-                            <div style={{ 
-                              padding:'8px 16px', 
-                              background:'rgba(46,204,113,0.2)', 
-                              border:'1px solid #2ecc71',
-                              borderRadius:12, 
-                              fontSize:12, 
-                              color:'#2ecc71',
-                              fontWeight:600,
-                              textAlign:'center'
-                            }}>
-                              {isFree ? '✅ Получена бесплатно' : `✅ Куплена за ${bonusCost} баллов`}
-                            </div>
-                          );
-                        }
-                        
-                        return (
-                          <button 
-                            onClick={() => purchasePromotion(offer)}
-                            style={{ 
-                              padding:'8px 16px', 
-                              background: isFree ? '#2ecc71' : (currentBalance >= bonusCost ? brandColor : '#666'),
-                              border:'none',
-                              borderRadius:12, 
-                              fontSize:12, 
-                              color:'white',
-                              fontWeight:600,
-                              cursor: isFree || currentBalance >= bonusCost ? 'pointer' : 'not-allowed',
-                              width:'100%'
-                            }}
-                          >
-                            {isFree ? '🎁 Получить бесплатно' : `🛣р Купить за ${bonusCost} баллов`}
-                          </button>
-                        );
-                      })()}
-                    </div>
-                  )}
+                  {/* Кнопка покупки акции */}
+{isCurrentlyActive && (
+  <div style={{ marginTop:12 }}>
+    {(() => {
+      const isFree = offer.is_free === true;
+      const bonusCost = isFree ? 0 : (offer.price || offer.reward_value * 10);
+      
+      // НОВАЯ ЛОГИКА: проверяем, покупал ли пользователь ЭТУ акцию 
+      // (без проверки даты начала - только по ID акции)
+      const alreadyPurchased = purchasedPromotions.some(
+        p => p.promotion_id === offer.id
+      );
+      
+      if (alreadyPurchased) {
+        return (
+          <div style={{ 
+            padding:'8px 16px', 
+            background:'rgba(46,204,113,0.2)', 
+            border:'1px solid #2ecc71',
+            borderRadius:12, 
+            fontSize:12, 
+            color:'#2ecc71',
+            fontWeight:600,
+            textAlign:'center'
+          }}>
+            {isFree ? '✅ Получена бесплатно' : `✅ Куплена за ${bonusCost} баллов`}
+          </div>
+        );
+      }
+      
+      return (
+        <button 
+          onClick={() => purchasePromotion(offer)}
+          style={{ 
+            padding:'8px 16px', 
+            background: isFree ? '#2ecc71' : (currentBalance >= bonusCost ? brandColor : '#666'),
+            border:'none',
+            borderRadius:12, 
+            fontSize:12, 
+            color:'white',
+            fontWeight:600,
+            cursor: isFree || currentBalance >= bonusCost ? 'pointer' : 'not-allowed',
+            width:'100%'
+          }}
+        >
+          {isFree ? '🎁 Получить бесплатно' : `💰 Купить за ${bonusCost} баллов`}
+        </button>
+      );
+    })()}
+  </div>
+)}
                 </div>
                 <div style={{ 
                   background: '#f39c12', 
@@ -1840,8 +1855,6 @@ const progressToNext = getProgressToNextTier(currentSpent);
 		  companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
         />
       )}
-      
-      {activeTab === 'referral' && selectedGroup && <ReferralSystem onBalanceUpdate={updateBalanceAndStats} userId={userInfo?.id} selectedGroupId={selectedGroup?.id} companyTimezoneOffset={selectedGroup?.timezoneOffset || 0} />}
       
 
       {activeTab === 'history' && (
