@@ -2943,10 +2943,6 @@ function renderScratchSettings() {
     <input type="number" id="scratchMaxPlays" value="${scratchSettings.maxPlaysPerDay || 0}" min="0" max="100" onchange="updateScratchMaxPlays(this.value)">
 </div>
                 <div class="scratch-setting-group">
-                    <label>🖱️ Максимум попыток</label>
-                    <input type="number" id="scratchMaxAttempts" value="${scratchSettings.maxAttempts}" min="1" max="10" onchange="updateScratchMaxAttempts(this.value)">
-                </div>
-                <div class="scratch-setting-group">
                     <label>💡 Стоимость подсказки (бонусов)</label>
                     <input type="number" id="scratchHintCost" value="${scratchSettings.hintCost}" min="0" max="100" onchange="updateScratchHintCost(this.value)">
                 </div>

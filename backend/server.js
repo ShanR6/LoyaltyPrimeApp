@@ -3422,40 +3422,6 @@ app.get('/api/companies/:companyId/addresses-revenue', async (req, res) => {
     }
 });
 
-
-// ============ API ДЛЯ ОГРАНИЧЕНИЯ ИГР ============
-
-// Получение количества сыгранных игр сегодня для пользователя
-app.get('/api/users/:userId/games/plays/:companyId', async (req, res) => {
-    try {
-        const { userId, companyId } = req.params;
-        const { gameType } = req.query; // ✅ Добавляем поддержку gameType
-        
-        // Получаем часовой пояс компании
-        const companyResult = await query('SELECT timezone_offset FROM companies WHERE id = $1', [companyId]);
-        const timezoneOffset = companyResult.rows[0]?.timezone_offset || 0;
-        
-        // Если указан конкретный тип игры - используем user_game_plays таблицу
-        if (gameType) {
-            const plays = await getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset);
-            return res.json({ success: true, plays: { [gameType]: plays } });
-        }
-        
-        // Иначе возвращаем все игры (для обратной совместимости)
-        const wheel = await getUserGamePlaysToday(userId, companyId, 'wheel', timezoneOffset);
-        const scratch = await getUserGamePlaysToday(userId, companyId, 'scratch', timezoneOffset);
-        const dice = await getUserGamePlaysToday(userId, companyId, 'dice', timezoneOffset);
-        
-        res.json({ 
-            success: true, 
-            plays: { wheel, scratch, dice }
-        });
-    } catch (error) {
-        console.error('Ошибка получения количества игр:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
 // Получение настроек игр с лимитами
 app.get('/api/users/:userId/games/settings/:companyId', async (req, res) => {
     try {
@@ -3491,29 +3457,22 @@ app.get('/api/users/:userId/games/settings/:companyId', async (req, res) => {
 app.get('/api/users/:userId/games/plays/:companyId', async (req, res) => {
     try {
         const { userId, companyId } = req.params;
-        const { gameType } = req.query; // опционально - можно получить конкретную игру
-        
+        const { gameType } = req.query;
+        const timezoneOffset = parseInt(req.query.timezoneOffset) || 0;  // <-- добавить
+
         if (gameType) {
-			// Получаем часовой пояс компании
-			const companyResult = await query('SELECT timezone_offset FROM companies WHERE id = $1', [companyId]);
-			const timezoneOffset = companyResult.rows[0]?.timezone_offset || 0;
             const plays = await getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset);
-            res.json({ success: true, plays: { [gameType]: plays } });
-        } else {
-            // Получаем все игры
-            const wheel = await getUserGamePlaysToday(userId, companyId, 'wheel', timezoneOffset);
-            const scratch = await getUserGamePlaysToday(userId, companyId, 'scratch', timezoneOffset);
-            const dice = await getUserGamePlaysToday(userId, companyId, 'dice', timezoneOffset);
-            
-            res.json({ 
-                success: true, 
-                plays: { wheel, scratch, dice }
-            });
+            return res.json({ success: true, plays: { [gameType]: plays } });
         }
+        // Если запрашиваются все игры (без gameType)
+        const wheel = await getUserGamePlaysToday(userId, companyId, 'wheel', timezoneOffset);
+        const scratch = await getUserGamePlaysToday(userId, companyId, 'scratch', timezoneOffset);
+        const dice = await getUserGamePlaysToday(userId, companyId, 'dice', timezoneOffset);
+        res.json({ success: true, plays: { wheel, scratch, dice } });
     } catch (error) {
-        console.error('Ошибка получения количества игр:', error);
+		console.error('Ошибка получения количества игр:', error);
         res.status(500).json({ success: false, error: error.message });
-    }
+	}
 });
 
 // Увеличение счетчика игр (вызывается после каждой игры)

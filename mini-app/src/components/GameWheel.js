@@ -119,7 +119,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId, com
         const loadPlaysToday = async () => {
             try {
                 console.log('🎡 GameWheel: загружаем статистику игр для userId:', userId);
-                const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=wheel`);
+                const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=wheel&timezoneOffset=${companyTimezoneOffset}`);
                 const data = await response.json();
                 if (data.success) {
                     setPlaysToday(data.plays?.wheel || 0);
@@ -140,7 +140,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId, com
             if (document.visibilityState === 'visible' && userId && companyId) {
                 const reloadPlays = async () => {
                     try {
-                        const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=wheel`);
+                        const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=wheel&timezoneOffset=${companyTimezoneOffset}`);
                         const data = await response.json();
                         if (data.success) {
                             setPlaysToday(data.plays?.wheel || 0);

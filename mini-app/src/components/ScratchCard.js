@@ -111,7 +111,7 @@ useEffect(() => {
     
     const loadPlaysToday = async () => {
         try {
-            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=scratch`);
+            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=scratch&timezoneOffset=${companyTimezoneOffset}`);
             const data = await response.json();
             if (data.success) {
                 setPlaysToday(data.plays?.scratch || 0);
@@ -255,7 +255,7 @@ useEffect(() => {
         if (userId && companyId) {
             const loadPlays = async () => {
                 try {
-                    const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=scratch`);
+                    const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=scratch&timezoneOffset=${companyTimezoneOffset}`);
                     const data = await response.json();
                     if (data.success) {
                         setPlaysToday(data.plays?.scratch || 0);

@@ -92,7 +92,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
     if (!userId || !companyId) return;
     const loadPlaysToday = async () => {
         try {
-            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}`);
+            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=dice&timezoneOffset=${companyTimezoneOffset}`);
             const data = await response.json();
             if (data.success) {
                 setPlaysToday(data.plays.dice);
@@ -242,7 +242,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
         const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ companyId, gameType: 'dice' })
+            body: JSON.stringify({ companyId, gameType: 'dice', timezoneOffset: companyTimezoneOffset })
         });
         const data = await response.json();
         if (data.success) {
