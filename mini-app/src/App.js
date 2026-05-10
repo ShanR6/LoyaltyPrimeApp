@@ -533,17 +533,14 @@ const syncBalanceFromDB = async () => {
         const historyData = await historyResponse.json();
         
         if (historyData.success && historyData.transactions.length > 0) {
-          // ✅ СОРТИРУЕМ ТРАНЗАКЦИИ (новые сверху)
           const sortedTransactions = [...historyData.transactions].sort((a, b) => 
             new Date(b.createdAt) - new Date(a.createdAt)
           );
           
-          // Преобразуем в формат истории
           serverHistory = sortedTransactions.map(t => {
             let icon = '';
             let desc = t.description || '';
             
-            // Определяем иконку для истории
             if (t.type === 'earn') {
               if (desc.includes('Покупка') || t.source === 'pos') {
                 icon = '🛒';
@@ -578,7 +575,6 @@ const syncBalanceFromDB = async () => {
         console.error('Ошибка загрузки истории:', historyError);
       }
       
-      // ✅ ОБНОВЛЯЕМ: баланс и история из БД
       const newData = {
         ...cur,
         bonusBalance: data.user.bonus_balance || 0,
@@ -589,6 +585,10 @@ const syncBalanceFromDB = async () => {
       
       saveCurrentGroupData(newData);
       console.log('Баланс синхронизирован из БД:', newData.bonusBalance, 'totalSpent:', newData.totalSpent, 'history length:', newData.history.length);
+      
+      // ✅ ВАЖНО: ОТПРАВЛЯЕМ СОБЫТИЕ ДЛЯ ОБНОВЛЕНИЯ ВСЕХ ИГР
+      window.dispatchEvent(new CustomEvent('refreshGamePlays'));
+      console.log('🔄 Отправлено событие refreshGamePlays для обновления игр');
     }
   } catch (error) {
     console.error('Ошибка синхронизации баланса:', error);
@@ -731,28 +731,33 @@ const syncBalanceFromDB = async () => {
     getUserData();
   }, []);
   
-  // Синхронизируем баланс при возврате в приложение
-  useEffect(() => {
+
+  // Синхронизируем баланс и игры при возврате в приложение
+useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && userId && selectedGroup) {
-        syncBalanceFromDB();
-      }
+        if (document.visibilityState === 'visible' && userId && selectedGroup) {
+            syncBalanceFromDB();
+            
+            // Также обновляем счётчики игр для активной вкладки
+            if (activeTab === 'games') {
+                // Отправляем событие для обновления всех игр
+                window.dispatchEvent(new CustomEvent('refreshGamePlays'));
+            }
+        }
     };
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Также синхронизируем при фокусе окна
     window.addEventListener('focus', () => {
-      if (userId && selectedGroup) {
-        syncBalanceFromDB();
-      }
+        if (userId && selectedGroup) {
+            syncBalanceFromDB();
+        }
     });
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', syncBalanceFromDB);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', syncBalanceFromDB);
     };
-  }, [userId, selectedGroup]);
+}, [userId, selectedGroup, activeTab]);
   // Добавьте useEffect для загрузки локаций и выбранного адреса
 useEffect(() => {
     if (selectedGroup?.id && userId) {
@@ -1820,11 +1825,12 @@ const progressToNext = getProgressToNextTier(currentSpent);
 			companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
         />
         <DiceRoll 
-            onBalanceUpdate={updateBalanceAndStats} 
-            userBalance={currentBalance}
-            companyId={selectedGroup?.id}
-			companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
-        />
+    onBalanceUpdate={updateBalanceAndStats} 
+    userBalance={currentBalance}
+    companyId={selectedGroup?.id}
+    userId={userId}  
+    companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
+/>
         <ScratchCard 
             onBalanceUpdate={updateBalanceAndStats} 
             userBalance={currentBalance}

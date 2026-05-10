@@ -96,7 +96,10 @@ const {
     saveGreetingSettings,
     getGreetingSettings,
 	clearPromotionPurchases,
-	shouldClearPurchasesForPromotion
+	shouldClearPurchasesForPromotion,
+	incrementUserGamePlays,
+getUserGamePlaysToday,
+getTodayString	
 } = require('./database-pg');
 
 const app = express();
@@ -2482,10 +2485,13 @@ app.get('/api/giveaways/:companyId/active', async (req, res) => {
         // Фильтруем по дате окончания
         const now = new Date();
         giveaways = giveaways.filter(g => {
-            if (!g.active) return false;
-            if (g.end_date && new Date(g.end_date) < now) return false;
-            return true;
-        });
+    if (!g.active) return false;
+    if (g.end_date) {
+        const endPlusMonth = new Date(new Date(g.end_date).getTime() + 30 * 24 * 60 * 60 * 1000);
+        if (endPlusMonth < now) return false; // скрыть только через 30 дней после окончания
+    }
+    return true;
+});
         
         // Если передан userId, проверяем для каждого розыгрыша, куплен ли он
         if (userId) {
@@ -3423,31 +3429,26 @@ app.get('/api/companies/:companyId/addresses-revenue', async (req, res) => {
 app.get('/api/users/:userId/games/plays/:companyId', async (req, res) => {
     try {
         const { userId, companyId } = req.params;
+        const { gameType } = req.query; // ✅ Добавляем поддержку gameType
         
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Получаем часовой пояс компании
+        const companyResult = await query('SELECT timezone_offset FROM companies WHERE id = $1', [companyId]);
+        const timezoneOffset = companyResult.rows[0]?.timezone_offset || 0;
         
-        const result = await query(
-            `SELECT 
-                COUNT(CASE WHEN metadata->>'gameType' = 'wheel' THEN 1 END) as wheel_plays,
-                COUNT(CASE WHEN metadata->>'gameType' = 'scratch' THEN 1 END) as scratch_plays,
-                COUNT(CASE WHEN metadata->>'gameType' = 'dice' THEN 1 END) as dice_plays
-             FROM transactions 
-             WHERE user_id = $1 
-             AND company_id = $2
-             AND source = 'game'
-             AND type = 'spend'
-             AND created_at >= $3`,
-            [userId, companyId, today]
-        );
+        // Если указан конкретный тип игры - используем user_game_plays таблицу
+        if (gameType) {
+            const plays = await getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset);
+            return res.json({ success: true, plays: { [gameType]: plays } });
+        }
+        
+        // Иначе возвращаем все игры (для обратной совместимости)
+        const wheel = await getUserGamePlaysToday(userId, companyId, 'wheel', timezoneOffset);
+        const scratch = await getUserGamePlaysToday(userId, companyId, 'scratch', timezoneOffset);
+        const dice = await getUserGamePlaysToday(userId, companyId, 'dice', timezoneOffset);
         
         res.json({ 
             success: true, 
-            plays: {
-                wheel: parseInt(result.rows[0].wheel_plays) || 0,
-                scratch: parseInt(result.rows[0].scratch_plays) || 0,
-                dice: parseInt(result.rows[0].dice_plays) || 0
-            }
+            plays: { wheel, scratch, dice }
         });
     } catch (error) {
         console.error('Ошибка получения количества игр:', error);

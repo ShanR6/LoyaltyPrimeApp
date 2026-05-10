@@ -448,7 +448,7 @@ async function loadAnalytics(period = 'month') {
                     { name: 'Новичок', desc: '1 покупка, ≤14 дней', count: classif.new || 0, percent: total > 0 ? Math.round((classif.new / total) * 100) : 0, color: '#3498db' },
                     { name: 'Активный', desc: '2+ покупок, ≤7 дней между', count: classif.active || 0, percent: total > 0 ? Math.round((classif.active / total) * 100) : 0, color: '#2ecc71' },
                     { name: 'Постоянный', desc: '2+ покупок, ≤3 дней между', count: classif.regular || 0, percent: total > 0 ? Math.round((classif.regular / total) * 100) : 0, color: '#f39c12' },
-                    { name: 'Спящий', desc: '1+ покупок, ≥20 дней', count: classif.dormant || 0, percent: total > 0 ? Math.round((classif.dormant / total) * 100) : 0, color: '#e74c3c' }
+                    { name: 'Спящий', desc: '1+ покупок, ≥15 дней', count: classif.dormant || 0, percent: total > 0 ? Math.round((classif.dormant / total) * 100) : 0, color: '#e74c3c' }
                 ];
                 
                 segmentsList.innerHTML = segments.map(seg => `
@@ -775,7 +775,7 @@ function showEmptyAnalytics() {
                     <div class="segment-color" style="background-color: #e74c3c"></div>
                     <div>
                         <div class="segment-name">Спящий</div>
-                        <div style="font-size: 11px; color: #999; margin-top: 2px;">1+ покупок, ≥20 дней</div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">1+ покупок, ≥15 дней</div>
                     </div>
                     <div class="segment-count">0 чел.</div>
                     <div class="segment-percent">0%</div>

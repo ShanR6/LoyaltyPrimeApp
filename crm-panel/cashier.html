@@ -1546,7 +1546,7 @@ function onDiscountTypeChange() {
             
             const maxRub = Math.floor(orderAmount * currentBonusSettings.maxBonusPaymentPercent / 100);
             const maxBonuses = maxRub * currentBonusSettings.rubToBonus;
-            const userBonuses = currentUser?.balance || 0;
+            const userBonuses = currentUser?.bonus_balance || 0;
             const finalMaxBonuses = Math.min(maxBonuses, userBonuses);
             
             document.getElementById('spendAmount').value = finalMaxBonuses;

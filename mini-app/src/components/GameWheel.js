@@ -1,4 +1,4 @@
-// GameWheel.js - Добавляем функционал бесплатного вращения
+// GameWheel.js - Исправленная версия с единым стилем индикатора игр
 import { useState, useEffect } from 'react';
 import './GameWheel.css';
 
@@ -16,7 +16,7 @@ const DEFAULT_SECTORS = [
     { name: 'x15', value: 15, multiplier: 15, color: '#e67e22', icon: '🏆', weight: 10 }
 ];
 
-export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
+export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId, companyTimezoneOffset = 0 }) {
     const [isSpinning, setIsSpinning] = useState(false);
     const [result, setResult] = useState(null);
     const [lastWin, setLastWin] = useState(null);
@@ -26,8 +26,8 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
     const [spinCount, setSpinCount] = useState(0);
     const [bestWin, setBestWin] = useState(0);
     const [particles, setParticles] = useState([]);
-	const [playsToday, setPlaysToday] = useState(null);
-	const [playsLoaded, setPlaysLoaded] = useState(false);
+    const [playsToday, setPlaysToday] = useState(null);
+    const [settingsLoaded, setSettingsLoaded] = useState(false);
     
     // Настройки игры (загружаются с сервера)
     const [settings, setSettings] = useState({
@@ -35,14 +35,13 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
         sectors: DEFAULT_SECTORS,
         maxSpinsPerDay: 10,
         freeSpinDaily: false,
+        maxPlaysPerDay: 0,
         active: true
     });
-    const [settingsLoaded, setSettingsLoaded] = useState(false);
     
     // Состояние для бесплатного вращения
     const [freeSpinAvailable, setFreeSpinAvailable] = useState(false);
     const [freeSpinUsed, setFreeSpinUsed] = useState(false);
-    const [lastFreeSpinDate, setLastFreeSpinDate] = useState(null);
 
     // Загрузка настроек с сервера
     useEffect(() => {
@@ -59,7 +58,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
                         sectors: data.settings.sectors || DEFAULT_SECTORS,
                         maxSpinsPerDay: data.settings.maxSpinsPerDay || 10,
                         freeSpinDaily: data.settings.freeSpinDaily || false,
-						maxPlaysPerDay: data.settings.maxPlaysPerDay || 0,
+                        maxPlaysPerDay: data.settings.maxPlaysPerDay || 0,
                         active: data.active
                     });
                 }
@@ -84,25 +83,21 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
                 const data = JSON.parse(saved);
                 const today = new Date().toDateString();
                 
-                // Проверяем, было ли бесплатное вращение сегодня
                 if (data.date === today) {
                     setFreeSpinUsed(data.used);
                     setFreeSpinAvailable(false);
-                    setLastFreeSpinDate(data.date);
                 } else {
-                    // Новый день - сбрасываем
                     setFreeSpinUsed(false);
                     setFreeSpinAvailable(settings.freeSpinDaily);
-                    setLastFreeSpinDate(null);
                 }
             } catch(e) {}
         } else {
-            // Первый раз - бесплатное вращение доступно если включено в настройках
             setFreeSpinAvailable(settings.freeSpinDaily);
             setFreeSpinUsed(false);
         }
     }, [userId, companyId, settings.freeSpinDaily]);
 
+    // Загрузка истории (spinCount, bestWin)
     useEffect(() => {
         const saved = localStorage.getItem('wheel_spin_history');
         if (saved) {
@@ -113,25 +108,84 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
             } catch(e) {}
         }
     }, []);
+    
+    // ✅ ЗАГРУЗКА КОЛИЧЕСТВА СЫГРАННЫХ ИГР СЕГОДНЯ (при монтировании)
+    useEffect(() => {
+        if (!userId || !companyId) {
+            console.log('⏳ GameWheel: ждём userId для загрузки статистики игр');
+            return;
+        }
+        
+        const loadPlaysToday = async () => {
+            try {
+                console.log('🎡 GameWheel: загружаем статистику игр для userId:', userId);
+                const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=wheel`);
+                const data = await response.json();
+                if (data.success) {
+                    setPlaysToday(data.plays?.wheel || 0);
+                    console.log('🎡 GameWheel: игр сегодня:', data.plays?.wheel);
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки количества игр для Wheel:', error);
+                setPlaysToday(0);
+            }
+        };
+        
+        loadPlaysToday();
+    }, [userId, companyId]);
+
+    // ✅ ОБРАБОТЧИК ВИДИМОСТИ СТРАНИЦЫ (при возвращении в приложение)
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && userId && companyId) {
+                const reloadPlays = async () => {
+                    try {
+                        const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=wheel`);
+                        const data = await response.json();
+                        if (data.success) {
+                            setPlaysToday(data.plays?.wheel || 0);
+                            console.log('🎡 GameWheel: перезагружено игр сегодня:', data.plays?.wheel);
+                        }
+                    } catch (error) {
+                        console.error('Ошибка перезагрузки:', error);
+                    }
+                };
+                reloadPlays();
+            }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleVisibilityChange);
+        
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleVisibilityChange);
+        };
+    }, [userId, companyId]);
 	
 	useEffect(() => {
-    if (!userId || !companyId) return;
-    const loadPlaysToday = async () => {
-        try {
-            const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}`);
-            const data = await response.json();
-            if (data.success) {
-                setPlaysToday(data.plays.wheel);
-            }
-        } catch (error) {
-            console.error('Ошибка загрузки количества игр:', error);
-        } finally {
-            setPlaysLoaded(true);
+    const handleRefreshPlays = () => {
+        if (userId && companyId) {
+            const loadPlays = async () => {
+                try {
+                    const response = await fetch(`${API_URL}/api/users/${userId}/games/plays/${companyId}?gameType=wheel`);
+                    const data = await response.json();
+                    if (data.success) {
+                        setPlaysToday(data.plays?.wheel || 0);
+                        console.log('🎡 Счётчик обновлён по событию refreshGamePlays');
+                    }
+                } catch (error) {
+                    console.error('Ошибка обновления счётчика:', error);
+                }
+            };
+            loadPlays();
         }
     };
-    loadPlaysToday();
+    
+    window.addEventListener('refreshGamePlays', handleRefreshPlays);
+    return () => window.removeEventListener('refreshGamePlays', handleRefreshPlays);
 }, [userId, companyId]);
-	
+    
     const saveStats = (winAmount) => {
         const newSpinCount = spinCount + 1;
         const newBestWin = Math.max(bestWin, winAmount);
@@ -143,7 +197,6 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
         }));
     };
 
-    // Сохранение состояния бесплатного вращения
     const saveFreeSpinState = (used) => {
         const today = new Date().toDateString();
         const key = `wheel_free_spin_${userId}_${companyId}`;
@@ -153,7 +206,6 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
         }));
         setFreeSpinUsed(used);
         setFreeSpinAvailable(!used && settings.freeSpinDaily);
-        setLastFreeSpinDate(today);
     };
 
     const createParticles = (x, y) => {
@@ -192,150 +244,150 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId }) {
         }
     };
 
-	const isLimitReached = () => {
-    if (playsToday === null) return true;  // ещё загружается – блокируем
-    const maxPlays = settings.maxPlaysPerDay || 0;
-    if (maxPlays === 0) return false;
-    return playsToday >= maxPlays;
-};
+    const isLimitReached = () => {
+        if (playsToday === null) return true;
+        const maxPlays = settings.maxPlaysPerDay || 0;
+        if (maxPlays === 0) return false;
+        return playsToday >= maxPlays;
+    };
 
-const getRemainingPlays = () => {
-    const maxPlays = settings.maxPlaysPerDay || 0;
-    if (maxPlays === 0) return null;
-    return Math.max(0, maxPlays - (playsToday || 0));
-};
+    const getRemainingPlays = () => {
+        const maxPlays = settings.maxPlaysPerDay || 0;
+        if (maxPlays === 0) return null;
+        return Math.max(0, maxPlays - (playsToday || 0));
+    };
 
     const spin = async (useFreeSpin = false) => {
-	if (isLimitReached()) {
-    alert(`❌ Достигнут лимит вращений на сегодня (${settings.maxPlaysPerDay}/${settings.maxPlaysPerDay}).`);
-    return;
-}
-    if (isSpinning) return;
-    if (!settings.active) {
-        alert('Игра временно недоступна');
-        return;
-    }
-    
-    let cost = settings.spinCost;
-    
-    // Если используем бесплатное вращение
-    if (useFreeSpin && freeSpinAvailable && !freeSpinUsed) {
-        cost = 0;
-        saveFreeSpinState(true);
-    }
-    
-    if (userBalance < cost && cost > 0) {
-        alert(`Недостаточно бонусов! Нужно ${cost} бонусов.`);
-        return;
-    }
-    
-    if (cost > 0) {
-        await onBalanceUpdate(-cost, 'spend', { source: 'game', gameType: 'wheel' });
-    }
-    
-    setIsSpinning(true);
-	try {
-    const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId, gameType: 'wheel' })
-    });
-    const data = await response.json();
-    if (data.success) {
-        setPlaysToday(data.playsToday);
-    }
-} catch (error) {
-    console.error('Ошибка сохранения счетчика игр:', error);
-    setPlaysToday(prev => (prev || 0) + 1);
-}
-    setResult(null);
-    setShowConfetti(false);
-    setShowGlow(true);
-    setTimeout(() => setShowGlow(false), 500);
-    playSound('spin');
-    
-    const weights = settings.sectors.map(s => s.weight || 10);
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    let random = Math.random() * totalWeight;
-    let sectorIndex = 0;
-    let cumulative = 0;
-    
-    for (let i = 0; i < weights.length; i++) {
-        cumulative += weights[i];
-        if (random <= cumulative) {
-            sectorIndex = i;
-            break;
+        if (isLimitReached()) {
+            alert(`❌ Достигнут лимит вращений на сегодня (${settings.maxPlaysPerDay}/${settings.maxPlaysPerDay}).`);
+            return;
         }
-    }
-    
-    const sectorAngle = 360 / settings.sectors.length;
-    const spins = 8 + Math.floor(Math.random() * 5);
-    const targetRotation = rotation + 360 * spins + (360 - (sectorIndex * sectorAngle) - 15);
-    
-    setRotation(targetRotation);
-    
-    // Сохраняем значения для использования в setTimeout
-    const selectedSector = settings.sectors[sectorIndex];
-    const currentCost = cost;
-    
-    // ✅ Обернём в Promise, чтобы дождаться анимации
-    await new Promise(resolve => {
-        setTimeout(async () => {
-            const sector = selectedSector;
-            let prize = null;
-            
-            if (sector.value === 0) {
-                prize = { type: 'lose', value: 0, message: 'Попробуйте ещё раз!', sector: sector };
-                setLastWin('0');
-                playSound('lose');
-            } else {
-                const winAmount = sector.value;
-                // ✅ Дожидаемся начисления выигрыша
-                await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'wheel' });
-                
-                setLastWin(winAmount);
-                saveStats(winAmount);
-                setShowConfetti(true);
-                createParticles();
-                playSound('win');
-                
-                setTimeout(() => setShowConfetti(false), 2500);
-                prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
-                
-                // ✅ Обновляем прогресс задания
-                console.log('🎡 GameWheel: Выигрыш', winAmount, 'бонусов');
-                
-                if (typeof window.updateQuestProgress === 'function') {
-                    console.log('🎡 Вызов updateQuestProgress для spin_wheel');
-                    window.updateQuestProgress('spin_wheel', 1);
-                } else {
-                    console.error('❌ window.updateQuestProgress не функция!');
-                    window.dispatchEvent(new CustomEvent('questProgress', { 
-                        detail: { type: 'spin_wheel', increment: 1 } 
-                    }));
-                }
-                
-                if (winAmount > 10) {
-                    try { navigator.vibrate?.(200); } catch(e) {}
-                }
+        if (isSpinning) return;
+        if (!settings.active) {
+            alert('Игра временно недоступна');
+            return;
+        }
+        
+        let cost = settings.spinCost;
+        
+        if (useFreeSpin && freeSpinAvailable && !freeSpinUsed) {
+            cost = 0;
+            saveFreeSpinState(true);
+        }
+        
+        if (userBalance < cost && cost > 0) {
+            alert(`Недостаточно бонусов! Нужно ${cost} бонусов.`);
+            return;
+        }
+        
+        if (cost > 0) {
+            await onBalanceUpdate(-cost, 'spend', { source: 'game', gameType: 'wheel' });
+        }
+        
+        setIsSpinning(true);
+        
+        // ✅ Увеличиваем счётчик игр на сервере
+        try {
+            const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companyId, gameType: 'wheel', timezoneOffset: companyTimezoneOffset })
+            });
+            const data = await response.json();
+            if (data.success) {
+                setPlaysToday(data.playsToday);
             }
-            
-            setResult(prize);
-            setIsSpinning(false);
-            resolve();
-        }, 3500);
-    });
-};
+        } catch (error) {
+            console.error('Ошибка сохранения счетчика игр:', error);
+            setPlaysToday(prev => (prev || 0) + 1);
+        }
+        
+        setResult(null);
+        setShowConfetti(false);
+        setShowGlow(true);
+        setTimeout(() => setShowGlow(false), 500);
+        playSound('spin');
+        
+        const weights = settings.sectors.map(s => s.weight || 10);
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let random = Math.random() * totalWeight;
+        let sectorIndex = 0;
+        let cumulative = 0;
+        
+        for (let i = 0; i < weights.length; i++) {
+            cumulative += weights[i];
+            if (random <= cumulative) {
+                sectorIndex = i;
+                break;
+            }
+        }
+        
+        const sectorAngle = 360 / settings.sectors.length;
+        const spins = 8 + Math.floor(Math.random() * 5);
+        const targetRotation = rotation + 360 * spins + (360 - (sectorIndex * sectorAngle) - 15);
+        
+        setRotation(targetRotation);
+        
+        const selectedSector = settings.sectors[sectorIndex];
+        
+        await new Promise(resolve => {
+            setTimeout(async () => {
+                const sector = selectedSector;
+                let prize = null;
+                
+                if (sector.value === 0) {
+                    prize = { type: 'lose', value: 0, message: 'Попробуйте ещё раз!', sector: sector };
+                    setLastWin('0');
+                    playSound('lose');
+                } else {
+                    const winAmount = sector.value;
+                    await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'wheel' });
+                    
+                    setLastWin(winAmount);
+                    saveStats(winAmount);
+                    setShowConfetti(true);
+                    createParticles();
+                    playSound('win');
+                    
+                    setTimeout(() => setShowConfetti(false), 2500);
+                    prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
+                    
+                    if (typeof window.updateQuestProgress === 'function') {
+                        window.updateQuestProgress('spin_wheel', 1);
+                    } else {
+                        window.dispatchEvent(new CustomEvent('questProgress', { 
+                            detail: { type: 'spin_wheel', increment: 1 } 
+                        }));
+                    }
+                    
+                    if (winAmount > 10) {
+                        try { navigator.vibrate?.(200); } catch(e) {}
+                    }
+                }
+                
+                setResult(prize);
+                setIsSpinning(false);
+                resolve();
+            }, 3500);
+        });
+    };
 
     const getSectorGradient = (color, isWinning) => {
         if (isWinning) return `radial-gradient(circle at 30% 30%, ${color}, ${color}cc)`;
         return `linear-gradient(135deg, ${color}, ${color}dd)`;
     };
 
-    if (!settingsLoaded) {
+    // ✅ Показываем загрузку, если нет userId или не загрузились настройки
+    if (!userId || !settingsLoaded || playsToday === null) {
         return (
-            <div className="game-wheel-classic" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-                <div style={{ color: 'white' }}>Загрузка...</div>
+            <div className="game-wheel-classic" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ color: 'white', fontSize: '24px' }}>🎡</div>
+                <div style={{ color: 'white' }}>Загрузка игры...</div>
+                <div style={{ color: '#aaa', fontSize: '12px' }}>
+                    {!userId && 'Ожидание авторизации...'}
+                    {userId && !settingsLoaded && 'Загрузка настроек...'}
+                    {userId && settingsLoaded && playsToday === null && 'Загрузка статистики...'}
+                </div>
             </div>
         );
     }
@@ -350,8 +402,30 @@ const getRemainingPlays = () => {
         );
     }
 
+    const remainingPlays = getRemainingPlays();
+    const limitReached = isLimitReached();
+
     return (
         <div className="game-wheel-classic">
+            {/* ✅ БАННЕР ЛИМИТА ИГР */}
+            {settings.maxPlaysPerDay > 0 && playsToday !== null && (
+                <div style={{ 
+                    background: limitReached ? '#e74c3c' : (remainingPlays <= 3 ? '#f39c12' : 'rgba(255,255,255,0.1)'),
+                    borderRadius: '30px',
+                    padding: '8px 16px',
+                    marginBottom: '16px',
+                    textAlign: 'center',
+                    color: 'white',
+                    fontSize: '13px',
+                    fontWeight: 'bold'
+                }}>
+                    {limitReached 
+                        ? `❌ Лимит игр на сегодня исчерпан! (${playsToday}/${settings.maxPlaysPerDay})`
+                        : `🎡 Игр сегодня: ${playsToday} / ${settings.maxPlaysPerDay}${remainingPlays <= 3 ? ` • Осталось: ${remainingPlays}` : ''}`
+                    }
+                </div>
+            )}
+
             {particles.map(p => (
                 <div
                     key={p.id}
@@ -453,12 +527,6 @@ const getRemainingPlays = () => {
                 </div>
             )}
             
-			{settings.maxPlaysPerDay > 0 && playsToday !== null && (
-    <div style={{ fontSize: '11px', color: '#aaa', textAlign: 'center', marginBottom: '8px' }}>
-        🎡 Игр сегодня: {playsToday} / {settings.maxPlaysPerDay}
-    </div>
-)}
-			
             <div className="classic-wheel-container">
                 <div className="classic-wheel-wrapper">
                     <div className={`classic-wheel ${isSpinning ? 'spinning' : ''}`}
@@ -521,7 +589,7 @@ const getRemainingPlays = () => {
                 <button
                     className={`classic-spin-btn ${isSpinning ? 'spinning' : ''}`}
                     onClick={() => spin(false)}
-                    disabled={isSpinning || (!freeSpinAvailable && userBalance < settings.spinCost) || (settings.maxPlaysPerDay > 0 && playsToday >= settings.maxPlaysPerDay)}
+                    disabled={isSpinning || (!freeSpinAvailable && userBalance < settings.spinCost) || limitReached}
                 >
                     <span className="btn-text">{isSpinning ? 'ВРАЩЕНИЕ...' : 'КРУТИТЬ'}</span>
                     {!isSpinning && <span className="btn-icon">🎲</span>}

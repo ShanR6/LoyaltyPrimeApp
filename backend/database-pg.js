@@ -2434,8 +2434,8 @@ async function recalculateUserType(userId, companyId) {
     
     // Логика классификации (проверяем в порядке приоритета):
     
-    // 1. Спящий - 1+ покупок и прошло ≥20 дней с последней покупки
-    if (daysSinceLastPurchase >= 20) {
+    // 1. Спящий - 1+ покупок и прошло ≥15 дней с последней покупки
+    if (daysSinceLastPurchase >= 15) {
         newUserType = 'dormant';
     }
     // 2. Постоянный - 2+ покупок и между каждыми покупками ≤3 дней
@@ -3979,9 +3979,9 @@ async function createUserGamePlaysTable() {
 // Функция для получения количества игр сегодня
 async function getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset = 0) {
     try {
-        // Вычисляем "сегодня" по часовому поясу компании
-        const now = new Date(Date.now() + timezoneOffset * 60000);
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+        const today = getTodayString(timezoneOffset);
+        
+        console.log(`📅 ${gameType}: Проверка игр: timezoneOffset=${timezoneOffset}, today=${today}`);
         
         const result = await query(
             `SELECT plays_today, last_play_date 
@@ -3992,9 +3992,25 @@ async function getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset
         
         if (result.rows.length > 0) {
             const lastDate = result.rows[0].last_play_date;
-            const lastDateStr = lastDate instanceof Date ? lastDate.toISOString().slice(0, 10) : lastDate;
+            let lastDateStr;
             
-            if (lastDateStr !== today) {
+            if (lastDate instanceof Date) {
+                // Извлекаем дату без времени
+                const year = lastDate.getFullYear();
+                const month = String(lastDate.getMonth() + 1).padStart(2, '0');
+                const day = String(lastDate.getDate()).padStart(2, '0');
+                lastDateStr = `${year}-${month}-${day}`;
+            } else if (typeof lastDate === 'string') {
+                lastDateStr = lastDate.slice(0, 10);
+            } else {
+                lastDateStr = null;
+            }
+            
+            console.log(`📅 ${gameType}: lastDate=${lastDateStr}, today=${today}, current_plays=${result.rows[0].plays_today}`);
+            
+            // Если последняя игра была в другой день - сбрасываем
+            if (lastDateStr && lastDateStr !== today) {
+                console.log(`🔄 ${gameType}: Сброс счётчика (новый день): было ${result.rows[0].plays_today}`);
                 await query(
                     `UPDATE user_game_plays 
                      SET plays_today = 0, last_play_date = $4, updated_at = NOW()
@@ -4007,6 +4023,7 @@ async function getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset
             return result.rows[0].plays_today || 0;
         }
         
+        console.log(`📅 ${gameType}: Нет записи в БД, возвращаем 0`);
         return 0;
     } catch (error) {
         console.error('Ошибка получения количества игр:', error);
@@ -4014,11 +4031,14 @@ async function getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset
     }
 }
 
+
 // Функция для увеличения счетчика игр сегодня
+
 async function incrementUserGamePlays(userId, companyId, gameType, timezoneOffset = 0) {
     try {
-        const now = new Date(Date.now() + timezoneOffset * 60000);
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+        const today = getTodayString(timezoneOffset);
+        
+        console.log(`📈 ${gameType}: Увеличение счётчика, today=${today}, timezoneOffset=${timezoneOffset}`);
         
         const result = await query(
             `INSERT INTO user_game_plays (user_id, company_id, game_type, plays_today, last_play_date, updated_at)
@@ -4028,10 +4048,11 @@ async function incrementUserGamePlays(userId, companyId, gameType, timezoneOffse
                 plays_today = user_game_plays.plays_today + 1,
                 last_play_date = $4,
                 updated_at = NOW()
-             RETURNING plays_today`,
+             RETURNING plays_today, last_play_date`,
             [userId, companyId, gameType, today]
         );
         
+        console.log(`📈 ${gameType}: Новое значение счётчика = ${result.rows[0].plays_today}, last_play_date = ${result.rows[0].last_play_date}`);
         return result.rows[0].plays_today;
     } catch (error) {
         console.error('Ошибка увеличения счетчика игр:', error);
@@ -4150,7 +4171,14 @@ async function addPromotionCycleStartColumn() {
 }
 
 
-
+function getTodayString(timezoneOffset) {
+    const now = new Date();
+    const companyNow = new Date(now.getTime() + (timezoneOffset || 0) * 60000);
+    const year = companyNow.getFullYear();
+    const month = String(companyNow.getMonth() + 1).padStart(2, '0');
+    const day = String(companyNow.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 module.exports = {
     pool,
     query,
@@ -4268,5 +4296,6 @@ module.exports = {
 	incrementUserGamePlays,
 	clearPromotionPurchases,
 	shouldClearPurchasesForPromotion,
-	addPromotionCycleStartColumn
+	addPromotionCycleStartColumn,
+	getTodayString
 };
