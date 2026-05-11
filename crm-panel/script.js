@@ -161,6 +161,72 @@ let currentEditingGiveawayId = null;
 
 const API_URL = 'http://localhost:3001';
 
+function initImageUpload(dropZoneId, fileInputId, previewId, removeBtnId, urlInputId) {
+    const dropZone = document.getElementById(dropZoneId);
+    const fileInput = document.getElementById(fileInputId);
+    const preview = document.getElementById(previewId);
+    const urlInput = document.getElementById(urlInputId);
+	const removeBtn = document.getElementById(removeBtnId);
+
+    if (!dropZone || !fileInput || !preview || !urlInput) return;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#667eea'; });
+    dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#ccc'; });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#ccc';
+        const file = e.dataTransfer.files[0];
+        if (file) handleImageFile(file);
+    });
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) handleImageFile(file);
+    });
+
+    async function handleImageFile(file) {
+        // Показываем превью
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+
+        // Загружаем на сервер
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const resp = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: formData });
+            const data = await resp.json();
+            if (data.success) {
+                urlInput.value = data.url;
+				removeBtn.style.display = 'block';
+		removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        preview.src = '';
+        preview.style.display = 'none';
+        removeBtn.style.display = 'none';
+        urlInput.value = '';
+        fileInput.value = '';  // очистить input file
+    });
+            } else {
+                alert('Ошибка загрузки изображения');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Ошибка загрузки');
+        }
+		
+    }
+}
+
+// Вызвать инициализацию после загрузки DOM (или в конце скрипта)
+document.addEventListener('DOMContentLoaded', () => {
+    initImageUpload('notifImageUpload', 'notifImageFile', 'notifImagePreview', 'notifImageRemove', 'notifImageUrl');
+	initImageUpload('campaignImageUpload', 'campaignImageFile', 'campaignImagePreview', 'campaignImageRemove', 'campaignImageUrl');
+});
+
 // ========== ФУНКЦИИ ДЛЯ РАБОТЫ С COOKIE ==========
 function setCookie(name, value, days = 7) {
     const expires = new Date(Date.now() + days * 864e5).toUTCString();
@@ -564,52 +630,26 @@ function renderActivityChart(period) {
         return;
     }
     
-    let activity = [...cachedAnalytics.dailyActivity];
-    
-    if (period === 'week') {
-        // Последние 7 дней
-        activity = activity.slice(-7);
-    } else if (period === 'month') {
-        // Последние 30 дней
-        activity = activity.slice(-30);
-    } else if (period === 'year') {
-        // Группируем по месяцам
-        const monthlyData = {};
-        activity.forEach(item => {
-            const date = new Date(item.date);
-            const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-            const monthName = date.toLocaleDateString('ru-RU', { month: 'short' });
-            
-            if (!monthlyData[monthKey]) {
-                monthlyData[monthKey] = {
-                    month: monthName,
-                    transactions: 0,
-                    fullDate: date
-                };
-            }
-            monthlyData[monthKey].transactions += parseInt(item.transactions) || 0;
-        });
-        
-        activity = Object.values(monthlyData).slice(-12);
-        const maxValue = Math.max(...activity.map(d => d.transactions), 1);
-        
-        activityChart.innerHTML = `
-            <div class="activity-chart">
-                ${activity.map((item, i) => {
-                    const height = (item.transactions / maxValue) * 150;
-                    return `
-                        <div class="bar-container">
-                            <div class="bar" style="height: ${height}px">
-                                <span class="bar-value">${item.transactions}</span>
-                            </div>
-                            <div class="bar-label">${item.month}</div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        `;
-        return;
-    }
+    let activity = cachedAnalytics.dailyActivity || [];
+if (period === 'year') {
+    // Группировка по месяцам для графика сохраняется
+    const monthlyData = {};
+    activity.forEach(item => {
+        const date = new Date(item.date);
+        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+        if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = {
+                month: date.toLocaleDateString('ru-RU', { month: 'short' }),
+                transactions: 0
+            };
+        }
+        monthlyData[monthKey].transactions += parseInt(item.transactions) || 0;
+    });
+    activity = Object.values(monthlyData);
+    // код построения колонок по месяцам оставить
+} else {
+    // для week и month просто отображаем все точки, полученные с сервера
+}
     
     // Для недели и месяца
     if (activity.length === 0) {

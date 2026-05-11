@@ -106,7 +106,26 @@ const app = express();
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 app.use(express.static('crm-panel'));
+const multer = require('multer');
+const path = require('path');
 
+// Настройка хранилища multer
+const storage = multer.diskStorage({
+    destination: './uploads/',
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5 MB
+
+// Статическая раздача загруженных файлов
+app.use('/uploads', express.static('uploads'));
+
+// Эндпоинт для загрузки изображений (возвращает URL)
+app.post('/api/upload', upload.single('image'), (req, res) => {
+    if (!req.file) return res.status(400).json({ success: false, message: 'Файл не загружен' });
+    res.json({ success: true, url: `/uploads/${req.file.filename}` });
+});
 
 app.use((req, res, next) => {
     console.log(`📨 ${req.method} ${req.url}`);
@@ -163,6 +182,19 @@ async function createDefaultCampaignsForCompany(companyId) {
 // ============ HEALTH CHECK ============
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend работает на PostgreSQL!' });
+});
+
+app.put('/api/companies/:companyId/logo', upload.single('logo'), async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        if (!req.file) return res.status(400).json({ success: false, message: 'Файл не загружен' });
+        const logoUrl = `/uploads/${req.file.filename}`;
+        await query('UPDATE companies SET logo_url = $1 WHERE id = $2', [logoUrl, companyId]);
+        res.json({ success: true, logoUrl });
+    } catch (error) {
+        console.error('Ошибка загрузки логотипа:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // ============ API ДЛЯ КОМПАНИЙ ============
@@ -3332,22 +3364,18 @@ app.get('/api/companies/:companyId/addresses-revenue', async (req, res) => {
         const companyId = parseInt(req.params.companyId);
         const period = req.query.period || 'month';
         
-        let startDate;
         const now = new Date();
-        
-        switch (period) {
-            case 'month':
-                startDate = new Date(now);
-                startDate.setMonth(startDate.getMonth() - 1);
-                break;
-            case 'year':
-                startDate = new Date(now);
-                startDate.setFullYear(startDate.getFullYear() - 1);
-                break;
-            default:
-                startDate = new Date(now);
-                startDate.setMonth(startDate.getMonth() - 1);
-        }
+let startDate;
+switch (period) {
+    case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+    case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+    default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+}
         
         // Получаем все активные адреса компании
         const addressesResult = await query(

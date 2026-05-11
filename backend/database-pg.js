@@ -2434,27 +2434,19 @@ async function recalculateUserType(userId, companyId) {
     
     // Логика классификации (проверяем в порядке приоритета):
     
-    // 1. Спящий - 1+ покупок и прошло ≥15 дней с последней покупки
-    if (daysSinceLastPurchase >= 15) {
-        newUserType = 'dormant';
-    }
-    // 2. Постоянный - 2+ покупок и между каждыми покупками ≤3 дней
-    else if (totalPurchases >= 2 && maxIntervalDays <= 3) {
-        newUserType = 'regular';
-    }
-    // 3. Активный - 2+ покупок и между каждыми покупками ≤7 дней
-    else if (totalPurchases >= 2 && maxIntervalDays <= 7) {
-        newUserType = 'active';
-    }
-    // 4. Новичок - 1 покупка и прошло ≤14 дней
-    else if (totalPurchases === 1 && daysSinceLastPurchase <= 14) {
-        newUserType = 'new';
-    }
-    // 5. Если не подошел ни один критерий - спящий
-    else {
-        newUserType = 'dormant';
-    }
-    
+    if (totalPurchases === 0) {
+    newUserType = 'new';                     // нет покупок – новичок
+} else if (daysSinceLastPurchase >= 15) {
+    newUserType = 'dormant';                 // 15+ дней без покупок → спящий
+} else if (totalPurchases >= 2 && maxIntervalDays <= 3) {
+    newUserType = 'regular';                 // постоянный
+} else if (totalPurchases >= 2 && maxIntervalDays <= 7) {
+    newUserType = 'active';                  // активный
+} else if (totalPurchases === 1 && daysSinceLastPurchase <= 14) {
+    newUserType = 'new';                     // новичок
+} else {
+    newUserType = 'new';                     // все остальные – новички
+}
     // Обновляем тип пользователя
     await query(
         `UPDATE user_classification 
@@ -2544,29 +2536,25 @@ async function getClassificationStats(companyId) {
 async function getRealAnalytics(companyId, period = 'month') {
     const now = new Date();
     let startDate;
-    
-    // Определяем начало периода
-    switch (period) {
-        case 'day':
-            startDate = new Date(now);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        case 'week':
-            startDate = new Date(now);
-            startDate.setDate(startDate.getDate() - 7);
-            break;
-        case 'month':
-            startDate = new Date(now);
-            startDate.setMonth(startDate.getMonth() - 1);
-            break;
-        case 'year':
-            startDate = new Date(now);
-            startDate.setFullYear(startDate.getFullYear() - 1);
-            break;
-        default:
-            startDate = new Date(now);
-            startDate.setMonth(startDate.getMonth() - 1);
-    }
+switch (period) {
+    case 'day':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // сегодня 00:00
+        break;
+    case 'week':
+        // Начало текущей недели (понедельник)
+        const dayOfWeek = now.getDay(); // 0 - вс, 1 - пн ...
+        const diffToMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday);
+        break;
+    case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+    case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+    default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+}
     
     // Получаем реальную выручку (только POS-транзакции с amount > 0)
     const revenueResult = await query(
