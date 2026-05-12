@@ -924,7 +924,6 @@ background: linear-gradient(135deg, #2A4B7C 0%, #4A7A9C 100%);
 .segment-percent { width: 50px; text-align: right; font-weight: 600; }
 .segment-bar { height: 8px; background: #ecf0f1; border-radius: 4px; overflow: hidden; }
 .segment-fill { height: 100%; border-radius: 4px; }
-.activity-chart { display: flex; align-items: flex-end; gap: 8px; height: 200px; }
 .bar-container { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .bar { width: 100%; background: linear-gradient(180deg, #ff4d4d, #ff7e5e); border-radius: 6px 6px 0 0; position: relative; display: flex; justify-content: center; }
 .bar-value { position: absolute; top: -20px; font-size: 10px; color: #666; }
@@ -2881,5 +2880,118 @@ select.form-input {
     to {
         transform: translateX(0);
         opacity: 1;
+    }
+}
+/* Стили для графика активности */
+.activity-chart {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-height: 240px;
+    padding: 20px 10px;
+    width: 100%;
+}
+.activity-chart[data-period="year"] {
+    overflow-x: auto;
+    justify-content: flex-start;
+}
+
+.bar-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.bar {
+    transition: transform 0.2s, background 0.2s;
+    cursor: pointer;
+    position: relative;
+}
+
+.bar:hover {
+    transform: scaleX(1.1);
+}
+
+.bar-value {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 600;
+    color: #333;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.bar-label {
+    font-size: 11px;
+    color: #555;
+    margin-top: 10px;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* Кнопки переключения периодов */
+.activity-period-buttons {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    justify-content: center;
+    padding: 8px 0;
+    flex-wrap: wrap;
+}
+
+.activity-period-btn {
+    padding: 10px 28px;
+    border-radius: 40px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.25s ease;
+    background: #f8f9fa;
+    color: #495057;
+    font-family: inherit;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.activity-period-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102,126,234,0.2);
+    background: #e9ecef;
+}
+
+.activity-period-btn.active {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+}
+
+.activity-period-btn.active:hover {
+    background: linear-gradient(135deg, #5a67d8, #6c3f8f);
+    transform: translateY(-2px);
+}
+@media (prefers-color-scheme: dark) {
+    .bar-value {
+        background: #2d3748;
+        color: #e2e8f0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    
+    .bar-label {
+        color: #cbd5e0;
+    }
+    
+    .activity-period-btn {
+        background: #2d3748;
+        color: #cbd5e0;
+    }
+    
+    .activity-period-btn:hover {
+        background: #4a5568;
     }
 }

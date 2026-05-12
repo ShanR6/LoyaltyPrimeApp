@@ -1,4 +1,6 @@
 const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const SALT_ROUNDS = 10;
 const pool = new Pool({
     user: 'postgres',
     password: 'postgres',
@@ -1220,9 +1222,9 @@ async function addCompany(companyData) {
         { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
         { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
     ]);
-    
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     const result = await query(
-        `INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings, active, created_at) 
+        `INSERT INTO companies (company, name, email, phone, hashedPassword, brand_color, description, tiers_settings, active, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW()) 
          RETURNING id, company, email, brand_color as "brandColor", description, created_at`,
         [company, name, email, phone || '', password, brandColor || '#2A4B7C', description || `Добро пожаловать в ${company}!`, defaultTiers]
@@ -1287,10 +1289,10 @@ async function createUser(vkId, companyId, name) {
         const user = result.rows[0];
         
         await client.query(
-            `INSERT INTO user_progress (user_id, company_id, total_earned, streak, created_at) 
-             VALUES ($1, $2, 100, 0, NOW())`,
-            [user.id, companyId]
-        );
+    `INSERT INTO user_progress (user_id, company_id, total_earned, streak, updated_at) 
+     VALUES ($1, $2, 100, 0, NOW())`,
+    [user.id, companyId]
+);
         
         await client.query('COMMIT');
         return user;
@@ -2388,7 +2390,6 @@ async function recalculateUserType(userId, companyId) {
     
     if (user.rows.length === 0) return;
     
-    const userData = user.rows[0];
     const now = new Date();
     
     // Получаем все покупки пользователя
@@ -2401,61 +2402,69 @@ async function recalculateUserType(userId, companyId) {
         [userId, companyId]
     );
     
-    // Если нет покупок - спящий
-    if (allPurchases.rows.length === 0) {
+    const totalPurchases = allPurchases.rows.length;
+    
+    // Если нет покупок - не включаем в сегментацию (удаляем или помечаем как inactive)
+    if (totalPurchases === 0) {
         await query(
             `UPDATE user_classification 
-             SET user_type = 'dormant', classified_at = NOW(), updated_at = NOW()
+             SET user_type = NULL, classified_at = NOW(), updated_at = NOW()
              WHERE user_id = $1 AND company_id = $2`,
             [userId, companyId]
         );
-        console.log(`📊 Пользователь ${userId}: dormant (нет покупок)`);
+        console.log(`📊 Пользователь ${userId}: нет покупок, исключен из сегментации`);
         return;
     }
     
     const lastPurchaseDate = new Date(allPurchases.rows[0].created_at);
     const daysSinceLastPurchase = Math.floor((now - lastPurchaseDate) / (1000 * 60 * 60 * 24));
-    const totalPurchases = allPurchases.rows.length;
     
     // Вычисляем максимальный интервал между покупками (в днях)
     let maxIntervalDays = 0;
-    if (allPurchases.rows.length >= 2) {
+    if (totalPurchases >= 2) {
         for (let i = 0; i < allPurchases.rows.length - 1; i++) {
             const currentDate = new Date(allPurchases.rows[i].created_at);
             const nextDate = new Date(allPurchases.rows[i + 1].created_at);
             const intervalDays = Math.floor((currentDate - nextDate) / (1000 * 60 * 60 * 24));
-            if (intervalDays > maxIntervalDays) {
-                maxIntervalDays = intervalDays;
-            }
+            if (intervalDays > maxIntervalDays) maxIntervalDays = intervalDays;
         }
     }
     
-    let newUserType = 'dormant'; // По умолчанию спящий
+    let newUserType = null;
     
-    // Логика классификации (проверяем в порядке приоритета):
+    // ========== ПРАВИЛА СЕГМЕНТАЦИИ (только для пользователей с покупками) ==========
     
-    if (totalPurchases === 0) {
-    newUserType = 'new';                     // нет покупок – новичок
-} else if (daysSinceLastPurchase >= 15) {
-    newUserType = 'dormant';                 // 15+ дней без покупок → спящий
-} else if (totalPurchases >= 2 && maxIntervalDays <= 3) {
-    newUserType = 'regular';                 // постоянный
-} else if (totalPurchases >= 2 && maxIntervalDays <= 7) {
-    newUserType = 'active';                  // активный
-} else if (totalPurchases === 1 && daysSinceLastPurchase <= 14) {
-    newUserType = 'new';                     // новичок
-} else {
-    newUserType = 'new';                     // все остальные – новички
-}
-    // Обновляем тип пользователя
-    await query(
-        `UPDATE user_classification 
-         SET user_type = $1, classified_at = NOW(), updated_at = NOW()
-         WHERE user_id = $2 AND company_id = $3`,
-        [newUserType, userId, companyId]
-    );
+    // 1. СПЯЩИЙ: 1+ покупка и прошло 15+ дней с последней покупки
+    if (daysSinceLastPurchase >= 15) {
+        newUserType = 'dormant';
+    }
+    // 2. ПОСТОЯННЫЙ: 2+ покупки и максимальный интервал между ними <= 5 дней
+    else if (totalPurchases >= 2 && maxIntervalDays <= 5) {
+        newUserType = 'regular';
+    }
+    // 3. АКТИВНЫЙ: 2+ покупки и максимальный интервал между ними <= 14 дней
+    else if (totalPurchases >= 2 && maxIntervalDays <= 14) {
+        newUserType = 'active';
+    }
+    // 4. НОВИЧОК: 1 покупка и прошло <= 14 дней
+    else if (totalPurchases === 1 && daysSinceLastPurchase <= 14) {
+        newUserType = 'new';
+    }
+    // 5. Если 2+ покупки, но интервал больше 14 дней - спящий (но с покупками)
+    else if (totalPurchases >= 2 && maxIntervalDays > 14) {
+        newUserType = 'dormant';
+    }
     
-    console.log(`📊 Пользователь ${userId}: ${newUserType} (всего покупок: ${totalPurchases}, последняя: ${daysSinceLastPurchase}дн назад, макс. интервал: ${maxIntervalDays}дн)`);
+    // Обновляем тип пользователя (только если есть тип)
+    if (newUserType) {
+        await query(
+            `UPDATE user_classification 
+             SET user_type = $1, classified_at = NOW(), updated_at = NOW()
+             WHERE user_id = $2 AND company_id = $3`,
+            [newUserType, userId, companyId]
+        );
+        console.log(`📊 Пользователь ${userId}: ${newUserType} | Покупок: ${totalPurchases} | Макс. интервал: ${maxIntervalDays} дн | Дней без покупок: ${daysSinceLastPurchase}`);
+    }
 }
 
 // Пересчет классификации всех пользователей компании
@@ -3822,8 +3831,9 @@ async function getGreetingSettings(companyId) {
 
 async function saveCashierCredentials(companyId, login, password) {
     try {
+		const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
         const result = await query(
-            `INSERT INTO cashier_credentials (company_id, login, password, updated_at)
+            `INSERT INTO cashier_credentials (company_id, login, hashedPassword, updated_at)
              VALUES ($1, $2, $3, NOW())
              ON CONFLICT (company_id) 
              DO UPDATE SET login = $2, password = $3, updated_at = NOW()

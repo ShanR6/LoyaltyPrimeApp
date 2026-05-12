@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
 const { 
     initDatabase, 
@@ -227,10 +228,16 @@ app.post('/api/companies/register', async (req, res) => {
 app.post('/api/companies/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const result = await query('SELECT * FROM companies WHERE email = $1 AND password = $2', [email, password]);
+        const result = await query('SELECT * FROM companies WHERE email = $1', [email]);
         
         if (result.rows.length > 0) {
-            res.json({ success: true, company: result.rows[0] });
+            const company = result.rows[0];
+            const match = await bcrypt.compare(password, company.password);
+            if (match) {
+                res.json({ success: true, company: company });
+            } else {
+                res.status(401).json({ success: false, message: 'Неверный email или пароль' });
+            }
         } else {
             res.status(401).json({ success: false, message: 'Неверный email или пароль' });
         }
@@ -2240,11 +2247,16 @@ app.post('/api/companies/:companyId/cashier-credentials', async (req, res) => {
 app.post('/api/cashier/login', async (req, res) => {
     try {
         const { login, password, companyId } = req.body;
-        
+        const match = await bcrypt.compare(password, credentials.password);
+if (!match) {
+    return res.status(401).json({ success: false, message: 'Неверный логин или пароль' });
+}
         if (!login || !password) {
             return res.status(400).json({ success: false, message: 'Заполните все поля' });
         }
         
+	
+		
         let credentials;
         let targetCompanyId = companyId;
         
@@ -2299,11 +2311,12 @@ app.post('/api/cashier/verify-qr', async (req, res) => {
         }
         
         // Получаем пользователя
-        const user = await getUserByVkId(vkId, companyId);
-        
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'Пользователь не найден' });
-        }
+        let user = await getUserByVkId(vkId, companyId);
+if (!user) {
+    user = await createUser(vkId, companyId, `Пользователь ${vkId}`);
+    await initializeUserClassification(user.id, companyId);
+    console.log('Создан новый пользователь через кассу:', user.id);
+}
         
         // ✅ ПОЛУЧАЕМ УРОВНИ КОМПАНИИ
         const tiers = await getCompanyTiers(companyId);
@@ -3357,25 +3370,46 @@ app.post('/api/companies/:companyId/greeting-settings', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
 // ============ API ДЛЯ ВЫРУЧКИ ПО АДРЕСАМ ============
 
 app.get('/api/companies/:companyId/addresses-revenue', async (req, res) => {
     try {
         const companyId = parseInt(req.params.companyId);
         const period = req.query.period || 'month';
+        const month = parseInt(req.query.month);
+        const year = parseInt(req.query.year);
         
         const now = new Date();
-let startDate;
-switch (period) {
-    case 'month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-    case 'year':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
-    default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-}
+        let startDate;
+        let endDate;
+        
+        // Определяем даты в зависимости от параметров
+        if (period === 'month' && month && year) {
+            // Конкретный месяц
+            startDate = new Date(year, month - 1, 1);
+            endDate = new Date(year, month, 0); // последний день месяца
+            endDate.setHours(23, 59, 59, 999);
+            console.log(`📊 Запрос за месяц: ${month}/${year}`);
+        } else if (period === 'year' && year) {
+            // Конкретный год
+            startDate = new Date(year, 0, 1);
+            endDate = new Date(year, 11, 31);
+            endDate.setHours(23, 59, 59, 999);
+            console.log(`📊 Запрос за год: ${year}`);
+        } else if (period === 'month') {
+            // Текущий месяц (по умолчанию)
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            endDate.setHours(23, 59, 59, 999);
+            console.log(`📊 Запрос за текущий месяц`);
+        } else {
+            // Текущий год (по умолчанию)
+            startDate = new Date(now.getFullYear(), 0, 1);
+            endDate = new Date(now.getFullYear(), 11, 31);
+            endDate.setHours(23, 59, 59, 999);
+            console.log(`📊 Запрос за текущий год`);
+        }
         
         // Получаем все активные адреса компании
         const addressesResult = await query(
@@ -3400,7 +3434,7 @@ switch (period) {
             citiesMap[city.id] = city.name;
         });
         
-        // Получаем выручку по адресам из транзакций
+        // Получаем выручку по адресам из транзакций за указанный период
         const revenueResult = await query(
             `SELECT 
                 t.metadata->>'address_id' as address_id,
@@ -3410,9 +3444,10 @@ switch (period) {
              AND t.source = 'pos'
              AND t.amount > 0
              AND t.created_at >= $2
+             AND t.created_at <= $3
              AND t.metadata->>'address_id' IS NOT NULL
              GROUP BY t.metadata->>'address_id'`,
-            [companyId, startDate]
+            [companyId, startDate, endDate]
         );
         
         const revenueMap = {};
@@ -3442,7 +3477,9 @@ switch (period) {
             success: true, 
             addresses: addresses,
             totalRevenue: totalRevenue,
-            period: period
+            period: period,
+            startDate: startDate,
+            endDate: endDate
         });
     } catch (error) {
         console.error('Ошибка получения выручки по адресам:', error);

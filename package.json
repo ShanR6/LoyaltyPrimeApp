@@ -13,6 +13,7 @@
     "concurrently": "^8.0.0"
   },
   "dependencies": {
-    "@vkontakte/vk-tunnel": "^0.2.10"
+    "@vkontakte/vk-tunnel": "^0.2.10",
+    "bcrypt": "^6.0.0"
   }
 }

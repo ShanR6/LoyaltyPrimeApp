@@ -317,25 +317,6 @@
             </small>
         </div>
         
-        <div class="form-group">
-    <label>🖼️ Изображение (опционально)</label>
-    <div id="notifImageUpload" style="border:2px dashed #ccc; border-radius:12px; padding:20px; text-align:center; cursor:pointer;">
-        <div>Перетащите изображение сюда или кликните для выбора</div>
-        <input type="file" id="notifImageFile" accept="image/*" style="display:none;">
-    </div>
-    <div style="position: relative; display: inline-block; margin-top: 10px;">
-    <img id="notifImagePreview" style="display:none; max-width:100%; max-height:200px; border-radius:8px;">
-    <button id="notifImageRemove" style="display:none; position:absolute; top: -8px; right: -8px; background:#e74c3c; color:white; border:none; border-radius:50%; width:24px; height:24px; font-size:14px; cursor:pointer; line-height:1;">✕</button>
-</div>
-    <input type="hidden" id="notifImageUrl" value="">
-</div>
-        
-        <div class="form-group">
-            <label>🔗 Кнопка с ссылкой (опционально)</label>
-            <input type="text" id="notifButtonLink" class="form-input" placeholder="https://vk.com/app" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
-            <input type="text" id="notifButtonText" class="form-input" placeholder="Текст кнопки" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; margin-top: 8px;">
-        </div>
-        
         <button class="btn-send" onclick="sendDirectMessage()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ff4d4d, #e74c3c); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin-top: 8px;">
             📤 Отправить сообщение
         </button>
@@ -706,25 +687,6 @@
             <div class="form-group">
                 <label>💬 Текст сообщения</label>
                 <textarea id="campaignMessage" rows="5" class="form-textarea" placeholder="Текст сообщения..."></textarea>
-            </div>
-            
-            <div class="form-group">
-    <label>🖼️ Изображение (опционально)</label>
-    <div id="campaignImageUpload" style="border:2px dashed #ccc; border-radius:12px; padding:20px; text-align:center; cursor:pointer;">
-        <div>Перетащите изображение сюда или кликните для выбора</div>
-        <input type="file" id="campaignImageFile" accept="image/*" style="display:none;">
-    </div>
-    <div style="position: relative; display: inline-block; margin-top: 10px;">
-    <img id="campaignImagePreview" style="display:none; max-width:100%; max-height:200px; border-radius:8px;">
-    <button id="campaignImageRemove" style="display:none; position:absolute; top: -8px; right: -8px; background:#e74c3c; color:white; border:none; border-radius:50%; width:24px; height:24px; font-size:14px; cursor:pointer; line-height:1;">✕</button>
-</div>
-    <input type="hidden" id="campaignImageUrl" value="">
-</div>
-            
-            <div class="form-group">
-                <label>🔗 Кнопка с ссылкой (опционально)</label>
-                <input type="text" id="campaignButtonLink" class="form-input" placeholder="https://vk.com/app">
-                <input type="text" id="campaignButtonText" class="form-input" placeholder="Текст кнопки" style="margin-top: 8px;">
             </div>
             
             <div class="form-group" id="campaignIntervalGroup">
