@@ -352,13 +352,9 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId, com
                     setTimeout(() => setShowConfetti(false), 2500);
                     prize = { type: 'bonus', value: winAmount, message: `+${winAmount} бонусов`, sector: sector };
                     
-                    if (typeof window.updateQuestProgress === 'function') {
-                        window.updateQuestProgress('spin_wheel', 1);
-                    } else {
-                        window.dispatchEvent(new CustomEvent('questProgress', { 
-                            detail: { type: 'spin_wheel', increment: 1 } 
-                        }));
-                    }
+                    window.dispatchEvent(new CustomEvent('questProgress', { 
+    detail: { type: 'spin_wheel', increment: 1 } 
+}));
                     
                     if (winAmount > 10) {
                         try { navigator.vibrate?.(200); } catch(e) {}

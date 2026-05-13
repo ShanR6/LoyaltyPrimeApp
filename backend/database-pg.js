@@ -254,7 +254,6 @@ async function initDatabase() {
         await ensureAllQuestsExist();
 		await checkAndResetQuests();
 		await addQuestColumns();
-		await addStreakColumns();
 		await addBonusSettingsColumn();
 		await addNotificationCampaignColumns();
 		await addUserProgressSpentColumn();
@@ -282,24 +281,6 @@ async function addDailyBonusSettings() {
     } catch (error) {
         console.error('❌ Ошибка добавления daily_bonus_settings:', error);
     }
-}
-
-async function addStreakColumns() {
-  try {
-    const checkColumn = await query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'user_progress' AND column_name = 'last_streak_update_date'
-    `);
-    
-    if (checkColumn.rows.length === 0) {
-      console.log('📝 Добавляем колонку last_streak_update_date в таблицу user_progress...');
-      await query(`ALTER TABLE user_progress ADD COLUMN last_streak_update_date TIMESTAMP`);
-      console.log('✅ Колонка last_streak_update_date добавлена');
-    }
-  } catch (error) {
-    console.error('Ошибка добавления колонки стрика:', error);
-  }
 }
 
 // Добавляем недостающие колонки в таблицу transactions
@@ -607,11 +588,10 @@ function getPresetQuests() {
         { emoji: '💰', title: 'Потратить 1000 рублей за 3 дня', description: 'Совершите покупки на общую сумму 1000₽ в течение 3 дней', reward: 50, durationDays: 3, targetType: 'spend_amount', targetValue: 1000 },
         { emoji: '💰', title: 'Потратить 2000 рублей за 7 дней', description: 'Совершите покупки на общую сумму 2000₽ в течение 7 дней', reward: 100, durationDays: 7, targetType: 'spend_amount', targetValue: 2000 },
         { emoji: '🛍️', title: '2 Покупки за 3 дня', description: 'Совершите 2 покупки в течение 3 дней', reward: 60, durationDays: 3, targetType: 'purchase_count', targetValue: 2 },
-        { emoji: '🛍️', title: '5 Покупок за 7 дней', description: 'Совершите 5 покупок в течение 7 дней', reward: 120, durationDays: 7, targetType: 'purchase_count', targetValue: 5 },
+        { emoji: '🛍', title: '5 Покупок за 7 дней', description: 'Совершите 5 покупок в течение 7 дней', reward: 120, durationDays: 7, targetType: 'purchase_count', targetValue: 5 },
         { emoji: '🎡', title: 'Сыграть в колесо удачи 3 раза', description: 'Покрутите колесо фортуны 3 раза', reward: 40, durationDays: 7, targetType: 'spin_wheel', targetValue: 3 },
         { emoji: '🎫', title: 'Сыграть в скретч-карту 3 раза', description: 'Сыграйте в скретч-карту 3 раза', reward: 40, durationDays: 7, targetType: 'scratch_card', targetValue: 3 },
         { emoji: '🎲', title: 'Сыграть в кости 3 раза', description: 'Сыграйте в игру в кости 3 раза', reward: 40, durationDays: 7, targetType: 'play_dice', targetValue: 3 },
-        { emoji: '🔥', title: 'Стрик из 7 дней', description: 'Выполняйте все ежедневные задания 7 дней подряд', reward: 150, durationDays: 7, targetType: 'daily_streak', targetValue: 7 },
         { emoji: '✅', title: 'Ежедневный вход', description: 'Заходите в приложение каждый день', reward: 10, durationDays: 1, targetType: 'daily_login', targetValue: 1 },
         { emoji: '🎁', title: 'Воспользоваться акцией', description: 'Купите и активируйте акцию за баллы у партнера', reward: 20, durationDays: 7, targetType: 'use_promotion', targetValue: 1 }
     ];
@@ -660,9 +640,10 @@ async function addPresetDataForCompany(companyId) {
         const presetQuests = getPresetQuests();
         for (const quest of presetQuests) {
             await query(`
-                INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
-                VALUES ($1, $2, $3, $4, $5, false, NULL, NOW(), NOW())
-            `, [companyId, quest.emoji, quest.title, quest.description, quest.reward]);
+    INSERT INTO quests (company_id, emoji, title, description, reward, active, target_type, target_value, duration_days, created_at, updated_at) 
+    VALUES ($1, $2, $3, $4, $5, false, $6, $7, $8, NOW(), NOW())
+    ON CONFLICT (company_id, title) DO NOTHING
+`, [companyId, quest.emoji, quest.title, quest.description, quest.reward, quest.targetType, quest.targetValue, quest.durationDays]);
         }
         console.log(`✅ Добавлено ${presetQuests.length} заданий`);
         
@@ -1223,12 +1204,12 @@ async function addCompany(companyData) {
         { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
     ]);
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    const result = await query(
-        `INSERT INTO companies (company, name, email, phone, hashedPassword, brand_color, description, tiers_settings, active, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW()) 
-         RETURNING id, company, email, brand_color as "brandColor", description, created_at`,
-        [company, name, email, phone || '', password, brandColor || '#2A4B7C', description || `Добро пожаловать в ${company}!`, defaultTiers]
-    );
+const result = await query(
+    `INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings, active, created_at) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW()) 
+     RETURNING id, company, email, brand_color as "brandColor", description, created_at`,
+    [company, name, email, phone || '', hashedPassword, brandColor || '#2A4B7C', description || `Добро пожаловать в ${company}!`, defaultTiers]
+);
     
     const newCompanyId = result.rows[0].id;
     
@@ -1524,34 +1505,39 @@ async function trackPurchaseProgress(userId, companyId, purchaseAmount) {
             // Проверяем выполнено ли задание
             const completed = actualProgress >= quest.target_value;
             
-            if (progressResult.rows.length === 0) {
-                // Инициализируем прогресс
-                await query(
-                    'INSERT INTO user_quest_progress (user_id, quest_id, progress, completed, claimed, updated_at) VALUES ($1, $2, $3, $4, false, NOW())',
-                    [userId, quest.id, actualProgress, completed]
-                );
-            } else {
-                const progress = progressResult.rows[0];
-                
-                // Пропускаем уже выполненные задания
-                if (progress.completed) continue;
-                
-                // Обновляем прогресс актуальными данными из временного окна
-                await query(
-                    'UPDATE user_quest_progress SET progress = $1, completed = $2, updated_at = NOW() WHERE user_id = $3 AND quest_id = $4',
-                    [actualProgress, completed, userId, quest.id]
-                );
-                
-                // Если задание выполнено, начисляем награду
-                if (completed && !progress.completed) {
-                    await updateUserBalance(userId, quest.reward, 'earn', `Задание выполнено: ${quest.title}`);
-                    await query(
-                        'INSERT INTO user_quests (user_id, quest_id, completed_at, reward_claimed) VALUES ($1, $2, NOW(), true)',
-                        [userId, quest.id]
-                    );
-                    console.log(`✅ Задание выполнено: ${quest.title}, пользователь ${userId}, награда: ${quest.reward}`);
-                }
-            }
+            if (progressResult.rows.length > 0) {
+    const progress = progressResult.rows[0];
+    const progressDate = new Date(progress.updated_at);
+    // Сбрасываем прогресс, если он был записан до начала текущего окна
+    if (progressDate < windowStartDate) {
+        await query(
+            `UPDATE user_quest_progress SET progress = 0, completed = FALSE, claimed = FALSE, updated_at = NOW()
+             WHERE user_id = $1 AND quest_id = $2`,
+            [userId, quest.id]
+        );
+    } else if (!progress.completed) {
+        // Обновляем прогресс только если задание ещё не выполнено
+        await query(
+            `UPDATE user_quest_progress SET progress = $1, completed = $2, updated_at = NOW()
+             WHERE user_id = $3 AND quest_id = $4`,
+            [actualProgress, completed, userId, quest.id]
+        );
+        if (completed) {
+            await updateUserBalance(userId, quest.reward, 'earn', `Задание выполнено: ${quest.title}`);
+            await query(
+                'INSERT INTO user_quests (user_id, quest_id, completed_at, reward_claimed) VALUES ($1, $2, NOW(), true)',
+                [userId, quest.id]
+            );
+        }
+    }
+} else {
+    await query(
+        `INSERT INTO user_quest_progress (user_id, quest_id, progress, completed, claimed, updated_at)
+         VALUES ($1, $2, $3, $4, false, NOW())
+         ON CONFLICT (user_id, quest_id) DO UPDATE SET progress = $3, completed = $4, updated_at = NOW()`,
+        [userId, quest.id, actualProgress, completed]
+    );
+}
         }
     } catch (error) {
         console.error('Ошибка trackPurchaseProgress:', error);
@@ -4252,7 +4238,6 @@ module.exports = {
 	migrateGiveawaysTable,
     getRealAnalytics,
     recalculateAllUsersClassification,
-	addStreakColumns,
 	addBonusSettingsColumn,
     // Notifications
     sendNotification,

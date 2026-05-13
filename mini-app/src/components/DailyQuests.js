@@ -4,15 +4,9 @@ const API_URL = 'http://localhost:3001';
 
 export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGroupId, vkId, companyTimezoneOffset }) {
   const [quests, setQuests] = useState([]);
-  const [totalEarned, setTotalEarned] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [lastStreakUpdateDate, setLastStreakUpdateDate] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [lastLoginDate, setLastLoginDate] = useState(null);
-  const hasCheckedToday = useRef(false);
   const hasAutoCompleted = useRef(false);
-  const streakCheckPerformed = useRef(false);
-  const getNow = () => new Date(Date.now() + (companyTimezoneOffset || 0) * 60000);
+
   // Функция для получения ключа localStorage для задания
   const getQuestStorageKey = (quest) => {
     return `quest_claimed_${userId}_${selectedGroupId}_${quest.id}`;
@@ -91,223 +85,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
       return `Доступно через: ${diffHours}ч ${diffMinutes}м`;
     } else {
       return `Доступно через: ${diffMinutes}м`;
-    }
-  };
-
-  // ============ ФУНКЦИИ ДЛЯ СТРИКА ============
-  
-  // Получить список ежедневных заданий (durationDays = 1)
-  const getDailyQuests = (questsList) => {
-    return questsList.filter(q => q.durationDays === 1);
-  };
-
-  // Проверить, выполнены ли все ежедневные задания сегодня
-  const areAllDailyQuestsCompletedToday = (questsList) => {
-    const dailyQuests = getDailyQuests(questsList);
-    if (dailyQuests.length === 0) return false;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Проверяем, что все ежедневные задания выполнены и получены сегодня
-    const allCompleted = dailyQuests.every(quest => {
-      if (!quest.completed || !quest.claimed) return false;
-      
-      const lastClaimDate = getLastClaimDate(quest);
-      if (!lastClaimDate) return false;
-      
-      const claimDate = new Date(lastClaimDate);
-      claimDate.setHours(0, 0, 0, 0);
-      
-      return claimDate.getTime() === today.getTime();
-    });
-    
-    return allCompleted;
-  };
-
-  // Проверить, были ли выполнены все ежедневные задания в указанную дату
-  const wereAllDailyQuestsCompletedOnDate = (questsList, date) => {
-    const dailyQuests = getDailyQuests(questsList);
-    if (dailyQuests.length === 0) return false;
-    
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
-    
-    const allCompleted = dailyQuests.every(quest => {
-      const lastClaimDate = getLastClaimDate(quest);
-      if (!lastClaimDate) return false;
-      
-      const claimDate = new Date(lastClaimDate);
-      claimDate.setHours(0, 0, 0, 0);
-      
-      return claimDate.getTime() === targetDate.getTime();
-    });
-    
-    return allCompleted;
-  };
-
-  // Получить все даты, когда были выполнены все ежедневные задания
-  const getAllStreakDates = (questsList) => {
-    const dailyQuests = getDailyQuests(questsList);
-    if (dailyQuests.length === 0) return [];
-    
-    // Собираем все даты выполнения для каждого ежедневного задания
-    const allCompletionDates = {};
-    
-    dailyQuests.forEach(quest => {
-      const lastClaimDate = getLastClaimDate(quest);
-      if (lastClaimDate) {
-        const dateKey = lastClaimDate.toDateString();
-        if (!allCompletionDates[dateKey]) {
-          allCompletionDates[dateKey] = [];
-        }
-        allCompletionDates[dateKey].push(quest.id);
-      }
-    });
-    
-    // Фильтруем только те даты, где выполнены ВСЕ ежедневные задания
-    const streakDates = [];
-    const dailyQuestIds = dailyQuests.map(q => q.id);
-    
-    for (const [dateKey, completedQuestIds] of Object.entries(allCompletionDates)) {
-      // Проверяем, что все ежедневные задания выполнены в этот день
-      const allCompleted = dailyQuestIds.every(id => completedQuestIds.includes(id));
-      if (allCompleted) {
-        streakDates.push(new Date(dateKey));
-      }
-    }
-    
-    // Сортируем по убыванию
-    return streakDates.sort((a, b) => b - a);
-  };
-
-  // Рассчитать текущий стрик на основе выполненных ежедневных заданий
-  const calculateCurrentStreak = (questsList) => {
-    const streakDates = getAllStreakDates(questsList);
-    if (streakDates.length === 0) return 0;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    // Проверяем, выполнены ли задания сегодня
-    const completedToday = areAllDailyQuestsCompletedToday(questsList);
-    
-    // Проверяем, выполнены ли задания вчера
-    const completedYesterday = wereAllDailyQuestsCompletedOnDate(questsList, yesterday);
-    
-    if (!completedToday && !completedYesterday) {
-      return 0; // Стрик потерян
-    }
-    
-    // Считаем непрерывную цепочку
-    let currentStreak = 0;
-    let checkDate = completedToday ? today : yesterday;
-    
-    while (true) {
-      const completed = wereAllDailyQuestsCompletedOnDate(questsList, checkDate);
-      if (!completed) break;
-      
-      currentStreak++;
-      checkDate = new Date(checkDate);
-      checkDate.setDate(checkDate.getDate() - 1);
-    }
-    
-    return currentStreak;
-  };
-
-  // Сохранение стрика в БД
-  const saveStreakToDB = async (streakValue, lastUpdateDate) => {
-    if (!userId || !selectedGroupId) return;
-    
-    try {
-      await fetch(`${API_URL}/api/users/${userId}/streak/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyId: selectedGroupId,
-          streak: streakValue,
-          lastStreakUpdateDate: lastUpdateDate || new Date().toISOString()
-        })
-      });
-      console.log(`💾 Стрик сохранен в БД: ${streakValue}`);
-    } catch (error) {
-      console.error('Ошибка сохранения стрика:', error);
-    }
-    
-    // Также сохраняем в localStorage
-    localStorage.setItem(`daily_streak_${userId}_${selectedGroupId}`, streakValue);
-    if (lastUpdateDate) {
-      localStorage.setItem(`daily_streak_last_update_${userId}_${selectedGroupId}`, lastUpdateDate);
-    }
-  };
-
-  // Загрузка стрика из БД
-  const loadStreakFromDB = async () => {
-    if (!userId || !selectedGroupId) return { streak: 0, lastUpdateDate: null };
-    
-    try {
-      const response = await fetch(`${API_URL}/api/users/${userId}/streak/${selectedGroupId}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          return { 
-            streak: data.streak || 0, 
-            lastUpdateDate: data.lastStreakUpdateDate 
-          };
-        }
-      }
-    } catch (error) {
-      console.error('Ошибка загрузки стрика:', error);
-    }
-    
-    // Fallback на localStorage
-    const savedStreak = localStorage.getItem(`daily_streak_${userId}_${selectedGroupId}`);
-    const savedDate = localStorage.getItem(`daily_streak_last_update_${userId}_${selectedGroupId}`);
-    return { 
-      streak: savedStreak ? parseInt(savedStreak) : 0, 
-      lastUpdateDate: savedDate || null 
-    };
-  };
-
-  // Обновление стрика после выполнения заданий
-  const updateStreakAfterCompletion = async (updatedQuests) => {
-    const newStreak = calculateCurrentStreak(updatedQuests);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const completedToday = areAllDailyQuestsCompletedToday(updatedQuests);
-    const lastUpdateDateObj = lastStreakUpdateDate ? new Date(lastStreakUpdateDate) : null;
-    const lastUpdateDay = lastUpdateDateObj ? new Date(lastUpdateDateObj) : null;
-    if (lastUpdateDay) lastUpdateDay.setHours(0, 0, 0, 0);
-    
-    // Если сегодня все задания выполнены и стрик увеличился
-    if (completedToday && newStreak > streak) {
-      const bonusText = newStreak === 1 ? 'начали' : `увеличили до ${newStreak}`;
-      showNotification(`🔥 Отлично! Вы ${bonusText} серию дней! +${newStreak * 5} бонусов за стрик!`);
-      
-      // Начисляем бонус за стрик (например, 5 бонусов за каждый день стрика)
-      if (onBalanceUpdate) {
-        await onBalanceUpdate(newStreak * 5, 'earn');
-      }
-    }
-    
-    // Проверяем потерю стрика
-    if (lastUpdateDay && lastUpdateDay < today && !completedToday) {
-      const wasCompletedYesterday = wereAllDailyQuestsCompletedOnDate(updatedQuests, 
-        new Date(today.setDate(today.getDate() - 1)));
-      
-      if (!wasCompletedYesterday && streak > 0) {
-        showNotification(`⚠️ Серия прервана! Вы пропустили выполнение ежедневных заданий. Начните новую серию!`);
-      }
-    }
-    
-    if (newStreak !== streak) {
-      setStreak(newStreak);
-      setLastStreakUpdateDate(completedToday ? new Date().toISOString() : lastStreakUpdateDate);
-      await saveStreakToDB(newStreak, completedToday ? new Date().toISOString() : lastStreakUpdateDate);
     }
   };
 
@@ -450,32 +227,27 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     
     try {
       if (onBalanceUpdate) {
-        await onBalanceUpdate(quest.reward, 'earn');
-      }
-      
-      setQuests(prev => {
-        const updated = prev.map(q => 
-          q.id === quest.id ? { ...q, claimed: true } : q
-        );
-        // Обновляем стрик после изменения статуса задания
-        setTimeout(() => updateStreakAfterCompletion(updated), 0);
-        return updated;
-      });
-      
-      saveClaimedDate(quest);
-      
-      await fetch(`${API_URL}/api/users/completeQuest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userId,
-          questId: quest.id,
-          reward: quest.reward,
-          claimReward: true
-        })
-      });
-      
-      showNotification(`🎁 Задание "${quest.title}" выполнено! +${quest.reward} бонусов!`);
+    await onBalanceUpdate(quest.reward, 'earn');
+}
+
+setQuests(prev => prev.map(q => 
+    q.id === quest.id ? { ...q, claimed: true } : q
+));
+
+saveClaimedDate(quest);
+
+await fetch(`${API_URL}/api/users/completeQuest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        userId: userId,
+        questId: quest.id,
+        reward: quest.reward,
+        claimReward: true
+    })
+});
+
+showNotification(`🎁 Задание "${quest.title}" выполнено! +${quest.reward} бонусов!`);
       
     } catch (error) {
       console.error('Ошибка начисления бонуса:', error);
@@ -487,24 +259,24 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     if (!userId || !selectedGroupId) return;
     
     if (!canClaimQuestBonus(quest)) {
-      setQuests(prev => prev.map(q => {
-        if (q.id === quest.id) {
-          return { ...q, completed: true, claimed: true };
-        }
-        return q;
-      }));
-      return;
+        setQuests(prev => prev.map(q => {
+            if (q.id === quest.id) {
+                return { ...q, completed: true, claimed: true };
+            }
+            return q;
+        }));
+        return;
     }
     
     setQuests(prev => prev.map(q => {
-      if (q.id === quest.id) {
-        return { ...q, completed: true, claimed: false };
-      }
-      return q;
+        if (q.id === quest.id) {
+            return { ...q, completed: true, claimed: false };
+        }
+        return q;
     }));
     
     showNotification(`✅ Задание "${quest.title}" выполнено! Нажмите "Забрать" чтобы получить +${quest.reward} бонусов!`);
-  };
+};
 
   const loadLastCompletedDates = async () => {
     if (!userId || !selectedGroupId) return {};
@@ -594,25 +366,7 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
         transformed.forEach(q => {
           console.log(`  - ${q.title}: прогресс ${q.progress}/${q.target}, completed=${q.completed}, durationDays=${q.durationDays}`);
         });
-        
-        // Загружаем сохраненный стрик
-        const { streak: savedStreak, lastUpdateDate: savedLastUpdate } = await loadStreakFromDB();
-        
-        // Рассчитываем актуальный стрик на основе выполненных заданий
-        const calculatedStreak = calculateCurrentStreak(transformed);
-        
-        // Используем максимальный из сохраненного и рассчитанного
-        // (на случай, если в БД старые данные)
-        const finalStreak = Math.max(savedStreak, calculatedStreak);
-        setStreak(finalStreak);
-        setLastStreakUpdateDate(savedLastUpdate);
-        
-        // Если стрик потерян, обновляем БД
-        if (calculatedStreak === 0 && savedStreak > 0) {
-          await saveStreakToDB(0, null);
-          showNotification(`⚠️ Ваша серия из ${savedStreak} дней прервана! Выполняйте ежедневные задания каждый день, чтобы не терять серию.`);
-        }
-        
+		
         return transformed;
       }
     } catch (error) {
@@ -713,34 +467,12 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }
   }, [loading, quests]);
 
-  // Проверка стрика при загрузке (проверяем, не пропустил ли пользователь день)
-  useEffect(() => {
-    if (!loading && quests.length > 0 && !streakCheckPerformed.current) {
-      streakCheckPerformed.current = true;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const completedToday = areAllDailyQuestsCompletedToday(quests);
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const completedYesterday = wereAllDailyQuestsCompletedOnDate(quests, yesterday);
-      
-      // Если сегодня не выполнено и вчера не выполнено, но стрик > 0 - сбрасываем
-      if (!completedToday && !completedYesterday && streak > 0) {
-        setStreak(0);
-        saveStreakToDB(0, null);
-        showNotification(`⚠️ Серия прервана! Вы не выполнили ежедневные задания вовремя.`);
-      }
-    }
-  }, [loading, quests, streak]);
-
   // Сохранение прогресса
   useEffect(() => {
     if (!loading && quests.length > 0 && userId && selectedGroupId) {
-      saveProgressToDB(quests, totalEarned, streak, lastLoginDate);
+      saveProgressToDB(quests, 0, 0, null);
     }
-  }, [quests, totalEarned, streak, loading, userId, selectedGroupId]);
+  }, [quests, loading, userId, selectedGroupId]);
 
   const showNotification = (message) => {
     const notification = document.createElement('div');
@@ -754,7 +486,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     console.log(`🔍 mapQuestType для "${title}" -> lower: "${lowerTitle}"`);
     
     if (lowerTitle.includes('ежедневный вход')) return 'daily_login';
-    if (lowerTitle.includes('стрик')) return 'daily_streak';
     if (lowerTitle.includes('потратить')) return 'spend_amount';
     if (lowerTitle.includes('покупк')) return 'purchase_count';
     if (lowerTitle.includes('колесо удачи')) return 'spin_wheel';
@@ -774,29 +505,11 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     if (lowerTitle.includes('колесо удачи 3 раза')) return 3;
     if (lowerTitle.includes('скретч-карту 3 раза')) return 3;
     if (lowerTitle.includes('кости 3 раза')) return 3;
-    if (lowerTitle.includes('стрик из 7 дней')) return 7;
     return 1;
   }
 
   const getCompletedCount = () => quests.filter(q => q.completed).length;
   const totalAvailable = quests.reduce((sum, q) => sum + (q.completed && !q.claimed ? q.reward : 0), 0);
-
-  // Вспомогательная функция для склонения слова "день"
-  const getStreakWord = (days) => {
-    if (days === 1) return 'день';
-    if (days >= 2 && days <= 4) return 'дня';
-    return 'дней';
-  };
-
-  // Получаем количество выполненных ежедневных заданий сегодня
-  const getCompletedDailyCount = () => {
-    const dailyQuests = getDailyQuests(quests);
-    const completed = dailyQuests.filter(q => q.completed && q.claimed).length;
-    return { completed, total: dailyQuests.length };
-  };
-
-  const dailyStats = getCompletedDailyCount();
-  const allDailyCompleted = dailyStats.total > 0 && dailyStats.completed === dailyStats.total;
 
   if (loading) {
     return (
@@ -811,22 +524,6 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
       <div style={styles.header}>
         <div>
           <h3 style={styles.title}>📋 Задания</h3>
-          <div style={styles.streak}>
-            🔥 Серия: {streak} {getStreakWord(streak)}
-            {streak > 0 && (
-              <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 5 }}>
-                (ежедневные задания)
-              </span>
-            )}
-          </div>
-          {dailyStats.total > 0 && (
-            <div style={{ fontSize: 11, color: allDailyCompleted ? '#2ecc71' : '#f39c12', marginTop: 4 }}>
-              📅 Ежедневные задания: {dailyStats.completed}/{dailyStats.total}
-              {allDailyCompleted && (
-                <span style={{ marginLeft: 8 }}>✅ Серия увеличится завтра!</span>
-              )}
-            </div>
-          )}
         </div>
         <div style={styles.rewardInfo}>🎁 Доступно: {totalAvailable} бонусов</div>
       </div>
@@ -955,7 +652,6 @@ const styles = {
   container: { background: 'rgba(30, 35, 48, 0.7)', borderRadius: 28, padding: 20, marginBottom: 20 },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 },
   title: { fontSize: 18, fontWeight: 700, margin: 0, color: 'white' },
-  streak: { fontSize: 12, color: '#ffd966', marginTop: 4 },
   rewardInfo: { fontSize: 13, color: '#ffd966', background: 'rgba(255,215,0,0.15)', padding: '6px 12px', borderRadius: 20 },
   progressOverview: { marginBottom: 20, padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderRadius: 16 },
   progressBarContainer: { height: 6, background: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 },

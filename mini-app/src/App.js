@@ -453,13 +453,11 @@ const updateBalanceAndStats = async (change, type, metadata = {}) => {
   let newTotalEarned = cur.totalEarned || 0;
   
   if (type === 'earn') {
-    newTotalEarned = cur.totalEarned + change;
-    addHistory(`Начисление +${change}`, change, 'earn');
-  } else if (type === 'spend') {
-    // ✅ При списании бонусов (игры) увеличиваем totalSpent
-    newTotalSpent = (cur.totalSpent || 0) + Math.abs(change);
-    addHistory(`Списание: ${Math.abs(change)} баллов (игровая активность)`, change, 'spend');
-  }
+    addHistory(`Выигрыш в игре: +${change}`, change, 'earn');
+} else if (type === 'spend') {
+    const gameType = metadata.gameType || 'игра';
+    addHistory(`Ставка в игре: -${Math.abs(change)}`, change, 'spend');
+}
   
   const newData = { 
     ...cur, 
@@ -1859,6 +1857,10 @@ const progressToNext = getProgressToNextTier(currentSpent);
           selectedGroupId={selectedGroup?.id}
           vkId={userInfo?.id}
 		  companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
+		   onProgressUpdate={(updatedQuests) => {
+            // Можно обновить состояние, если нужно
+            console.log('Прогресс заданий обновлен', updatedQuests);
+        }}
         />
       )}
       

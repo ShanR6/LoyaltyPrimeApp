@@ -332,7 +332,7 @@
     <!-- Header with logout button -->
     <div class="header" id="mainHeader" style="display: none;">
         <h1>🏪 Страница кассира</h1>
-        <button class="logout-btn" onclick="cashierLogout()">🚪 Выйти</button>
+        <button class="logout-btn" onclick="cashierLogout()">Выйти</button>
     </div>
     
     <h1 id="pageTitle" style="color: white; text-align: center; margin-bottom: 20px;">🏪 Страница кассира</h1>
@@ -359,14 +359,14 @@
         <div id="scannerScreen" class="hidden">
             <!-- QR Scanner Card -->
             <div class="card">
-                <h3>📷 Сканирование QR-кода</h3>
+                <h3>Сканирование QR-кода</h3>
                 <div class="scanner-area">
                     <p style="color: #666;">Отсканируйте QR-код с помощью камеры или загрузите изображение</p>
                     
                     <!-- Scanner Control Buttons -->
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                         <button class="btn" id="startScanBtn" onclick="startCameraScan()" style="flex: 1;">
-                            📸 Начать сканирование
+                            Начать сканирование
                         </button>
                         <button class="btn btn-warning" id="stopScanBtn" onclick="stopCameraScan()" style="flex: 1; display: none;">
                             ⏹️ Остановить
@@ -379,7 +379,7 @@
                     
                     <!-- Image Upload Section -->
                     <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 12px; text-align: center;">
-                        <h3 style="margin-bottom: 10px;">🖼️ Загрузите фото с QR-кодом</h3>
+                        <h3 style="margin-bottom: 10px;">Загрузите фото с QR-кодом</h3>
                         <p style="color: #666; font-size: 14px; margin-bottom: 15px;">Выберите изображение, вставьте из буфера или перетащите сюда</p>
                         
                         <input type="file" id="qrImageInput" accept="image/*" style="display: none;" onchange="handleImageFileSelect(event)">
@@ -394,7 +394,7 @@
                         </button>
                         
                         <div id="dropZone" style="margin-top: 15px; padding: 20px; border: 2px dashed #ccc; border-radius: 8px; background: white;">
-                            <div style="color: #999; font-size: 13px;">📤 Перетащите изображение сюда</div>
+                            <div style="color: #999; font-size: 13px;">Перетащите изображение сюда</div>
                         </div>
                         
                         <div id="imageUploadResult" style="margin-top: 10px;"></div>

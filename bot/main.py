@@ -130,16 +130,6 @@ def send_messages():
         full_message = f"📢 {title}\n\n{message}"
         sent_count = 0
         failed_count = 0
-        
-        # Загружаем изображение один раз для всех пользователей
-        photo_attachment = None
-        if image_url:
-            print(f"🖼️ Загрузка изображения: {image_url}")
-            photo_attachment = upload_photo_from_url(image_url)
-            if photo_attachment:
-                print(f"✅ Изображение готово: {photo_attachment}")
-            else:
-                print(f"⚠️ Не удалось загрузить изображение, будет отправлена ссылка")
 
         # Создаем клавиатуру с кнопкой если есть ссылка
         keyboard = None
@@ -163,16 +153,6 @@ def send_messages():
                     "message": full_message,
                     "random_id": random_id
                 }
-
-                # Используем загруженное фото или ссылку как запасной вариант
-                if photo_attachment:
-                    params["attachment"] = photo_attachment
-                elif image_url:
-                    # Если не удалось загрузить, отправляем ссылку в тексте
-                    params["message"] = full_message + f"\n\n🖼️ Изображение: {image_url}"
-
-                if keyboard:
-                    params["keyboard"] = json.dumps(keyboard, ensure_ascii=False)
 
                 vk.messages.send(**params)
                 sent_count += 1
@@ -226,16 +206,6 @@ def send_campaign_messages():
         full_message = f"{title}\n\n{message}"
         sent_count = 0
         failed_count = 0
-        
-        # Загружаем изображение один раз для всех пользователей
-        photo_attachment = None
-        if image_url:
-            print(f"🖼️ Загрузка изображения: {image_url}")
-            photo_attachment = upload_photo_from_url(image_url)
-            if photo_attachment:
-                print(f"✅ Изображение готово: {photo_attachment}")
-            else:
-                print(f"⚠️ Не удалось загрузить изображение, будет отправлена ссылка")
 
         # Создаем клавиатуру с кнопкой если есть ссылка
         keyboard = None
@@ -259,13 +229,6 @@ def send_campaign_messages():
                     "message": full_message,
                     "random_id": random_id
                 }
-
-                # Используем загруженное фото или ссылку как запасной вариант
-                if photo_attachment:
-                    params["attachment"] = photo_attachment
-                elif image_url:
-                    # Если не удалось загрузить, отправляем ссылку в тексте
-                    params["message"] = full_message + f"\n\n🖼️ Изображение: {image_url}"
 
                 if keyboard:
                     params["keyboard"] = json.dumps(keyboard, ensure_ascii=False)

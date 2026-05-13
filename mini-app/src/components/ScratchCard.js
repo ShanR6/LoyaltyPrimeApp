@@ -285,120 +285,128 @@ useEffect(() => {
     };
 
     // Новая игра
-    const newGame = async () => {
-        if (isRevealing) return;
-        if (!settings.active) {
-            alert('Игра временно недоступна');
-            return;
+const newGame = async () => {
+    if (isRevealing) return;
+    if (!settings.active) {
+        alert('Игра временно недоступна');
+        return;
+    }
+    
+    if (isLimitReached()) {
+        alert(`❌ Вы исчерпали лимит игр на сегодня (${settings.maxPlaysPerDay}/${settings.maxPlaysPerDay}). Завтра будет новый лимит!`);
+        return;
+    }
+    
+    if (userBalance < settings.cost) {
+        alert(`❌ Недостаточно бонусов! Нужно ${settings.cost} бонусов.`);
+        return;
+    }
+    
+    await onBalanceUpdate(-settings.cost, 'spend', { source: 'game', gameType: 'scratch', action: 'newGame' });
+    
+    // ✅ СОХРАНЯЕМ СЧЁТЧИК В БД
+    try {
+        const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyId, gameType: 'scratch', timezoneOffset: companyTimezoneOffset })
+        });
+        const data = await response.json();
+        if (data.success) {
+            setPlaysToday(data.playsToday);
+            console.log('✅ Scratch plays incremented to:', data.playsToday);
         }
-        
-        if (isLimitReached()) {
-            alert(`❌ Вы исчерпали лимит игр на сегодня (${settings.maxPlaysPerDay}/${settings.maxPlaysPerDay}). Завтра будет новый лимит!`);
-            return;
-        }
-        
-        if (userBalance < settings.cost) {
-            alert(`❌ Недостаточно бонусов! Нужно ${settings.cost} бонусов.`);
-            return;
-        }
-        
-        await onBalanceUpdate(-settings.cost, 'spend', { source: 'game', gameType: 'scratch', action: 'newGame' });
-        
-        // ✅ СОХРАНЯЕМ СЧЁТЧИК В БД
-        try {
-            const response = await fetch(`${API_URL}/api/users/${userId}/games/increment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ companyId, gameType: 'scratch', timezoneOffset: companyTimezoneOffset })
-});
-            const data = await response.json();
-            if (data.success) {
-                setPlaysToday(data.playsToday);
-                console.log('✅ Scratch plays incremented to:', data.playsToday);
-            }
-        } catch (error) {
-            console.error('Ошибка сохранения счетчика игр:', error);
-            setPlaysToday(prev => (prev || 0) + 1);
-        }
-        
-        const newBoard = createBoard(settings.symbols);
-        const winningSym = newBoard.find(cell => cell.isWinning)?.symbol;
-        
-        setBoard(newBoard);
-        setSelectedSymbol(winningSym);
-        setGameActive(true);
-        setResult(null);
-        setLastWin(null);
-        setShowConfetti(false);
-        setAttemptsLeft(settings.maxAttempts);
-        setFoundWinning(0);
-    };
+    } catch (error) {
+        console.error('Ошибка сохранения счетчика игр:', error);
+        setPlaysToday(prev => (prev || 0) + 1);
+    }
+    
+    // ✅ ОТПРАВЛЯЕМ СОБЫТИЕ О ПРОГРЕССЕ ЗАДАНИЯ (1 раз за игру)
+    // Это должно быть здесь, а не только при выигрыше!
+    window.dispatchEvent(new CustomEvent('questProgress', { 
+        detail: { type: 'scratch_card', increment: 1 } 
+    }));
+    
+    const newBoard = createBoard(settings.symbols);
+    const winningSym = newBoard.find(cell => cell.isWinning)?.symbol;
+    
+    setBoard(newBoard);
+    setSelectedSymbol(winningSym);
+    setGameActive(true);
+    setResult(null);
+    setLastWin(null);
+    setShowConfetti(false);
+    setAttemptsLeft(settings.maxAttempts);
+    setFoundWinning(0);
+};
 
-    // Открыть ячейку
-    const revealCell = (index, isFreeHint = false) => {
-        if (!gameActive) return;
-        if (isRevealing) return;
-        if (board[index].revealed) return;
-        if (attemptsLeft <= 0) return;
+// Открыть ячейку
+const revealCell = (index, isFreeHint = false) => {
+    if (!gameActive) return;
+    if (isRevealing) return;
+    if (board[index].revealed) return;
+    if (attemptsLeft <= 0) return;
+    
+    setIsRevealing(true);
+    
+    const currentAttemptsLeft = attemptsLeft;
+    const currentFoundWinning = foundWinning;
+    
+    setTimeout(async () => {
+        const newBoard = [...board];
+        newBoard[index].revealed = true;
+        setBoard(newBoard);
         
-        setIsRevealing(true);
+        let newAttemptsLeft = currentAttemptsLeft;
+        let newFoundWinning = currentFoundWinning;
         
-        const currentAttemptsLeft = attemptsLeft;
-        const currentFoundWinning = foundWinning;
+        if (!isFreeHint) {
+            newAttemptsLeft = currentAttemptsLeft - 1;
+            setAttemptsLeft(newAttemptsLeft);
+        }
         
-        setTimeout(async () => {
-            const newBoard = [...board];
-            newBoard[index].revealed = true;
-            setBoard(newBoard);
+        if (newBoard[index].isWinning) {
+            newFoundWinning = currentFoundWinning + 1;
+            setFoundWinning(newFoundWinning);
             
-            let newAttemptsLeft = currentAttemptsLeft;
-            let newFoundWinning = currentFoundWinning;
-            
-            if (!isFreeHint) {
-                newAttemptsLeft = currentAttemptsLeft - 1;
-                setAttemptsLeft(newAttemptsLeft);
-            }
-            
-            if (newBoard[index].isWinning) {
-                newFoundWinning = currentFoundWinning + 1;
-                setFoundWinning(newFoundWinning);
-                
-                if (newFoundWinning === 3) {
-                    const winAmount = newBoard[index].symbol.value * newBoard[index].symbol.multiplier;
-                    await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'scratch', action: 'win' });
-                    setLastWin(winAmount);
-                    setShowConfetti(true);
-                    setTimeout(() => setShowConfetti(false), 3000);
-                    setResult({
-                        type: 'win',
-                        value: winAmount,
-                        message: `🎉 ПОБЕДА! Вы нашли 3 ${newBoard[index].symbol.name} и выиграли ${winAmount} бонусов! 🎉`
-                    });
-                    setGameActive(false);
-                    try { navigator.vibrate?.(200); } catch(e) {}
-                    
-                    if (typeof window.updateQuestProgress === 'function') {
-                        window.updateQuestProgress('scratch_card', 1);
-                    }
-                }
-            }
-            
-            if (!isFreeHint && newAttemptsLeft === 0 && newFoundWinning < 3) {
+            if (newFoundWinning === 3) {
+                const winAmount = newBoard[index].symbol.value * newBoard[index].symbol.multiplier;
+                await onBalanceUpdate(winAmount, 'earn', { source: 'game', gameType: 'scratch', action: 'win' });
+                setLastWin(winAmount);
+                setShowConfetti(true);
+                setTimeout(() => setShowConfetti(false), 3000);
                 setResult({
-                    type: 'lose',
-                    value: 0,
-                    message: `😢 Вы не нашли 3 одинаковых символа за ${settings.maxAttempts} попыток. Попробуйте ещё раз!`
+                    type: 'win',
+                    value: winAmount,
+                    message: `🎉 ПОБЕДА! Вы нашли 3 ${newBoard[index].symbol.name} и выиграли ${winAmount} бонусов! 🎉`
                 });
                 setGameActive(false);
+                try { navigator.vibrate?.(200); } catch(e) {}
+                
+                // ❌ УДАЛИТЕ ЭТОТ ДУБЛИРУЮЩИЙ ВЫЗОВ - он уже есть в newGame
+                // window.dispatchEvent(new CustomEvent('questProgress', { 
+                //     detail: { type: 'scratch_card', increment: 1 } 
+                // }));
             }
-            
-            setIsRevealing(false);
-            
-            if (!isFreeHint && typeof window.updateQuestProgress === 'function') {
-                window.updateQuestProgress('scratch_card', 1);
-            }
-        }, 200);
-    };
+        }
+        
+        if (!isFreeHint && newAttemptsLeft === 0 && newFoundWinning < 3) {
+            setResult({
+                type: 'lose',
+                value: 0,
+                message: `😢 Вы не нашли 3 одинаковых символа за ${settings.maxAttempts} попыток. Попробуйте ещё раз!`
+            });
+            setGameActive(false);
+        }
+        
+        setIsRevealing(false);
+        
+        // ❌ УДАЛИТЕ ЭТОТ СТАРЫЙ ВЫЗОВ
+        // if (!isFreeHint && typeof window.updateQuestProgress === 'function') {
+        //     window.updateQuestProgress('scratch_card', 1);
+        // }
+    }, 200);
+};
 
     // Подсказка - показать одну выигрышную ячейку
     const showHint = async () => {

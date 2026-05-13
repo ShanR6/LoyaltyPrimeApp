@@ -232,7 +232,9 @@ app.post('/api/companies/login', async (req, res) => {
         
         if (result.rows.length > 0) {
             const company = result.rows[0];
-            const match = await bcrypt.compare(password, company.password);
+            // Прямое сравнение строк (без хеширования)
+            const match = (company.password === password);
+            
             if (match) {
                 res.json({ success: true, company: company });
             } else {
@@ -2740,49 +2742,6 @@ app.post('/api/companies/:companyId/recalculate-classification', async (req, res
     }
 });
 
-// Получение стрика пользователя
-app.get('/api/users/:userId/streak/:companyId', async (req, res) => {
-  try {
-    const { userId, companyId } = req.params;
-    
-    const result = await query(
-      'SELECT streak, last_streak_update_date FROM user_progress WHERE user_id = $1 AND company_id = $2',
-      [userId, companyId]
-    );
-    
-    const streak = result.rows.length > 0 ? result.rows[0].streak : 0;
-    const lastStreakUpdateDate = result.rows.length > 0 ? result.rows[0].last_streak_update_date : null;
-    
-    res.json({ success: true, streak, lastStreakUpdateDate });
-  } catch (error) {
-    console.error('Ошибка получения стрика:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Обновление стрика пользователя
-app.post('/api/users/:userId/streak/update', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { companyId, streak, lastStreakUpdateDate } = req.body;
-    
-    await query(
-      `INSERT INTO user_progress (user_id, company_id, streak, last_streak_update_date, updated_at) 
-       VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (user_id, company_id) 
-       DO UPDATE SET 
-         streak = EXCLUDED.streak,
-         last_streak_update_date = EXCLUDED.last_streak_update_date,
-         updated_at = NOW()`,
-      [userId, companyId, streak, lastStreakUpdateDate || null]
-    );
-    
-    res.json({ success: true, streak });
-  } catch (error) {
-    console.error('Ошибка обновления стрика:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 // ============ API ДЛЯ НАСТРОЕК БОНУСНОЙ СИСТЕМЫ ============
 
 // Получение настроек бонусной системы компании
@@ -3559,6 +3518,49 @@ app.post('/api/users/:userId/games/increment', async (req, res) => {
         res.json({ success: true, playsToday });
     } catch (error) {
         console.error('Ошибка увеличения счетчика игр:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Добавьте после других API эндпоинтов:
+
+// Завершение задания
+app.post('/api/users/:userId/quests/complete', async (req, res) => {
+    try {
+        const { userId, questId, reward } = req.body;
+        
+        // Проверяем, не выполнено ли уже задание
+        const existing = await query(
+            'SELECT * FROM user_quests WHERE user_id = $1 AND quest_id = $2',
+            [userId, questId]
+        );
+        
+        if (existing.rows.length > 0) {
+            return res.json({ success: true, alreadyCompleted: true });
+        }
+        
+        // Отмечаем задание как выполненное
+        await query(
+            `INSERT INTO user_quests (user_id, quest_id, completed_at, reward_claimed) 
+             VALUES ($1, $2, NOW(), true)`,
+            [userId, questId]
+        );
+        
+        // Обновляем прогресс в user_quest_progress
+        await query(
+            `INSERT INTO user_quest_progress (user_id, quest_id, progress, completed, claimed, updated_at)
+             VALUES ($1, $2, $3, true, true, NOW())
+             ON CONFLICT (user_id, quest_id)
+             DO UPDATE SET progress = $3, completed = true, claimed = true, updated_at = NOW()`,
+            [userId, questId, 1]
+        );
+        
+        // Начисляем награду
+        await updateUserBalance(userId, reward, 'earn', `Задание выполнено! +${reward} бонусов`);
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка выполнения задания:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
