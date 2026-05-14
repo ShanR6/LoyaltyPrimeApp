@@ -235,7 +235,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
         return;
     }
     
-    await onBalanceUpdate(-totalCost, 'spend', { source: 'game', gameType: 'dice' });
+    await onBalanceUpdate(totalCost, 'spend', { source: 'game', gameType: 'dice' });
     
     // ✅ СОХРАНЯЕМ СЧЁТЧИК В БД
     try {

@@ -281,7 +281,7 @@ export function GameWheel({ onBalanceUpdate, userBalance, companyId, userId, com
         }
         
         if (cost > 0) {
-            await onBalanceUpdate(-cost, 'spend', { source: 'game', gameType: 'wheel' });
+            await onBalanceUpdate(cost, 'spend', { source: 'game', gameType: 'wheel' });
         }
         
         setIsSpinning(true);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 const API_URL = 'http://localhost:3001';
 
-export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGroupId, vkId, companyTimezoneOffset }) {
+export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGroupId, vkId, companyTimezoneOffset,onRefreshBalance }) {
   const [quests, setQuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const hasAutoCompleted = useRef(false);
@@ -211,49 +211,59 @@ export function DailyQuests({ userBalance, onBalanceUpdate, userId, selectedGrou
     }));
   };
 
-  const claimQuestBonus = async (quest) => {
+const claimQuestBonus = async (quest) => {
     if (!userId || !selectedGroupId) return;
     
     if (!canClaimQuestBonus(quest)) {
-      const timeRemaining = getTimeRemainingText(quest);
-      showNotification(`❌ Бонус пока недоступен. ${timeRemaining || 'Попробуйте позже'}`);
-      return;
+        const timeRemaining = getTimeRemainingText(quest);
+        showNotification(`❌ Бонус пока недоступен. ${timeRemaining || 'Попробуйте позже'}`);
+        return;
     }
     
     if (quest.claimed) {
-      showNotification('❌ Вы уже получили бонус за этот период');
-      return;
+        showNotification('❌ Вы уже получили бонус за этот период');
+        return;
     }
     
     try {
-      if (onBalanceUpdate) {
-    await onBalanceUpdate(quest.reward, 'earn');
-}
-
-setQuests(prev => prev.map(q => 
-    q.id === quest.id ? { ...q, claimed: true } : q
-));
-
-saveClaimedDate(quest);
-
-await fetch(`${API_URL}/api/users/completeQuest`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-        userId: userId,
-        questId: quest.id,
-        reward: quest.reward,
-        claimReward: true
-    })
-});
-
-showNotification(`🎁 Задание "${quest.title}" выполнено! +${quest.reward} бонусов!`);
-      
+        // ✅ ТОЛЬКО ОДИН ЗАПРОС НА БЭКЕНД
+        const response = await fetch(`${API_URL}/api/users/completeQuest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: userId,
+                questId: quest.id,
+                reward: quest.reward
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // ✅ ОБНОВЛЯЕМ ЛОКАЛЬНОЕ СОСТОЯНИЕ
+            setQuests(prev => prev.map(q => 
+                q.id === quest.id ? { ...q, claimed: true } : q
+            ));
+            
+            saveClaimedDate(quest);
+            
+            // ✅ СИНХРОНИЗИРУЕМ БАЛАНС
+            if (onRefreshBalance) {
+                await onRefreshBalance();
+            }
+            
+            showNotification(`🎁 Задание "${quest.title}" выполнено! +${quest.reward} бонусов!`);
+        } else {
+            showNotification(data.message || data.error || '❌ Ошибка при получении бонуса');
+        }
+        
     } catch (error) {
-      console.error('Ошибка начисления бонуса:', error);
-      showNotification('❌ Ошибка при получении бонуса');
+        console.error('Ошибка начисления бонуса:', error);
+        showNotification('❌ Ошибка при получении бонуса');
     }
-  };
+};
+
+
 
   const handleDailyLogin = async (quest) => {
     if (!userId || !selectedGroupId) return;
@@ -309,71 +319,75 @@ showNotification(`🎁 Задание "${quest.title}" выполнено! +${qu
   const loadQuestsFromDB = async () => {
     if (!selectedGroupId) return [];
     try {
-      const response = await fetch(`${API_URL}/api/quests/${selectedGroupId}`);
-      if (response.ok) {
-        const questsData = await response.json();
-        const userProgress = await loadUserProgress();
-        const userQuestProgress = userProgress?.quests || [];
-        
-        console.log('📥 Загруженный прогресс из БД:', userQuestProgress);
-        
-        const transformed = questsData
-          .filter(q => q.active)
-          .map(q => {
-            const userProgressForQuest = userQuestProgress.find(p => p.id === q.id);
+        const response = await fetch(`${API_URL}/api/quests/${selectedGroupId}`);
+        if (response.ok) {
+            const questsData = await response.json();
+            const userProgress = await loadUserProgress();
+            const userQuestProgress = userProgress?.quests || [];
             
-            // Используем прогресс из БД, если он есть
-            let progress = userProgressForQuest?.progress || 0;
-            let isCompleted = userProgressForQuest?.completed || false;
-            let isClaimed = userProgressForQuest?.claimed || false;
+            console.log('📥 Загруженный прогресс из БД:', userQuestProgress);
             
-            // Проверяем в localStorage для заданий с периодом
-            const key = getQuestStorageKey(q);
-            const saved = localStorage.getItem(key);
-            if (saved && !isClaimed) {
-              try {
-                const data = JSON.parse(saved);
-                const lastClaimDate = new Date(data.date);
-                const today = new Date();
-                const durationDays = q.duration_days || 1;
-                const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
-                
-                if (daysDiff < durationDays) {
-                  isClaimed = true;
-                  isCompleted = true;
-                }
-              } catch(e) {}
-            }
+            const transformed = questsData
+                .filter(q => q.active)
+                .map(q => {
+                    const userProgressForQuest = userQuestProgress.find(p => p.id === q.id);
+                    
+                    const targetValue = getTargetByType(q.title);
+                    let progress = userProgressForQuest?.progress || 0;
+                    
+                    // ✅ ПЕРЕСЧИТЫВАЕМ completed на основе прогресса и цели
+                    // НЕ используем isCompleted из БД, так как он может быть неправильным
+                    const isActuallyCompleted = progress >= targetValue;
+                    let isClaimed = userProgressForQuest?.claimed || false;
+                    
+                    // Проверяем в localStorage для заданий с периодом
+                    const key = getQuestStorageKey(q);
+                    const saved = localStorage.getItem(key);
+                    if (saved && !isClaimed) {
+                        try {
+                            const data = JSON.parse(saved);
+                            const lastClaimDate = new Date(data.date);
+                            const today = new Date();
+                            const durationDays = q.duration_days || 1;
+                            const daysDiff = Math.floor((today - lastClaimDate) / (1000 * 60 * 60 * 24));
+                            
+                            if (daysDiff < durationDays) {
+                                isClaimed = true;
+                            }
+                        } catch(e) {}
+                    }
+                    
+                    console.log(`📊 ${q.title}: прогресс=${progress}, цель=${targetValue}, completed=${isActuallyCompleted}, claimed=${isClaimed}`);
+                    
+                    return {
+                        id: q.id,
+                        title: q.title,
+                        description: q.description || '',
+                        reward: q.reward,
+                        type: mapQuestType(q.title),
+                        target: targetValue,
+                        progress: progress,
+                        completed: isActuallyCompleted,  // ✅ пересчитано!
+                        claimed: isClaimed,
+                        emoji: q.emoji || '✅',
+                        durationDays: q.duration_days || 1,
+                        status: q.active ? 'active' : 'inactive',
+                        lastCompletedAt: null
+                    };
+                });
             
-            return {
-              id: q.id,
-              title: q.title,
-              description: q.description || '',
-              reward: q.reward,
-              type: mapQuestType(q.title),
-              target: getTargetByType(q.title),
-              progress: progress,
-              completed: isCompleted,
-              claimed: isClaimed,
-              emoji: q.emoji || '✅',
-              durationDays: q.duration_days || 1,
-              status: q.active ? 'active' : 'inactive',
-              lastCompletedAt: null
-            };
-          });
-        
-        console.log('📋 ЗАГРУЖЕННЫЕ ЗАДАНИЯ С ПРОГРЕССОМ:');
-        transformed.forEach(q => {
-          console.log(`  - ${q.title}: прогресс ${q.progress}/${q.target}, completed=${q.completed}, durationDays=${q.durationDays}`);
-        });
-		
-        return transformed;
-      }
+            console.log('📋 ЗАГРУЖЕННЫЕ ЗАДАНИЯ С ПРОГРЕССОМ:');
+            transformed.forEach(q => {
+                console.log(`  - ${q.title}: прогресс ${q.progress}/${q.target}, completed=${q.completed}, durationDays=${q.durationDays}`);
+            });
+            
+            return transformed;
+        }
     } catch (error) {
-      console.error('Ошибка загрузки заданий из БД:', error);
+        console.error('Ошибка загрузки заданий из БД:', error);
     }
     return [];
-  };
+};
 
   const saveProgressToDB = async (questsData, totalEarnedData, streakData, lastLoginData) => {
     if (!userId || !selectedGroupId) return;
@@ -485,16 +499,39 @@ showNotification(`🎁 Задание "${quest.title}" выполнено! +${qu
     const lowerTitle = title.toLowerCase();
     console.log(`🔍 mapQuestType для "${title}" -> lower: "${lowerTitle}"`);
     
-    if (lowerTitle.includes('ежедневный вход')) return 'daily_login';
-    if (lowerTitle.includes('потратить')) return 'spend_amount';
-    if (lowerTitle.includes('покупк')) return 'purchase_count';
-    if (lowerTitle.includes('колесо удачи')) return 'spin_wheel';
-    if (lowerTitle.includes('скретч')) return 'scratch_card';
-    if (lowerTitle.includes('кости')) return 'play_dice';
+    // ✅ ДОБАВИТЬ ПРОВЕРКУ ДЛЯ АКЦИИ (самую первую!)
+    if (lowerTitle.includes('воспользоваться акцией') || lowerTitle.includes('акцией')) {
+        console.log(`   ✅ Определён тип: use_promotion`);
+        return 'use_promotion';
+    }
+    if (lowerTitle.includes('ежедневный вход')) {
+        console.log(`   ✅ Определён тип: daily_login`);
+        return 'daily_login';
+    }
+    if (lowerTitle.includes('потратить')) {
+        console.log(`   ✅ Определён тип: spend_amount`);
+        return 'spend_amount';
+    }
+    if (lowerTitle.includes('покупк')) {
+        console.log(`   ✅ Определён тип: purchase_count`);
+        return 'purchase_count';
+    }
+    if (lowerTitle.includes('колесо удачи')) {
+        console.log(`   ✅ Определён тип: spin_wheel`);
+        return 'spin_wheel';
+    }
+    if (lowerTitle.includes('скретч')) {
+        console.log(`   ✅ Определён тип: scratch_card`);
+        return 'scratch_card';
+    }
+    if (lowerTitle.includes('кости')) {
+        console.log(`   ✅ Определён тип: play_dice`);
+        return 'play_dice';
+    }
     
-    console.log(`⚠️ Тип не определен для "${title}", возвращаю daily_login`);
+    console.log(`   ⚠️ Тип не определен для "${title}", возвращаю daily_login`);
     return 'daily_login';
-  }
+}
   
   function getTargetByType(title) {
     const lowerTitle = title.toLowerCase();
@@ -505,8 +542,11 @@ showNotification(`🎁 Задание "${quest.title}" выполнено! +${qu
     if (lowerTitle.includes('колесо удачи 3 раза')) return 3;
     if (lowerTitle.includes('скретч-карту 3 раза')) return 3;
     if (lowerTitle.includes('кости 3 раза')) return 3;
+    // ✅ ДОБАВИТЬ ДЛЯ АКЦИИ И ВХОДА
+    if (lowerTitle.includes('воспользоваться акцией')) return 1;
+    if (lowerTitle.includes('ежедневный вход')) return 1;
     return 1;
-  }
+}
 
   const getCompletedCount = () => quests.filter(q => q.completed).length;
   const totalAvailable = quests.reduce((sum, q) => sum + (q.completed && !q.claimed ? q.reward : 0), 0);

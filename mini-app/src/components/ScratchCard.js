@@ -302,7 +302,7 @@ const newGame = async () => {
         return;
     }
     
-    await onBalanceUpdate(-settings.cost, 'spend', { source: 'game', gameType: 'scratch', action: 'newGame' });
+    await onBalanceUpdate(settings.cost, 'spend', { source: 'game', gameType: 'scratch', action: 'newGame' });
     
     // ✅ СОХРАНЯЕМ СЧЁТЧИК В БД
     try {
@@ -383,10 +383,6 @@ const revealCell = (index, isFreeHint = false) => {
                 setGameActive(false);
                 try { navigator.vibrate?.(200); } catch(e) {}
                 
-                // ❌ УДАЛИТЕ ЭТОТ ДУБЛИРУЮЩИЙ ВЫЗОВ - он уже есть в newGame
-                // window.dispatchEvent(new CustomEvent('questProgress', { 
-                //     detail: { type: 'scratch_card', increment: 1 } 
-                // }));
             }
         }
         
@@ -401,10 +397,6 @@ const revealCell = (index, isFreeHint = false) => {
         
         setIsRevealing(false);
         
-        // ❌ УДАЛИТЕ ЭТОТ СТАРЫЙ ВЫЗОВ
-        // if (!isFreeHint && typeof window.updateQuestProgress === 'function') {
-        //     window.updateQuestProgress('scratch_card', 1);
-        // }
     }, 200);
 };
 

@@ -1653,62 +1653,32 @@ function updateConfirmButtonState() {
         // ============ ЗАГРУЗКА ДОСТУПНЫХ АКЦИЙ (ПЛАТНЫХ И БЕСПЛАТНЫХ) ============
 async function loadAvailablePromotions() {
     if (!currentUser || !currentCompanyId) return;
-    
+
     try {
-        // Загружаем АКТИВНЫЕ акции компании
-        const promotionsResponse = await fetch(`${API_URL}/api/promotions/${currentCompanyId}`);
-        const allPromotions = await promotionsResponse.json();
-        
-        const now = new Date();
-        
-        // Фильтруем активные акции (и бесплатные, и платные) - ТОЛЬКО ТЕ, У КОТОРЫХ НЕ ИСТЕК СРОК
-        const activePromotions = allPromotions.filter(promo => {
-            if (!promo.active) return false;
-            if (!promo.start_date || !promo.end_date) return false;
-            const startDate = new Date(promo.start_date);
-            const endDate = new Date(promo.end_date);
-            return now >= startDate && now <= endDate; // ← ТОЛЬКО АКТУАЛЬНЫЕ ПО ДАТАМ
-        });
-        
-        // Загружаем КУПЛЕННЫЕ акции пользователя (платные) - бэкенд уже вернёт только непросроченные
         const purchasedResponse = await fetch(`${API_URL}/api/users/${currentUser.id}/promotions/purchased/${currentCompanyId}`);
         const purchasedResult = await purchasedResponse.json();
-        
-        // Формируем список доступных акций: бесплатные + купленные платные
+
         availablePromotions = [];
-        
-        // Бесплатные акции (is_free = true) - только активные по датам
-        const freePromos = activePromotions.filter(p => p.is_free === true);
-        availablePromotions.push(...freePromos.map(p => ({
-            id: p.id,
-            name: p.name,
-            discount: p.reward_value,
-            products: p.products || '',
-            type: 'free',
-            is_purchased: false,
-            is_free: true,
-            price: p.price || 0,
-            end_date: p.end_date
-        })));
-        
-        // Купленные платные акции (бэкенд уже вернул только непросроченные, неиспользованные)
+
         if (purchasedResult.success && purchasedResult.purchased) {
-            const purchasedPromos = purchasedResult.purchased.filter(p => !p.used);
-            availablePromotions.push(...purchasedPromos.map(p => ({
-                id: p.promotion_id,
-                name: p.name,
-                discount: p.reward_value,
-                products: p.products || '',
-                type: 'paid',
-                is_purchased: true,
-                is_free: false,
-                promotion_cycle_start: p.promotion_cycle_start,
-                end_date: p.end_date
-            })));
+            availablePromotions = purchasedResult.purchased
+                .filter(p => !p.used)
+                .map(p => ({
+                    id: p.promotion_id,
+                    name: p.name,
+                    discount: p.reward_value,
+                    products: '', // при необходимости можно добавить в ответ бэкенда
+                    type: p.is_free ? 'free' : 'paid',
+                    is_purchased: true,
+                    is_free: p.is_free,
+                    price: p.price || 0,
+                    end_date: p.end_date,
+                    promotion_cycle_start: p.promotion_cycle_start
+                }));
         }
-        
+
         const container = document.getElementById('availablePromotionsList');
-        
+
         if (availablePromotions.length === 0) {
             container.innerHTML = '<div class="warning">⚠️ Нет доступных акций</div>';
             const promoRadio = document.querySelector('input[value="promotion"]');
@@ -1722,7 +1692,7 @@ async function loadAvailablePromotions() {
                 promoRadio.disabled = false;
                 promoRadio.parentElement.style.opacity = '1';
             }
-            
+
             container.innerHTML = availablePromotions.map(promo => `
                 <div class="promotion-option ${selectedPromotion?.id === promo.id && selectedPromotion?.type === promo.type ? 'selected' : ''}" 
                      onclick="selectPromotion(${promo.id}, '${promo.name.replace(/'/g, "\\'")}', ${promo.discount}, '${(promo.products || '').replace(/'/g, "\\'")}', '${promo.type}', ${promo.is_purchased || false}, '${promo.promotion_cycle_start || ''}', ${promo.is_free || false})">
@@ -1735,7 +1705,6 @@ async function loadAvailablePromotions() {
                         </div>
                         <span style="font-size: 20px;">${selectedPromotion?.id === promo.id && selectedPromotion?.type === promo.type ? '✅' : '○'}</span>
                     </div>
-                    ${promo.products ? `<div style="font-size: 11px; color: #666; margin-top: 5px;">📦 ${promo.products.substring(0, 50)}</div>` : ''}
                 </div>
             `).join('');
         }
@@ -1962,27 +1931,21 @@ async function loadAvailablePromotions() {
             if (currentUser) currentUser.balance = spendResult.newBalance;
             
         } else if (currentDiscountType === 'promotion' && selectedPromotion) {
-            discountRub = Math.floor(currentOrderAmount * selectedPromotion.discount / 100);
-            
-            // Для ПЛАТНЫХ акций - отмечаем как использованную в БД
-            if (selectedPromotion.type === 'paid') {
-                const promoResponse = await fetch(`${API_URL}/api/pos/use-purchased-promotion`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        qrData: JSON.stringify(currentQrData),
-                        promotionId: selectedPromotion.id
-                    })
-                });
-                
-                const promoResult = await promoResponse.json();
-                if (!promoResult.success) throw new Error(promoResult.message);
-            }
-            
-            // ❌ НЕ создаём транзакцию для акции здесь!
-            // Транзакция уже была создана при покупке акции в приложении
-            // Просто применяем скидку к заказу
-        }
+    discountRub = Math.floor(currentOrderAmount * selectedPromotion.discount / 100);
+
+    // Отмечаем любую акцию как использованную (и платную, и бесплатную)
+    const promoResponse = await fetch(`${API_URL}/api/pos/use-purchased-promotion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            qrData: JSON.stringify(currentQrData),
+            promotionId: selectedPromotion.id
+        })
+    });
+
+    const promoResult = await promoResponse.json();
+    if (!promoResult.success) throw new Error(promoResult.message);
+}
         
         // 2. Начисляем бонусы за покупку
 const earnResponse = await fetch(`${API_URL}/api/pos/apply-bonus-v2`, {

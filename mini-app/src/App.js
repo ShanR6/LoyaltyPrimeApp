@@ -67,7 +67,9 @@ const adjustDateToLocal = (dateString, companyOffset) => {
     const correctedTime = parsed.getTime() + (userOffset - companyOffset) * 60000;
     return new Date(correctedTime);
 };
-
+const handleRefreshBalance = async () => {
+    await syncBalanceFromDB();
+};
 const getCurrentTierBySpent = (spent) => {
   if (tiers && tiers.length > 0) {
     let current = tiers[0];
@@ -441,68 +443,79 @@ const addHistory = (desc, pointsChange, type) => {
 
 
 const updateBalanceAndStats = async (change, type, metadata = {}) => {
-  if (!selectedGroup) return false;
-  const cur = getCurrentGroupData();
-  let newBalance = cur.bonusBalance + change;
-  if (newBalance < 0) {
-    showModal('Недостаточно бонусов', `Не хватает ${Math.abs(change)} баллов в "${selectedGroup.name}"`);
-    return false;
-  }
-  
-  let newTotalSpent = cur.totalSpent || 0;
-  let newTotalEarned = cur.totalEarned || 0;
-  
-  if (type === 'earn') {
-    addHistory(`Выигрыш в игре: +${change}`, change, 'earn');
-} else if (type === 'spend') {
-    const gameType = metadata.gameType || 'игра';
-    addHistory(`Ставка в игре: -${Math.abs(change)}`, change, 'spend');
-}
-  
-  const newData = { 
-    ...cur, 
-    bonusBalance: newBalance,
-    totalEarned: newTotalEarned,
-    totalSpent: newTotalSpent
-  };
-  
-  // Сохраняем локально (для быстрого UI)
-  saveCurrentGroupData(newData);
-  
-  // ✅ Отправляем на сервер и получаем обновленные данные
-  if (userId) {
-    try {
-      const response = await fetch(`${API_URL}/api/users/updateBalance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userId,
-          change: change,
-          type: type,
-          description: type === 'earn' ? `Начисление ${change} бонусов` : `Списание ${Math.abs(change)} бонусов`,
-          metadata: { source: metadata.source || 'game', gameType: metadata.gameType }
-        })
-      });
-      
-      const result = await response.json();
-      if (result.success) {
-        // ✅ Синхронизируем с сервером (на случай расхождений)
-        if (result.newTotalSpent !== undefined) {
-          const syncedData = { 
-            ...newData, 
-            totalSpent: result.newTotalSpent,
-            totalEarned: result.newTotalEarned,
-            bonusBalance: result.newBalance
-          };
-          saveCurrentGroupData(syncedData);
-        }
-      }
-    } catch (error) {
-      console.error('Ошибка обновления баланса на сервере:', error);
+    if (!selectedGroup) return false;
+    
+    // ✅ Если это синхронизация из DailyQuests, не дублируем историю
+    const isSync = metadata.source === 'sync' || metadata.skipSync === true;
+    
+    const cur = getCurrentGroupData();
+    let newBalance = cur.bonusBalance + change;
+    if (newBalance < 0) {
+        showModal('Недостаточно бонусов', `Не хватает ${Math.abs(change)} баллов в "${selectedGroup.name}"`);
+        return false;
     }
-  }
-  
-  return true;
+    
+    let newTotalSpent = cur.totalSpent || 0;
+    let newTotalEarned = cur.totalEarned || 0;
+    
+    if (type === 'earn') {
+        // ✅ Добавляем историю ТОЛЬКО если это не синхронизация
+        if (!isSync) {
+            addHistory(`Выигрыш в игре: +${change}`, change, 'earn');
+        }
+        newTotalEarned += change;
+    } else if (type === 'spend') {
+        if (!isSync) {
+            const gameType = metadata.gameType || 'игра';
+            addHistory(`Ставка в игре: -${Math.abs(change)}`, change, 'spend');
+        }
+        newTotalSpent += Math.abs(change);
+    }
+    
+    const newData = { 
+        ...cur, 
+        bonusBalance: newBalance,
+        totalEarned: newTotalEarned,
+        totalSpent: newTotalSpent
+    };
+    
+    // Сохраняем локально (для быстрого UI)
+    saveCurrentGroupData(newData);
+    
+    // ✅ Отправляем на сервер ТОЛЬКО если это не синхронизация
+    if (userId && !isSync) {
+        try {
+            const response = await fetch(`${API_URL}/api/users/updateBalance`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: userId,
+                    change: change,
+                    type: type,
+                    description: type === 'earn' ? `Начисление ${change} бонусов` : `Списание ${Math.abs(change)} бонусов`,
+                    metadata: { source: metadata.source || 'game', gameType: metadata.gameType }
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                // ✅ Синхронизируем с сервером (на случай расхождений)
+                if (result.newTotalSpent !== undefined) {
+                    const syncedData = { 
+                        ...newData, 
+                        totalSpent: result.newTotalSpent,
+                        totalEarned: result.newTotalEarned,
+                        bonusBalance: result.newBalance
+                    };
+                    saveCurrentGroupData(syncedData);
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка обновления баланса на сервере:', error);
+        }
+    }
+    
+    return true;
 };
   
 
@@ -1807,7 +1820,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
         <div style={{ display: 'none' }}>
             <DailyQuests 
                 userBalance={currentBalance} 
-                onBalanceUpdate={updateBalanceAndStats} 
+                onBalanceUpdate={updateBalanceAndStats}				
                 userId={userId} 
                 selectedGroupId={selectedGroup?.id}
                 vkId={userInfo?.id}
@@ -1853,6 +1866,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
         <DailyQuests 
           userBalance={currentBalance} 
           onBalanceUpdate={updateBalanceAndStats} 
+		  onRefreshBalance={handleRefreshBalance} 
           userId={userId} 
           selectedGroupId={selectedGroup?.id}
           vkId={userInfo?.id}

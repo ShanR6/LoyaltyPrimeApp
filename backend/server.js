@@ -99,8 +99,9 @@ const {
 	clearPromotionPurchases,
 	shouldClearPurchasesForPromotion,
 	incrementUserGamePlays,
-getUserGamePlaysToday,
-getTodayString	
+	getUserGamePlaysToday,
+	getTodayString,
+	trackDailyLogin	
 } = require('./database-pg');
 
 const app = express();
@@ -109,24 +110,6 @@ app.use(express.json());
 app.use(express.static('crm-panel'));
 const multer = require('multer');
 const path = require('path');
-
-// Настройка хранилища multer
-const storage = multer.diskStorage({
-    destination: './uploads/',
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5 MB
-
-// Статическая раздача загруженных файлов
-app.use('/uploads', express.static('uploads'));
-
-// Эндпоинт для загрузки изображений (возвращает URL)
-app.post('/api/upload', upload.single('image'), (req, res) => {
-    if (!req.file) return res.status(400).json({ success: false, message: 'Файл не загружен' });
-    res.json({ success: true, url: `/uploads/${req.file.filename}` });
-});
 
 app.use((req, res, next) => {
     console.log(`📨 ${req.method} ${req.url}`);
@@ -151,7 +134,7 @@ async function createDefaultCampaignsForCompany(companyId) {
             {
                 name: '🎂 Поздравление с днем рождения',
                 title: 'С днем рождения! 🎉🎂',
-                message: 'Поздравляем вас с днем рождения! В честь вашего праздника дарим вам удвоенные бонусы! Желаем счастья и здоровья! 🎈🎁',
+                message: 'Поздравляем вас с днем рождения! Желаем счастья и здоровья! 🎈🎁',
                 audience: 'birthday',
                 is_active: false, // По умолчанию выключена
                 interval_days: 1,
@@ -183,19 +166,6 @@ async function createDefaultCampaignsForCompany(companyId) {
 // ============ HEALTH CHECK ============
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend работает на PostgreSQL!' });
-});
-
-app.put('/api/companies/:companyId/logo', upload.single('logo'), async (req, res) => {
-    try {
-        const companyId = parseInt(req.params.companyId);
-        if (!req.file) return res.status(400).json({ success: false, message: 'Файл не загружен' });
-        const logoUrl = `/uploads/${req.file.filename}`;
-        await query('UPDATE companies SET logo_url = $1 WHERE id = $2', [logoUrl, companyId]);
-        res.json({ success: true, logoUrl });
-    } catch (error) {
-        console.error('Ошибка загрузки логотипа:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
 });
 
 // ============ API ДЛЯ КОМПАНИЙ ============
@@ -708,6 +678,8 @@ app.post('/api/users/getOrCreate', async (req, res) => {
         // Отслеживаем посещение приложения для классификации пользователя
         await initializeUserClassification(user.id, companyId);
         await updateUserClassification(user.id, companyId, 'app_visit');
+		
+		 await trackDailyLogin(user.id, companyId);
         
         const allQuests = await getQuests(companyId);
         const now = new Date();
@@ -789,24 +761,60 @@ app.post('/api/users/completeQuest', async (req, res) => {
             }
         }
         
+        // ✅ ПРОВЕРЯЕМ, НЕ ПОЛУЧИЛ ЛИ УЖЕ БОНУС
         const existing = await query(
             'SELECT * FROM user_quests WHERE user_id = $1 AND quest_id = $2',
             [userId, questId]
         );
         
         if (existing.rows.length > 0) {
-            return res.status(400).json({ error: 'Задание уже выполнено' });
+            return res.status(400).json({ error: 'Бонус за это задание уже получен' });
         }
         
+        // ✅ ПРОВЕРЯЕМ, ВЫПОЛНЕНО ЛИ ЗАДАНИЕ (прогресс >= цель)
+        const progressResult = await query(
+            `SELECT uqp.progress, q.target_value 
+             FROM user_quest_progress uqp
+             JOIN quests q ON uqp.quest_id = q.id
+             WHERE uqp.user_id = $1 AND uqp.quest_id = $2`,
+            [userId, questId]
+        );
+        
+        let isCompleted = false;
+        let currentProgress = 0;
+        let targetValue = 1;
+        
+        if (progressResult.rows.length > 0) {
+            currentProgress = progressResult.rows[0].progress || 0;
+            targetValue = progressResult.rows[0].target_value || 1;
+            isCompleted = currentProgress >= targetValue;
+        }
+        
+        if (!isCompleted) {
+            return res.status(400).json({ 
+                error: `Задание ещё не выполнено. Прогресс: ${currentProgress}/${targetValue}` 
+            });
+        }
+        
+        // ✅ ЗАПИСЫВАЕМ ВЫПОЛНЕНИЕ
         await query(
             'INSERT INTO user_quests (user_id, quest_id, completed_at, reward_claimed) VALUES ($1, $2, NOW(), $3)',
             [userId, questId, true]
         );
         
-        await updateQuestProgress(userId, questId, 1, true, true);
+        // ✅ ОБНОВЛЯЕМ user_quest_progress: помечаем как полученное
+        await query(
+            `UPDATE user_quest_progress 
+             SET claimed = true, updated_at = NOW()
+             WHERE user_id = $1 AND quest_id = $2`,
+            [userId, questId]
+        );
+        
+        // ✅ НАЧИСЛЯЕМ БОНУС (только здесь!)
         await updateUserBalance(userId, reward, 'earn', `Задание выполнено! +${reward} бонусов`);
         
         res.json({ success: true });
+        
     } catch (error) {
         console.error('Ошибка выполнения задания:', error);
         res.status(500).json({ error: error.message });
