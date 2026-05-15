@@ -914,7 +914,8 @@ background: linear-gradient(135deg, #2A4B7C 0%, #4A7A9C 100%);
 .stat-trend.up { color: #2ecc71; }
 .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
 .chart-card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-.chart-card h3 { margin-bottom: 20px; font-size: 18px; }
+.chart-card h3 { margin-bottom: 20px; font-size: 18px; text-align: center; }
+
 .full-width { grid-column: span 2; }
 .segment-item { margin-bottom: 16px; }
 .segment-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }

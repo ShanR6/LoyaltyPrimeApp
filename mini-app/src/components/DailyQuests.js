@@ -563,9 +563,9 @@ const claimQuestBonus = async (quest) => {
     <div style={styles.container}>
       <div style={styles.header}>
         <div>
-          <h3 style={styles.title}>📋 Задания</h3>
+          <h3 style={styles.title}>Задания</h3>
         </div>
-        <div style={styles.rewardInfo}>🎁 Доступно: {totalAvailable} бонусов</div>
+        <div style={styles.rewardInfo}>Доступно: {totalAvailable} бонусов</div>
       </div>
       
       <div style={styles.progressOverview}>
@@ -587,20 +587,20 @@ const claimQuestBonus = async (quest) => {
           
           if (quest.claimed) {
             if (timeRemaining) {
-              statusDisplay = `⏳ ${timeRemaining}`;
+              statusDisplay = `${timeRemaining}`;
               statusColor = '#f39c12';
             } else {
-              statusDisplay = '✅ Получено';
+              statusDisplay = 'Получено';
               statusColor = '#2ecc71';
             }
           } else if (quest.completed) {
-            statusDisplay = '🎁 Готово к получению';
+            statusDisplay = 'Готово к получению';
             statusColor = '#f39c12';
           } else if (quest.status === 'active') {
-            statusDisplay = '🟢 Активно';
+            statusDisplay = 'Активно';
             statusColor = '#2ecc71';
           } else {
-            statusDisplay = '⚫ Неактивно';
+            statusDisplay = 'Неактивно';
             statusColor = '#888';
           }
           
@@ -615,19 +615,19 @@ const claimQuestBonus = async (quest) => {
                   {quest.title}
                   {isDailyQuest && (
                     <span style={{ fontSize: 10, marginLeft: 8, background: quest.completed && quest.claimed ? '#2ecc71' : '#f39c12', padding: '2px 6px', borderRadius: 12, color: '#333' }}>
-                      {quest.completed && quest.claimed ? '✅ Выполнено' : '📅 Ежедневное'}
+                      {quest.completed && quest.claimed ? 'Выполнено' : 'Ежедневное'}
                     </span>
                   )}
                 </div>
                 <div style={styles.questDescription}>{quest.description}</div>
                 {quest.durationDays > 1 && (quest.type === 'spin_wheel' || quest.type === 'scratch_card' || quest.type === 'play_dice') && (
                   <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                    ⏱️ Бонус доступен 1 раз в {quest.durationDays} {getDaysWord(quest.durationDays)}
+                    Бонус доступен 1 раз в {quest.durationDays} {getDaysWord(quest.durationDays)}
                   </div>
                 )}
                 {quest.type === 'daily_login' && quest.durationDays > 1 && (
                   <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                    ⏱️ Бонус доступен 1 раз в {quest.durationDays} {getDaysWord(quest.durationDays)}
+                    Бонус доступен 1 раз в {quest.durationDays} {getDaysWord(quest.durationDays)}
                   </div>
                 )}
                 {/* Прогресс бар */}
@@ -655,10 +655,10 @@ const claimQuestBonus = async (quest) => {
                 <div style={styles.rewardLabel}>бонусов</div>
                 {!quest.completed ? (
                   <div style={{ ...styles.statusPending, color: quest.status === 'active' ? '#aaa' : '#888' }}>
-                    {quest.status === 'active' ? '⏳ Не выполнено' : '🔒 Неактивно'}
+                    {quest.status === 'active' ? 'Не выполнено' : 'Неактивно'}
                   </div>
                 ) : quest.claimed ? (
-                  <div style={styles.statusClaimed}>✅ Получено</div>
+                  <div style={styles.statusClaimed}>Получено</div>
                 ) : (
                   <button onClick={() => claimReward(quest)} style={styles.claimButton}>Забрать</button>
                 )}

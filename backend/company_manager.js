@@ -1,5 +1,6 @@
 const readline = require('readline');
 const { Pool } = require('pg');
+const { addPresetDataForCompany } = require('./database-pg');
 
 const pool = new Pool({
     user: 'postgres',
@@ -25,7 +26,7 @@ async function syncSequence() {
 
 // Функция для создания компании
 async function createCompany() {
-    console.log('\n📝 Создание новой компании\n');
+    console.log('\nСоздание новой компании\n');
     
     const company = await question('Название компании: ');
     const name = await question('Имя владельца: ');
@@ -36,7 +37,7 @@ async function createCompany() {
     const description = await question('Описание: ');
     
     if (!company || !name || !email || !password) {
-        console.log('❌ Ошибка: Название, имя, email и пароль обязательны');
+        console.log('Ошибка: Название, имя, email и пароль обязательны');
         return;
     }
     
@@ -52,7 +53,8 @@ async function createCompany() {
     );
     
     const companyId = result.rows[0].id;
-    console.log(`\n✅ Компания "${company}" успешно создана!`);
+	await addPresetDataForCompany(companyId);
+    console.log(`\nКомпания "${company}" успешно создана!`);
     console.log(`   ID: ${companyId}`);
     console.log(`   Email: ${email}`);
     console.log(`   Пароль: ${password}`);
@@ -64,11 +66,11 @@ async function deleteCompany() {
     const companies = await pool.query('SELECT id, company, email FROM companies ORDER BY id');
     
     if (companies.rows.length === 0) {
-        console.log('\n📋 Нет компаний в базе данных');
+        console.log('\nНет компаний в базе данных');
         return;
     }
     
-    console.log('\n📋 Список компаний:');
+    console.log('\nСписок компаний:');
     companies.rows.forEach(comp => {
         console.log(`   ID: ${comp.id} | ${comp.company} | ${comp.email}`);
     });
@@ -78,7 +80,7 @@ async function deleteCompany() {
     
     const companyId = parseInt(answer);
     if (isNaN(companyId)) {
-        console.log('❌ Некорректный ID');
+        console.log('Некорректный ID');
         return;
     }
     
@@ -86,11 +88,11 @@ async function deleteCompany() {
     const company = await pool.query('SELECT id, company, email FROM companies WHERE id = $1', [companyId]);
     
     if (company.rows.length === 0) {
-        console.log('❌ Компания с таким ID не найдена');
+        console.log('Компания с таким ID не найдена');
         return;
     }
     
-    console.log(`\n⚠️  Вы собираетесь удалить компанию:`);
+    console.log(`\nВы собираетесь удалить компанию:`);
     console.log(`   Название: ${company.rows[0].company}`);
     console.log(`   Email: ${company.rows[0].email}`);
     
@@ -98,13 +100,13 @@ async function deleteCompany() {
     
     if (confirm.toLowerCase() === 'yes') {
         await pool.query('DELETE FROM companies WHERE id = $1', [companyId]);
-        console.log('✅ Компания успешно удалена!');
+        console.log('Компания успешно удалена!');
         
         // Синхронизируем последовательность после удаления
         await syncSequence();
-        console.log('🔄 Последовательность ID синхронизирована');
+        console.log('Последовательность ID синхронизирована');
     } else {
-        console.log('❌ Удаление отменено');
+        console.log('Удаление отменено');
     }
 }
 
@@ -113,11 +115,11 @@ async function listCompanies() {
     const companies = await pool.query('SELECT id, company, email, phone, created_at FROM companies ORDER BY id');
     
     if (companies.rows.length === 0) {
-        console.log('\n📋 Нет компаний в базе данных');
+        console.log('\nНет компаний в базе данных');
         return;
     }
     
-    console.log('\n📋 Список компаний:');
+    console.log('\nСписок компаний:');
     console.log('┌────┬──────────────────────────┬──────────────────────────┬─────────────┐');
     console.log('│ ID │ Название                 │ Email                    │ Телефон     │');
     console.log('├────┼──────────────────────────┼──────────────────────────┼─────────────┤');
@@ -130,20 +132,20 @@ async function listCompanies() {
     });
     
     console.log('└────┴──────────────────────────┴──────────────────────────┴─────────────┘');
-    console.log(`\n📊 Всего компаний: ${companies.rows.length}`);
+    console.log(`\nВсего компаний: ${companies.rows.length}`);
 }
 
 // Главное меню
 async function showMenu() {
     console.clear();
-    console.log('╔════════════════════════════════════════╗');
-    console.log('║     🏢 Управление компаниями           ║');
-    console.log('╠════════════════════════════════════════╣');
-    console.log('║  1. 📋 Показать все компании           ║');
-    console.log('║  2. ➕  Создать новую компанию         ║');
-    console.log('║  3. ❌  Удалить компанию               ║');
-    console.log('║  4. 🚪 Выход                           ║');
-    console.log('╚════════════════════════════════════════╝');
+    console.log('╔════════════════════════════════════╗');
+    console.log('║     Управление компаниями          ║');
+    console.log('╠════════════════════════════════════╣');
+    console.log('║  1. Показать все компании          ║');
+    console.log('║  2. Создать новую компанию         ║');
+    console.log('║  3. Удалить компанию               ║');
+    console.log('║  4. Выход                          ║');
+    console.log('╚════════════════════════════════════╝');
     console.log('');
 }
 
@@ -152,7 +154,7 @@ async function main() {
     try {
         // Проверяем подключение к БД
         await pool.query('SELECT NOW()');
-        console.log('✅ Подключение к базе данных установлено\n');
+        console.log('Подключение к базе данных установлено\n');
         
         let running = true;
         
@@ -178,13 +180,13 @@ async function main() {
                     running = false;
                     break;
                 default:
-                    console.log('\n❌ Неверный выбор. Попробуйте снова.');
+                    console.log('\nНеверный выбор. Попробуйте снова.');
                     await question('\nНажмите Enter для продолжения...');
             }
         }
         
     } catch (error) {
-        console.error('❌ Ошибка:', error.message);
+        console.error('Ошибка:', error.message);
     } finally {
         rl.close();
         await pool.end();

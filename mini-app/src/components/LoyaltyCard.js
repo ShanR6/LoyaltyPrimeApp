@@ -65,9 +65,9 @@ export function LoyaltyCard({ userInfo, selectedGroup, companyTimezoneOffset }) 
     return (
         <div style={styles.container}>
             <div style={styles.header}>
-                <h3 style={styles.title}>🎫 Моя карта лояльности</h3>
+                <h3 style={styles.title}>Моя карта лояльности</h3>
                 <button onClick={generateQRCode} style={styles.refreshBtn} disabled={isGenerating}>
-                    {isGenerating ? '🔄 Генерация...' : '🔄 Обновить'}
+                    {isGenerating ? 'Генерация...' : 'Обновить'}
                 </button>
             </div>
             
@@ -85,15 +85,15 @@ export function LoyaltyCard({ userInfo, selectedGroup, companyTimezoneOffset }) 
                 )}
                 
                 <div style={styles.qrHint}>
-                    <div>📸 Покажите этот QR-код кассиру</div>
+                    <div>Покажите этот QR-код кассиру</div>
                     <div style={styles.timer}>
-                        ⏱️ Действителен: {formatTime(countdown)}
+                        Действителен: {formatTime(countdown)}
                     </div>
                 </div>
             </div>
             
             <div style={styles.instruction}>
-                <div style={styles.instructionTitle}>📖 Как использовать:</div>
+                <div style={styles.instructionTitle}>Как использовать:</div>
                 <ol style={styles.instructionList}>
                     <li>Покажите QR-код кассиру</li>
                     <li>Кассир отсканирует QR-код с помощью камеры или загрузит фото</li>

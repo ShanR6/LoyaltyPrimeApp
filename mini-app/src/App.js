@@ -300,7 +300,7 @@ const saveSelectedLocation = async (addressId) => {
         if (data.success) {
             await loadUserSelectedLocation();
             setShowLocationSelector(false);
-            showModal('📍 Адрес сохранен', 'Ваш адрес выбран. При следующем посещении он будет использоваться по умолчанию.');
+            showModal('Адрес сохранен', 'Ваш адрес выбран. При следующем посещении он будет использоваться по умолчанию.');
         }
     } catch (error) {
         console.error('Ошибка сохранения локации:', error);
@@ -796,7 +796,8 @@ useEffect(() => {
       description: company.description,
       greetingEmoji: '👋', // Default, will be updated from CRM
       greetingText: 'Добро пожаловать!', // Default, will be updated from CRM
-      fullGreetingText: '' // Default, will be updated from CRM
+      fullGreetingText: '', // Default, will be updated from CRM
+      miniAppActive: true // По умолчанию активно
     });
     
     // Загружаем настройки приветствия
@@ -825,21 +826,43 @@ useEffect(() => {
       console.error('Ошибка загрузки приветствия:', error);
     }
     
-	// Загружаем часовой пояс компании
-try {
-  const tzResp = await fetch(`${API_URL}/api/companies/${company.id}/timezone`);
-  const tzData = await tzResp.json();
-  const timezoneOffset = tzData.success ? tzData.timezoneOffset : 0;
-  setSelectedGroup(prev => ({ ...prev, timezoneOffset }));
-} catch (e) {
-  console.error('Ошибка загрузки timezone:', e);
-}
-	
+    // Загружаем часовой пояс компании
+    try {
+      const tzResp = await fetch(`${API_URL}/api/companies/${company.id}/timezone`);
+      const tzData = await tzResp.json();
+      const timezoneOffset = tzData.success ? tzData.timezoneOffset : 0;
+      setSelectedGroup(prev => ({ ...prev, timezoneOffset }));
+    } catch (e) {
+      console.error('Ошибка загрузки timezone:', e);
+    }
+    
+    try {
+      const statusResponse = await fetch(`${API_URL}/api/companies/${company.id}/mini-app-status`);
+      const statusData = await statusResponse.json();
+      
+      if (statusData.success) {
+        setSelectedGroup(prev => ({ 
+          ...prev, 
+          miniAppActive: statusData.mini_app_active 
+        }));
+        
+        // Если приложение отключено, показываем сообщение и не переходим в профиль
+        if (!statusData.mini_app_active) {
+          showModal('Временно недоступно', 'Приложение отключено администратором. Пожалуйста, зайдите позже.');
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка проверки статуса Mini App:', error);
+      // По умолчанию считаем, что приложение активно
+      setSelectedGroup(prev => ({ ...prev, miniAppActive: true }));
+    }
+    
     if (userInfo?.id) {
       await loadUserData(company.id, userInfo.id, `${userInfo.first_name} ${userInfo.last_name}`);
     }
     setStep('profile');
-  };
+};
 
   const getInitials = (firstName, lastName) => {
     if (firstName && lastName) return (firstName[0] + lastName[0]).toUpperCase();
@@ -1209,21 +1232,60 @@ if (step === 'selectGroup') {
         padding: '8px',
         borderTop: '1px solid rgba(255,255,255,0.1)'
       }}>
-        📍 Всего заведений: {availableCompanies.length}
+        Всего заведений: {availableCompanies.length}
       </div>
     </div>
   );
 }
 
 
-  const currentGroupData = getCurrentGroupData();
+const currentGroupData = getCurrentGroupData();
 const currentBalance = currentGroupData?.bonusBalance || 0;
 const currentSpent = currentGroupData?.totalSpent || 0;     
 const currentTier = getCurrentTierBySpent(currentSpent);    
 const nextTier = getNextTierBySpent(currentSpent);          
 const progressToNext = getProgressToNextTier(currentSpent); 
   
-
+if (step === 'profile' && selectedGroup && selectedGroup.miniAppActive === false) {
+    return (
+        <div style={{ 
+            maxWidth: 500, 
+            margin: '0 auto', 
+            padding: '40px 20px', 
+            background: '#1a1f2e', 
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center'
+        }}>
+            <div style={{ fontSize: '64px', marginBottom: '24px' }}>🔧</div>
+            <h2 style={{ color: '#ffd966', fontSize: '24px', marginBottom: '12px' }}>Временно недоступно</h2>
+            <p style={{ color: 'white', opacity: 0.8, fontSize: '16px', marginBottom: '8px' }}>
+                Приложение временно отключено администратором.
+            </p>
+            <p style={{ color: '#aaa', fontSize: '14px' }}>
+                Пожалуйста, зайдите позже.
+            </p>
+            <button 
+                onClick={() => setStep('selectGroup')}
+                style={{
+                    marginTop: '32px',
+                    padding: '12px 24px',
+                    background: selectedGroup?.color || '#ff4d4d',
+                    border: 'none',
+                    borderRadius: '30px',
+                    color: 'white',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                }}
+            >
+                ← Выбрать другое заведение
+            </button>
+        </div>
+    );
+}
   return (
     <div style={{ maxWidth:500, margin:'0 auto', padding:'20px 16px 30px', background:'#1a1f2e', minHeight:'100vh' }}>
       <header style={{ background:`linear-gradient(135deg, ${selectedGroup?.color}40, rgba(30,35,48,0.9))`, borderRadius:28, padding:20, marginBottom:20, border:`1px solid ${selectedGroup?.color}60` }}>
@@ -1241,13 +1303,13 @@ const progressToNext = getProgressToNextTier(currentSpent);
       }} 
       style={{ background:'rgba(255,255,255,0.15)', border:'none', padding:'8px 12px', borderRadius:20, color:'white', fontSize:12, cursor:'pointer' }}
     >
-      🔄 Сменить
+      Сменить
     </button>
   </div>
   
   <div style={{ background:'rgba(0,0,0,0.4)', borderRadius:20, padding:16, marginBottom:12, cursor:'pointer' }} onClick={() => setShowTiersModal(true)}>
   {/* Блок с количеством бонусов НАД прогресс-баром */}
-  <div style={{ fontSize:13, opacity:0.8, marginBottom:8, color:'white' }}>💰 Ваши бонусы</div>
+  <div style={{ fontSize:13, opacity:0.8, marginBottom:8, color:'white' }}>Ваши бонусы</div>
   <div style={{ fontSize:36, fontWeight:800, marginBottom:12, color:'white' }}>
     {currentBalance.toLocaleString()} <span style={{ fontSize:14, fontWeight:400 }}>бонусов</span>
   </div>
@@ -1277,7 +1339,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
       </div>
     );
   })()}
-  <div style={{ fontSize:10, textAlign:'center', marginTop:8, opacity:0.5, color:'white' }}>👆 Нажмите, чтобы увидеть все уровни</div>
+  <div style={{ fontSize:10, textAlign:'center', marginTop:8, opacity:0.5, color:'white' }}>Нажмите, чтобы увидеть все уровни</div>
 </div>
   
   <div style={{ display:'flex', justifyContent:'center', gap:16, background:'rgba(0,0,0,0.3)', borderRadius:16, padding:'8px 12px' }}>
@@ -1289,7 +1351,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
       <nav style={{ display:'flex', gap:8, background:'rgba(0,0,0,0.3)', padding:6, borderRadius:60, marginBottom:24, flexWrap:'wrap', justifyContent:'center' }}>
         {['home','card','offers','giveaways','games','quests','history'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex:'0 1 auto', background:activeTab===tab ? brandColor : 'transparent', border:'none', padding:'10px 12px', borderRadius:40, fontSize:12, fontWeight:600, color:activeTab===tab ? 'white' : '#aaa', cursor:'pointer', whiteSpace:'nowrap' }}>
-            {tab==='home'?'🏠 Главная':tab==='card'?'🎫 Карта':tab==='offers'?'🎁 Акции':tab==='giveaways'?'🎰 Розыгрыши':tab==='games'?'🎮 Игры':tab==='quests'?'📋 Задания':tab==='referral'?'👥 Друзья':'📜 История'}
+            {tab==='home'?' Главная':tab==='card'?' Карта':tab==='offers'?' Акции':tab==='giveaways'?'Розыгрыши':tab==='games'?'Игры':tab==='quests'?'Задания':' История'}
           </button>
         ))}
       </nav>
@@ -1327,14 +1389,14 @@ const progressToNext = getProgressToNextTier(currentSpent);
     </div>
     
     <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
-      <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📊 Информация</h3>
+      <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>Информация</h3>
       <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.08)', color:'white' }}>
         <span>День рождения:</span>
         <span 
           style={{ fontWeight:700, color:'#ffd966', cursor:'pointer' }} 
           onClick={() => setShowBirthdayModal(true)}
         >
-          {birthdayDate ? new Date(birthdayDate).toLocaleDateString('ru-RU') : '📝 Установить'}
+          {birthdayDate ? new Date(birthdayDate).toLocaleDateString('ru-RU') : 'Установить'}
         </span>
       </div>
       <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', color:'white' }}>
@@ -1350,10 +1412,9 @@ const progressToNext = getProgressToNextTier(currentSpent);
   border: `1px solid ${selectedGroup?.color || '#3498db'}40`
 }}>
   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-    <span style={{ fontSize: 28 }}>🤖</span>
     <div style={{ flex: 1 }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: '#ffd966', marginBottom: 6 }}>
-        💡 Важно для получения уведомлений!
+        Важно для получения уведомлений!
       </div>
       <div style={{ fontSize: 13, color: 'white', opacity: 0.85, marginBottom: 16, lineHeight: 1.5 }}>
         Если вы зашли в приложение не через бота, но при этом хотите получать уведомления или персонализированные скидки — необходимо перейти в бота и начать диалог.
@@ -1392,7 +1453,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
           e.currentTarget.style.boxShadow = 'none';
         }}
       >
-        📨 Перейти в бота
+        Перейти в бота
       </button>
     </div>
   </div>
@@ -1412,7 +1473,6 @@ const progressToNext = getProgressToNextTier(currentSpent);
             onClick={() => setShowLocationSelector(true)}
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24 }}>📍</span>
                 <div style={{ flex: 1 }}>
                     {selectedLocation.city && (
                         <div style={{ fontSize: 13, opacity: 0.7, color: 'white' }}>
@@ -1425,7 +1485,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
                     </div>
                     {selectedLocation.phone && (
                         <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4, color: 'white' }}>
-                            📞 {selectedLocation.phone}
+                            {selectedLocation.phone}
                         </div>
                     )}
                 </div>
@@ -1436,7 +1496,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
     {/* Блок с активными акциями на главной */}
     {promotions.length > 0 && (
       <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20, marginTop:20 }}>
-        <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>🎁 Активные акции</h3>
+        <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>Активные акции</h3>
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {promotions.slice(0, 3).map(offer => {
             const endDate = adjustDateToLocal(offer.end_date, selectedGroup?.timezoneOffset || 0);
@@ -1488,12 +1548,12 @@ const progressToNext = getProgressToNextTier(currentSpent);
                         fontWeight: 500,
                         fontFamily: totalHours > 0 ? 'inherit' : 'monospace'
                       }}>
-                        ⏰ Осталось: {timeLeftText}
+                        Осталось: {timeLeftText}
                       </div>
                     )}
                     {!showTimeLeft && (
                       <div style={{ fontSize:11, color: '#e74c3c', marginTop:4, fontWeight: 500 }}>
-                        ❌ {timeLeftText}
+                        {timeLeftText}
                       </div>
                     )}
                   </div>
@@ -1527,7 +1587,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
         <div style={{ background:'linear-gradient(135deg,#1e2538,#131825)', borderRadius:32, maxWidth:500, width:'100%', maxHeight:'80vh', overflow:'auto', position:'relative' }} onClick={e=>e.stopPropagation()}>
             <div style={{ padding:24 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-                    <h3 style={{ color:'white', fontSize:20 }}>📍 Выберите адрес</h3>
+                    <h3 style={{ color:'white', fontSize:20 }}>Выберите адрес</h3>
                     <button onClick={() => setShowLocationSelector(false)} style={{ background:'none', border:'none', fontSize:24, color:'white', cursor:'pointer' }}>✕</button>
                 </div>
                 
@@ -1540,7 +1600,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
                             return (
                                 <div key={city.id} style={{ marginBottom: 24 }}>
                                     <h4 style={{ color: '#ffd966', fontSize: 16, marginBottom: 12, paddingLeft: 8 }}>
-                                        🏙️ {city.name}
+                                        {city.name}
                                     </h4>
                                     {cityAddresses.map(addr => (
                                         <div 
@@ -1556,17 +1616,17 @@ const progressToNext = getProgressToNextTier(currentSpent);
                                             }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <span style={{ fontSize: 20 }}>{addr.is_main ? '⭐' : '📍'}</span>
+                                                <span style={{ fontSize: 20 }}>{addr.is_main ? '⭐' : ''}</span>
                                                 <div style={{ flex: 1 }}>
                                                     <div style={{ color: 'white', fontWeight: 500 }}>{addr.address}</div>
                                                     {addr.phone && (
                                                         <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, color: 'white' }}>
-                                                            📞 {addr.phone}
+                                                            {addr.phone}
                                                         </div>
                                                     )}
                                                     {addr.working_hours && (
                                                         <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2, color: 'white' }}>
-                                                            ⏰ {addr.working_hours}
+                                                            {addr.working_hours}
                                                         </div>
                                                     )}
                                                 </div>
@@ -1585,7 +1645,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
                 {/* Адреса без города */}
                 {locations?.addresses?.filter(a => !a.city_id).length > 0 && (
                     <div>
-                        <h4 style={{ color: '#ffd966', fontSize: 16, marginBottom: 12, paddingLeft: 8 }}>📍 Другие адреса</h4>
+                        <h4 style={{ color: '#ffd966', fontSize: 16, marginBottom: 12, paddingLeft: 8 }}>Другие адреса</h4>
                         {locations.addresses.filter(a => !a.city_id).map(addr => (
                             <div 
                                 key={addr.id}
@@ -1600,10 +1660,9 @@ const progressToNext = getProgressToNextTier(currentSpent);
                                 }}
                             >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                    <span style={{ fontSize: 20 }}>📍</span>
                                     <div style={{ flex: 1 }}>
                                         <div style={{ color: 'white', fontWeight: 500 }}>{addr.address}</div>
-                                        {addr.phone && <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, color: 'white' }}>📞 {addr.phone}</div>}
+                                        {addr.phone && <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, color: 'white' }}>{addr.phone}</div>}
                                     </div>
                                     {selectedLocation?.addressId === addr.id && <div style={{ color: '#2ecc71', fontSize: 20 }}>✓</div>}
                                 </div>
@@ -1614,7 +1673,6 @@ const progressToNext = getProgressToNextTier(currentSpent);
                 
                 {(!locations?.cities || locations.cities.length === 0) && (!locations?.addresses || locations.addresses.length === 0) && (
                     <div style={{ textAlign: 'center', padding: 40, opacity: 0.6, color: 'white' }}>
-                        <div style={{ fontSize: 48, marginBottom: 12 }}>📍</div>
                         <div>Нет доступных адресов</div>
                         <div style={{ fontSize: 12, marginTop: 8, opacity: 0.5 }}>Обратитесь к администратору</div>
                     </div>
@@ -1627,9 +1685,9 @@ const progressToNext = getProgressToNextTier(currentSpent);
      {activeTab === 'offers' && (
   <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-      <h3 style={{ fontSize:18, color:'white' }}>🔥 Акции и скидки</h3>
+      <h3 style={{ fontSize:18, color:'white' }}>Акции и скидки</h3>
       <div style={{ fontSize:11, color: '#ffd966', fontFamily: 'monospace' }}>
-        🕐 {currentTime.toLocaleTimeString('ru-RU')}
+        {currentTime.toLocaleTimeString('ru-RU')}
       </div>
     </div>
     {promotions.length > 0 ? (
@@ -1803,7 +1861,6 @@ const progressToNext = getProgressToNextTier(currentSpent);
       </div>
     ) : (
       <div style={{ textAlign:'center', padding:40, opacity:0.6, color:'white' }}>
-        <div style={{ fontSize:48, marginBottom:12 }}>📭</div>
         <div>На данный момент нет активных акций</div>
         <div style={{ fontSize:12, marginTop:8, opacity:0.5 }}>Загляните позже!</div>
       </div>
@@ -1881,7 +1938,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
 
       {activeTab === 'history' && (
   <div style={{ background:'rgba(30,35,48,0.7)', borderRadius:28, padding:20 }}>
-    <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>📋 История операций</h3>
+    <h3 style={{ fontSize:18, marginBottom:12, color:'white' }}>История операций</h3>
     <div style={{ display:'flex', flexDirection:'column', gap:12 }} id="history-container">
       {currentGroupData?.history?.length > 0 ? (
         <>
@@ -2068,7 +2125,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
   <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:20 }} onClick={() => setShowTiersModal(false)}>
     <div style={{ background:'linear-gradient(135deg,#1e2538,#131825)', borderRadius:32, maxWidth:400, width:'100%', maxHeight:'80vh', overflow:'auto', position:'relative' }} onClick={e=>e.stopPropagation()}>
       <div style={{ padding:24 }}>
-        <h3 style={{ color:'white', marginBottom:20, fontSize:20 }}>🏆 Все уровни программы</h3>
+        <h3 style={{ color:'white', marginBottom:20, fontSize:20 }}>Все уровни программы</h3>
         <p style={{ color:'#aaa', fontSize:12, marginBottom:16 }}>Чем больше тратите, тем выше кешбэк!</p>
         {tiers.map((tier, idx) => (
           <div key={idx} style={{ marginBottom:12, padding:12, background:`${tier.color}20`, borderRadius:16, borderLeft:`4px solid ${tier.color}`, transition:'all 0.2s' }}>
@@ -2077,8 +2134,8 @@ const progressToNext = getProgressToNextTier(currentSpent);
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:700, color:'white', fontSize:16 }}>{tier.name}</div>
                 <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>
-                  <span>💰 от {tier.threshold.toLocaleString()} ₽</span>
-                  <span style={{ marginLeft:12 }}>💸 кешбэк {tier.cashback || 3}%</span>
+                  <span>от {tier.threshold.toLocaleString()} ₽</span>
+                  <span style={{ marginLeft:12 }}>кешбэк {tier.cashback || 3}%</span>
                 </div>
               </div>
               {idx === tiers.findIndex(t => t.name === getCurrentTierBySpent(currentSpent).name) && (
@@ -2089,7 +2146,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
         ))}
         <div style={{ background:'rgba(255,255,255,0.05)', borderRadius:16, padding:12, marginTop:16 }}>
           <div style={{ fontSize:12, color:'#aaa', textAlign:'center' }}>
-            💡 Подсказка: Кешбэк — это процент от покупки, который начисляется бонусами
+            Подсказка: Кешбэк — это процент от покупки, который начисляется бонусами
           </div>
         </div>
         <button onClick={() => setShowTiersModal(false)} style={{ width:'100%', padding:12, background:'#ff4d4d', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer', marginTop:16 }}>
@@ -2154,7 +2211,7 @@ const progressToNext = getProgressToNextTier(currentSpent);
                     }} 
                     style={{ width:'100%', padding:12, background:'#ffd966', border:'none', borderRadius:12, color:'#1a1f2e', fontWeight:600, cursor:'pointer', marginBottom:8 }}
                   >
-                    💾 Сохранить дату
+                    Сохранить дату
                   </button>
                   <button onClick={() => setShowBirthdayModal(false)} style={{ width:'100%', padding:12, background:'rgba(255,255,255,0.1)', border:'none', borderRadius:12, color:'white', fontWeight:600, cursor:'pointer' }}>
                     Отмена

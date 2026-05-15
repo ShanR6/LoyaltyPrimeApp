@@ -28,7 +28,6 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
     const [isRolling, setIsRolling] = useState(false);
     const [result, setResult] = useState(null);
     const [lastWin, setLastWin] = useState(null);
-    const [jackpot, setJackpot] = useState(1000);
     const [betMultiplier, setBetMultiplier] = useState(1);
     const [showCombinations, setShowCombinations] = useState(false);
     const [comboHistory, setComboHistory] = useState([]);
@@ -40,11 +39,8 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
     // Настройки игры (загружаются с сервера)
     const [settings, setSettings] = useState({
         cost: 25,
-        jackpotBase: 1000,
         betMultipliers: [1, 2, 3, 5, 10],
         combinations: DEFAULT_COMBINATIONS,
-        jackpotChance: 1,
-        jackpotContribution: 10,
         maxPlaysPerDay: 0,
         active: true
     });
@@ -74,7 +70,6 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
                     
                     console.log('🎲 Loaded maxPlaysPerDay:', newSettings.maxPlaysPerDay);
                     setSettings(newSettings);
-                    setJackpot(data.settings.jackpotBase || 1000);
                 } else {
                     console.error('Failed to load dice settings:', data);
                 }
@@ -149,17 +144,9 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
         setTimeout(() => clearInterval(interval), 1500);
     };
     
-    // Сохранение джекпота
-    const saveJackpot = (value) => {
-        setJackpot(value);
-        localStorage.setItem('dice_jackpot', value);
-    };
     
     // Загрузка сохранённых данных
     useEffect(() => {
-        const saved = localStorage.getItem('dice_jackpot');
-        if (saved) setJackpot(parseInt(saved));
-        
         const savedHistory = localStorage.getItem('dice_history');
         if (savedHistory) {
             try {
@@ -201,20 +188,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
             winAmount = Math.floor(settings.cost * combo.multiplier * betMultiplier);
         }
         
-        const jackpotChance = Math.random() < (settings.jackpotChance / 100);
-        let isJackpot = false;
-        
-        if (jackpotChance && winAmount > 0) {
-            winAmount += jackpot;
-            combo = { ...combo, name: `${combo.name} + ДЖЕКПОТ!`, multiplier: combo.multiplier + 10, icon: '💎' };
-            saveJackpot(settings.jackpotBase);
-            isJackpot = true;
-        } else if (!jackpotChance && winAmount === 0) {
-            const addedToJackpot = Math.floor(settings.cost * betMultiplier * (settings.jackpotContribution / 100));
-            saveJackpot(jackpot + addedToJackpot);
-        }
-        
-        return { winAmount, combo, isJackpot };
+        return { winAmount, combo, isJackpot:false };
     };
     
     const rollDice = async () => {
@@ -294,7 +268,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
                         win: true,
                         amount: winAmount,
                         combo: combo,
-                        message: `${combo?.icon || '🎉'} ${combo?.name || 'Выигрыш'}! +${winAmount} бонусов!`,
+                        message: `${combo?.name || 'Выигрыш'}! +${winAmount} бонусов!`,
                         isJackpot
                     });
                     
@@ -420,14 +394,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
             
             <div className="dice-header">
                 <div className="dice-title">
-                    <span className="dice-main-emoji">🎲</span>
-                    <h3>Кости: Премиум</h3>
-                </div>
-                <div className="dice-stats-panel">
-                    <div className="jackpot-display">
-                        <span className="jackpot-icon">💎</span>
-                        <span className="jackpot-value">{jackpot.toLocaleString()}</span>
-                    </div>
+                    <h3>КОСТИ</h3>
                 </div>
             </div>
             
@@ -451,7 +418,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
                 </div>
                 {settings.maxPlaysPerDay > 0 && playsToday !== null && (
                     <div className="remaining-plays" style={{ fontSize: '11px', color: '#aaa', marginTop: '8px', textAlign: 'center' }}>
-                        🎲 Игр сегодня: {playsToday} / {settings.maxPlaysPerDay}
+                        Игр сегодня: {playsToday} / {settings.maxPlaysPerDay}
                     </div>
                 )}
             </div>
@@ -481,9 +448,9 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
                     disabled={playsToday === null || isRolling || userBalance < settings.cost * betMultiplier || limitReached}
                 >
                     {isRolling ? (
-                        <><span className="spinner-icon">🎲</span> Бросаем...</>
+                        <><span className="spinner-icon"></span> Бросаем...</>
                     ) : (
-                        <><span className="roll-icon">🎲</span> Бросить кости!</>
+                        <><span className="roll-icon"></span> Бросить кости!</>
                     )}
                 </button>
             </div>
@@ -491,7 +458,6 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
             {/* Результат */}
             {result && (
                 <div className={`dice-result ${result.win ? 'win' : 'lose'} ${result.isJackpot ? 'jackpot' : ''}`}>
-                    <div className="result-emoji">{result.win ? (result.isJackpot ? '💎' : '🎉') : '😢'}</div>
                     <div className="result-message">{result.message}</div>
                     {result.win && result.combo && (
                         <div className="combo-badge" style={{ backgroundColor: result.combo.color }}>
@@ -515,7 +481,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
                     className="combinations-toggle"
                     onClick={() => setShowCombinations(!showCombinations)}
                 >
-                    {showCombinations ? '📋 Скрыть комбинации' : '📖 Показать все комбинации'}
+                    {showCombinations ? 'Скрыть комбинации' : 'Показать все комбинации'}
                 </button>
                 
                 {showCombinations && (
@@ -535,7 +501,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
             {/* История комбинаций */}
             {comboHistory.length > 0 && (
                 <div className="history-section">
-                    <div className="history-title">📜 Последние выигрыши</div>
+                    <div className="history-title">Последние выигрыши</div>
                     <div className="history-list">
                         {comboHistory.slice(0, 5).map(entry => (
                             <div key={entry.id} className="history-item">
@@ -549,6 +515,7 @@ export function DiceRoll({ onBalanceUpdate, userBalance, companyId, userId, comp
                     </div>
                 </div>
             )}
+			
         </div>
     );
 }

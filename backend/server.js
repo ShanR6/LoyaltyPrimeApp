@@ -101,7 +101,9 @@ const {
 	incrementUserGamePlays,
 	getUserGamePlaysToday,
 	getTodayString,
-	trackDailyLogin	
+	trackDailyLogin,
+	getMiniAppStatus,
+    updateMiniAppStatus	
 } = require('./database-pg');
 
 const app = express();
@@ -3572,10 +3574,54 @@ app.post('/api/users/:userId/quests/complete', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
+// ============ API ДЛЯ УПРАВЛЕНИЯ СТАТУСОМ VK MINI APP ============
+
+// Получение статуса Mini App
+app.get('/api/companies/:companyId/mini-app-status', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const isActive = await getMiniAppStatus(companyId);
+        
+        res.json({ 
+            success: true, 
+            mini_app_active: isActive 
+        });
+    } catch (error) {
+        console.error('Ошибка получения статуса Mini App:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Обновление статуса Mini App
+app.put('/api/companies/:companyId/mini-app-status', async (req, res) => {
+    try {
+        const companyId = parseInt(req.params.companyId);
+        const { mini_app_active } = req.body;
+        
+        if (mini_app_active === undefined) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Поле mini_app_active обязательно'
+            });
+        }
+        
+        const newStatus = await updateMiniAppStatus(companyId, mini_app_active);
+        
+        res.json({ 
+            success: true, 
+            mini_app_active: newStatus,
+            message: newStatus ? 'VK Mini App активирован' : 'VK Mini App деактивирован'
+        });
+    } catch (error) {
+        console.error('Ошибка обновления статуса Mini App:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 const PORT = 3001;
 app.listen(PORT, () => {
-    console.log(`✅ Backend running on http://localhost:${PORT}`);
-    console.log(`🐘 База данных: PostgreSQL`);
-    console.log(`🔑 Тестовый вход: email: pizza@test.com, password: 123456`);
-    console.log(`💳 POS API доступны: /api/pos/verify-qr, /api/pos/apply-bonus, /api/pos/spend-bonus`);
+    console.log(`Бэкенд запущен на http://localhost:${PORT}`);
+    console.log(`База данных: PostgreSQL`);
+    console.log(`Тестовый вход: email: pizza@test.com, password: 123456`);
+    console.log(`POS API доступны: /api/pos/verify-qr, /api/pos/apply-bonus, /api/pos/spend-bonus`);
 });

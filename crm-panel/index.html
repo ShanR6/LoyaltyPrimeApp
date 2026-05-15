@@ -80,7 +80,7 @@
         <div class="form-group" style="display: flex; align-items: center; gap: 20px;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                 <input type="checkbox" id="promoIsFree" onchange="togglePromoPriceField()">
-                <strong>🎁 Бесплатная акция</strong>
+                <strong>Бесплатная акция</strong>
             </label>
             <div id="promoPriceField" style="flex: 1;">
                 <label style="display: block; margin-bottom: 4px;">Цена в баллах</label>
@@ -104,7 +104,7 @@
         </div>
         
         <div class="error-message" id="promotionError"></div>
-        <button class="modal-btn" id="savePromotionBtn" onclick="savePromotion()">💾 Сохранить изменения</button>
+        <button class="modal-btn" id="savePromotionBtn" onclick="savePromotion()">Сохранить изменения</button>
         <button class="modal-btn" id="deletePromotionBtn" onclick="deleteCurrentPromotion()" style="background:#e74c3c; margin-top:10px;">🗑️ Удалить акцию</button>
     </div>
 </div>
@@ -127,7 +127,7 @@
                 <input type="number" id="questReward" class="form-input" value="10" min="1">
             </div>
 <div class="form-group">
-    <label>⏱️ Дней на выполнение (от 1 до 7):</label>
+    <label>Дней на выполнение (от 1 до 7):</label>
     <input type="number" id="questDurationDays" class="form-input" value="7" min="1" max="7" step="1">
     <small style="display: block; margin-top: 4px; color: #666;">Количество дней для выполнения задания (1-7 дней)</small>
 </div>
@@ -177,7 +177,7 @@
         </div>
         
         <div class="form-group">
-            <label>📅 Дата окончания розыгрыша</label>
+            <label>Дата окончания розыгрыша</label>
             <input type="datetime-local" id="giveawayEndDate" class="form-input">
             <small style="display: block; margin-top: 4px; color: #666;">После этой даты розыгрыш станет недоступен для пользователей</small>
         </div>
@@ -190,7 +190,7 @@
         </div>
         
         <div class="error-message" id="giveawayError"></div>
-        <button class="modal-btn" onclick="saveGiveaway()">💾 Сохранить</button>
+        <button class="modal-btn" onclick="saveGiveaway()">Сохранить</button>
     </div>
 </div>
 
@@ -199,7 +199,6 @@
         <div class="crm-container">
             <div class="crm-sidebar">
                 <div class="crm-logo">
-                    <div class="logo-icon">🎛️</div>
                     <div class="logo-text">LoyaltyPrime CRM</div>
                 </div>
                 <nav class="crm-nav">
@@ -207,10 +206,10 @@
                         <span class="nav-icon">📊</span> Аналитика
                     </button>
                     <button class="crm-nav-item" data-module="loyalty">
-                        <span class="nav-icon">🎯</span> Лояльность
+                        <span class="nav-icon">🎫</span> Лояльность
                     </button>
                     <button class="crm-nav-item" data-module="notifications">
-                        <span class="nav-icon">📨</span> Уведомления
+                        <span class="nav-icon">📫</span> Уведомления
                     </button>
                     <button class="crm-nav-item" data-module="marketing">
                         <span class="nav-icon">🎁</span> Маркетинг
@@ -232,7 +231,7 @@
                     <div class="business-info" id="businessInfo">
                         <div class="business-name">Загрузка...</div>
                     </div>
-                    <button class="logout-btn" onclick="closeCRMPanel()">🚪 Выйти</button>
+                    <button class="logout-btn" onclick="closeCRMPanel()">Выйти</button>
                 </div>
             </div>
             <div class="crm-content">
@@ -244,15 +243,15 @@
                     <div class="stats-grid" id="statsGrid" style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;"></div>
                     <div class="charts-row">
                         <div class="chart-card">
-                            <h3>📊 Сегментация пользователей</h3>
+                            <h3>Сегментация пользователей</h3>
                             <div id="segmentsList"></div>
                         </div>
                         <div class="chart-card">
-                            <h3>📈 Активность</h3>
+                            <h3>Активность</h3>
                             <div id="activityChart"></div>
                         </div>
 						<div class="chart-card full-width" style="margin-top: 24px;">
-    <h3>📍 Выручка по адресам</h3>
+    <h3>Выручка по адресам</h3>
     <div id="addressesRevenueContainer">
         <div id="addressesRevenueList"></div>
     </div>
@@ -264,14 +263,14 @@
                 <!-- Модуль 2: Программа лояльности -->
                 <div id="loyaltyModule" class="crm-module">
                     <div class="module-header">
-                        <h2>🎯 Программа лояльности</h2>
-                        <button class="btn-save" onclick="saveLoyaltySettings()">💾 Сохранить все</button>
+                        <h2>🎫 Лояльность</h2>
+                        <button class="btn-save" onclick="saveLoyaltySettings()">Сохранить все</button>
                     </div>
                     <div class="loyalty-settings">
                         <div class="settings-card">
-                            <h3>🏆 Уровни программы лояльности</h3>
+                            <h3>Уровни программы лояльности</h3>
                             <div class="tiers-info">
-                                <p class="info-text">⚡ Настройте пороги, множители бонусов и кешбэк для каждого уровня. 
+                                <p class="info-text">Настройте пороги, множители бонусов и кешбэк для каждого уровня. 
                                 <strong>Минимум 1 уровень</strong>, можно добавлять неограниченное количество.</p>
                                 <div id="tiersSettingsList"></div>
                                 <button class="btn-add" onclick="addTierConfig()" style="margin-top: 12px;">+ Добавить уровень</button>
@@ -284,58 +283,58 @@
                 <!-- Модуль 3: Уведомления -->
 <div id="notificationsModule" class="crm-module">
     <div class="module-header">
-        <h2>📨 Рассылка сообщений в VK</h2>
+        <h2>📫 Рассылка сообщений в VK</h2>
     </div>
     
     <!-- Форма отправки сообщения -->
     <div class="notification-card" style="margin-bottom: 24px;">
-        <h3>📝 Отправить сообщение</h3>
+        <h3>Отправить сообщение</h3>
         <div class="form-group">
-            <label>👥 Выберите аудиторию</label>
+            <label>Выберите аудиторию</label>
             <select id="notifSegment" class="form-select" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
-                <option value="all">📊 Все пользователи</option>
-                <option value="new">🌱 Новичок (1 покупка, ≤14 дней)</option>
-                <option value="active">🔥 Активный (2+ покупок, ≤7 дней)</option>
-                <option value="regular">⭐ Постоянный (2+ покупок, ≤3 дней)</option>
-                <option value="dormant">😴 Спящий (≥20 дней без покупок)</option>
+                <option value="all">Все пользователи</option>
+                <option value="new">Новичок (1 покупка, ≤14 дней)</option>
+                <option value="active">Активный (2+ покупок, ≤7 дней)</option>
+                <option value="regular">Постоянный (2+ покупок, ≤3 дней)</option>
+                <option value="dormant">Спящий (≥15 дней без покупок)</option>
             </select>
             <small style="display: block; margin-top: 4px; color: #666;">
-                💡 Пользователи автоматически классифицируются на основе их покупок
+                Пользователи автоматически классифицируются на основе их покупок
             </small>
         </div>
         
         <div class="form-group">
-            <label>📝 Заголовок сообщения</label>
-            <input type="text" id="notifTitle" class="form-input" placeholder="Например: 🔥 Специальное предложение для вас!" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
+            <label>Заголовок сообщения</label>
+            <input type="text" id="notifTitle" class="form-input" placeholder="Например: Специальное предложение для вас!" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
         </div>
         
         <div class="form-group">
-            <label>💬 Текст сообщения</label>
+            <label>Текст сообщения</label>
             <textarea id="notifMessage" rows="5" class="form-textarea" placeholder="Введите текст сообщения...&#10;&#10;Поддерживаются смайлики и перенос строк." style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; resize: vertical;"></textarea>
             <small style="display: block; margin-top: 4px; color: #666;">
-                📨 Сообщение будет отправлено напрямую в личные сообщения ВКонтакте
+                Сообщение будет отправлено напрямую в личные сообщения ВКонтакте
             </small>
         </div>
         
         <button class="btn-send" onclick="sendDirectMessage()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ff4d4d, #e74c3c); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin-top: 8px;">
-            📤 Отправить сообщение
+             Отправить сообщение
         </button>
     </div>
     
     <!-- История рассылок -->
     <div class="notification-card">
-        <h3>📋 История отправленных сообщений</h3>
+        <h3>История отправленных сообщений</h3>
         <div id="notificationsHistory" style="max-height: 400px; overflow-y: auto;"></div>
     </div>
     
     <!-- Управление кампаниями -->
     <div class="notification-card" style="margin-top: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h3 style="margin: 0;">🔄 Автоматические кампании</h3>
-            <button class="btn-save" onclick="showAddCampaignModal()" style="padding: 10px 20px;">➕ Создать кампанию</button>
+            <h3 style="margin: 0;">Автоматические кампании</h3>
+            <button class="btn-save" onclick="showAddCampaignModal()" style="padding: 10px 20px;"> Создать кампанию</button>
         </div>
         <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
-            💡 Кампании автоматически отправляют сообщения по расписанию. Создайте свои или используйте готовые шаблоны.
+            Кампании автоматически отправляют сообщения по расписанию. Создайте свои или используйте готовые шаблоны.
         </p>
         <div id="campaignsList" style="max-height: 600px; overflow-y: auto;"></div>
     </div>
@@ -347,18 +346,18 @@
         <h2>🎁 Управление акциями и заданиями</h2>
     </div>
     <div class="settings-card">
-        <h3>🎯 Акции</h3>
-        <button class="btn-save" onclick="showAddPromotionModal()" style="margin-bottom:16px;">➕ Создать новую акцию</button>
+        <h3>Акции</h3>
+        <button class="btn-save" onclick="showAddPromotionModal()" style="margin-bottom:16px;">Создать новую акцию</button>
         <div id="promotionsList"></div>
     </div>
     <div class="settings-card">
-        <h3>📋 Задания</h3>
-        <p class="info-text" style="margin-bottom:16px;">⚡ Задания создаются автоматически. Вы можете активировать их, настроить награду и указать срок действия.</p>
+        <h3>Задания</h3>
+        <p class="info-text" style="margin-bottom:16px;"> Задания создаются автоматически. Вы можете активировать их, настроить награду и указать срок действия.</p>
         <div id="questsManagerList"></div>
     </div>
     <div class="settings-card">
-        <h3>🎰 Розыгрыши</h3>
-        <button class="btn-save" onclick="openGiveawayModal()" style="margin-bottom:16px;">➕ Добавить розыгрыш</button>
+        <h3>Розыгрыши</h3>
+        <button class="btn-save" onclick="openGiveawayModal()" style="margin-bottom:16px;">Добавить розыгрыш</button>
         <div id="giveawaysList"></div>
     </div>
 </div>
@@ -368,7 +367,7 @@
 <div id="gamificationModule" class="crm-module">
     <div class="module-header">
         <h2>🎮 Игровые механики</h2>
-        <button class="btn-save" onclick="saveAllGameSettings()">💾 Сохранить всё</button>
+        <button class="btn-save" onclick="saveAllGameSettings()">Сохранить всё</button>
     </div>
     
     <!-- Контейнер для настроек колеса фортуны -->
@@ -387,51 +386,51 @@
                         <h2>🏪 Страница кассира</h2>
                     </div>
                     <div class="settings-card">
-                        <h3>🔐 Настройка доступа кассира</h3>
+                        <h3>Настройка доступа кассира</h3>
                         <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
                             Установите логин и пароль для доступа к странице кассира. Эти данные будут использоваться для входа на страницу кассира.
                         </p>
                         
                         <div class="form-group">
-                            <label>👤 Логин кассира</label>
+                            <label>Логин кассира</label>
                             <input type="text" id="cashierLogin" class="form-input" placeholder="Введите логин">
                         </div>
                         
                         <div class="form-group">
-                            <label>🔒 Пароль кассира</label>
+                            <label>Пароль кассира</label>
                             <input type="password" id="cashierPassword" class="form-input" placeholder="Введите пароль">
                         </div>
                         
                         <div class="form-group">
-                            <label>🔒 Подтверждение пароля</label>
+                            <label>Подтверждение пароля</label>
                             <input type="password" id="cashierPasswordConfirm" class="form-input" placeholder="Повторите пароль">
                         </div>
                         
                         <button class="btn-save" onclick="saveCashierCredentials()" style="width: 100%; margin-top: 16px;">
-                            💾 Сохранить данные кассира
+                            Сохранить данные кассира
                         </button>
                         
                         <div id="cashierCredentialsStatus" style="margin-top: 12px;"></div>
                     </div>
                     
                     <div class="settings-card" style="margin-top: 20px;">
-                        <h3>🖥️ Открыть страницу кассира</h3>
+                        <h3>Открыть страницу кассира</h3>
                         <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
                             Нажмите кнопку ниже, чтобы открыть страницу кассира в новом окне. Страница кассира доступна только по логину и паролю.
                         </p>
                         
                         <button class="btn-demo" onclick="openCashierPage()" style="width: 100%; padding: 16px; font-size: 16px;">
-                            🏪 Открыть страницу кассира
+                            Открыть страницу кассира
                         </button>
                     </div>
                 </div>
 
                 <!-- Модуль настроек -->
                 <div id="settingsModule" class="crm-module">
-                    <div class="module-header"><h2>⚙️ Настройки бизнеса</h2><button class="btn-save" onclick="saveBusinessSettings()">💾 Сохранить</button></div>
-                    <div class="settings-card"><h3>🎨 Брендирование</h3>
+                    <div class="module-header"><h2>⚙️ Настройки бизнеса</h2><button class="btn-save" onclick="saveBusinessSettings()">Сохранить</button></div>
+                    <div class="settings-card"><h3>Брендирование</h3>
                         <div class="branding-description">
-                            <p>🎯 <strong>Зачем нужно брендирование?</strong></p>
+                            <p><strong>Зачем нужно брендирование?</strong></p>
                             <p>Брендирование позволяет настроить внешний вид вашего mini-app под стиль вашей компании. 
                             При изменении основного цвета, он автоматически применяется во всём приложении:</p>
                             <ul>
@@ -440,7 +439,7 @@
                                 <li>• Заголовки и акцентные элементы</li>
                                 <li>• Карточки лояльности</li>
                             </ul>
-                            <p>💡 <strong>Совет:</strong> Выберите цвет, который соответствует вашему бренду и логотипу.</p>
+                            <p><strong>Совет:</strong> Выберите цвет, который соответствует вашему бренду и логотипу.</p>
                         </div>
                         <div class="setting-row"><label>Основной цвет бренда:</label><input type="color" id="brandColor" value="#2A4B7C"></div>
                         <div class="brand-preview">
@@ -452,17 +451,57 @@
                             </div>
                         </div>
                     </div>
+					<div class="settings-card" style="margin-top: 20px;">
+    <h3>VK Mini App</h3>
+    <div class="mini-app-control">
+        <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+            Управляйте доступом пользователей к VK Mini App. 
+            При отключении приложение будет показывать сообщение "Временно недоступно".
+        </p>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <label style="font-weight: 600; display: block; margin-bottom: 4px;">Статус Mini App</label>
+                <span style="font-size: 12px; color: #666;">Включено/Выключено приложение для пользователей</span>
+            </div>
+            <div class="toggle-switch" style="display: flex; align-items: center; gap: 12px;">
+                <input type="checkbox" id="miniAppToggle" onchange="toggleMiniApp(this.checked)">
+                <span id="miniAppStatusText" style="font-weight: 600; padding: 4px 12px; border-radius: 20px;"></span>
+            </div>
+        </div>
+        
+        <div id="miniAppWarning" style="display: none; margin-top: 16px; padding: 12px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div>
+                    <strong style="color: #856404;">Внимание!</strong>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #856404;">
+                        При отключении Mini App пользователи увидят сообщение "Временно недоступно" и не смогут пользоваться приложением.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="miniAppSuccess" style="display: none; margin-top: 16px; padding: 12px; background: #d4edda; border-radius: 8px; border-left: 4px solid #28a745;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 20px;">✅</span>
+                <div>
+                    <strong style="color: #155724;">Успешно!</strong>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #155724;" id="miniAppSuccessMessage"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 					<div id="bonusSettingsContainer"></div>
 					<div class="settings-card" style="margin-top: 20px;">
-						<h3>💬 Приветствие компании</h3>
+						<h3>Приветствие компании</h3>
 						<p style="color: #666; font-size: 13px; margin-bottom: 16px;">
 							Настройте приветствие, которое отображается пользователям в mini-app.
 						</p>
 						
 						<div class="form-group">
-							<label>😊 Эмодзи компании</label>
+							<label>Эмодзи компании</label>
 							<div id="emojiPicker" style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin-top: 8px;">
-								<!-- Emojis will be populated by JavaScript -->
 							</div>
 							<input type="hidden" id="selectedEmoji" value="🏢">
 							<small style="display: block; margin-top: 8px; color: #666;">
@@ -471,7 +510,7 @@
 						</div>
 						
 						<div class="form-group" style="margin-top: 16px;">
-							<label>📝 Полный текст приветствия</label>
+							<label>Полный текст приветствия</label>
 							<textarea id="fullGreetingText" class="form-input" rows="4" placeholder="Добро пожаловать в нашу компанию! Пользуйтесь бонусами и получайте скидки..." maxlength="500"></textarea>
 							<small style="display: block; margin-top: 4px; color: #666;">
 								Текст приветствия (максимум 500 символов)
@@ -490,13 +529,13 @@
 						</div>
 						
 						<button class="btn-save" onclick="saveGreetingSettings()" style="width: 100%; margin-top: 16px;">
-							💾 Сохранить настройки
+							Сохранить настройки
 						</button>
 						
 						<div id="greetingStatus" style="margin-top: 12px;"></div>
 					</div>
 					<div class="settings-card" style="margin-top: 20px;">
-	<h3>🕐 Часовой пояс компании</h3>
+	<h3>Часовой пояс компании</h3>
   <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
     Выберите часовой пояс, по которому будут рассчитываться сроки акций, заданий и розыгрышей.
   </p>
@@ -514,19 +553,19 @@
     <option value="720">UTC+12</option>
   </select>
   <div class="settings-card" style="margin-top: 20px;">
-    <h3>📍 Города и адреса</h3>
+    <h3>Города и адреса</h3>
     <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
         Управляйте городами и адресами ваших заведений. Пользователи смогут выбрать удобную локацию в приложении.
     </p>
     
     <div style="display: flex; gap: 20px; margin-bottom: 20px;">
         <div style="flex: 1;">
-            <h4>🏙️ Города</h4>
+            <h4>Города</h4>
             <div id="citiesList" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 8px;"></div>
             <button class="btn-add" onclick="openCityModal()" style="margin-top: 12px; width: 100%;">+ Добавить город</button>
         </div>
         <div style="flex: 2;">
-            <h4>📍 Адреса</h4>
+            <h4>Адреса</h4>
             <div id="addressesList" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 8px;"></div>
             <button class="btn-add" onclick="openAddressModal()" style="margin-top: 12px; width: 100%;">+ Добавить адрес</button>
         </div>
@@ -539,29 +578,29 @@
                 <div id="informationModule" class="crm-module">
                     <div class="module-header"><h2>ℹ️ Информация о компании</h2></div>
                     <div class="settings-card">
-                        <h3>🏢 Данные компании</h3>
+                        <h3>Данные компании</h3>
                         <div class="info-readonly">
                             <div class="info-row">
-                                <label>🏢 Название компании:</label>
+                                <label>Название компании:</label>
                                 <div class="info-value" id="infoCompanyName">-</div>
                             </div>
                             <div class="info-row">
-                                <label>👤 Владелец:</label>
+                                <label>Владелец:</label>
                                 <div class="info-value" id="infoOwnerName">-</div>
                             </div>
                             <div class="info-row">
-                                <label>📧 Email:</label>
+                                <label>Email:</label>
                                 <div class="info-value" id="infoEmail">-</div>
                             </div>
                             <div class="info-row">
-                                <label>📞 Телефон:</label>
+                                <label>Телефон:</label>
                                 <div class="info-value" id="infoPhone">-</div>
                             </div>
                         </div>
                         <div class="info-notice">
-                            <p>⚠️ <strong>Внимание:</strong> Данные компании отображаются только для просмотра.</p>
-                            <p>📬 Если вам необходимо изменить информацию о компании (название, телефон, email, владельца), пожалуйста, свяжитесь с нами по электронной почте:</p>
-                            <p class="support-email">📧 <a href="mailto:support@loyaltyprime.ru">support@loyaltyprime.ru</a></p>
+                            <p><strong>Внимание:</strong> Данные компании отображаются только для просмотра.</p>
+                            <p>Если вам необходимо изменить информацию о компании (название, телефон, email, владельца), пожалуйста, свяжитесь с нами по электронной почте:</p>
+                            <p class="support-email"><a href="mailto:support@loyaltyprime.ru">support@loyaltyprime.ru</a></p>
                             <p>Укажите в письме вашу компанию и какие данные необходимо изменить.</p>
                         </div>
                     </div>
@@ -573,22 +612,22 @@
 <div id="cityModal" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 500px;">
         <span class="modal-close" onclick="closeCityModal()">&times;</span>
-        <div class="modal-title" id="cityModalTitle">➕ Добавить город</div>
+        <div class="modal-title" id="cityModalTitle">Добавить город</div>
         
         <div class="form-group">
-            <label>🏙️ Название города</label>
+            <label>Название города</label>
             <input type="text" id="cityName" class="form-input" placeholder="Например: Москва">
         </div>
         
         <div class="form-group">
-            <label>📊 Порядок сортировки</label>
+            <label>Порядок сортировки</label>
             <input type="number" id="citySortOrder" class="form-input" value="0" min="0">
             <small>Меньше число - выше в списке</small>
         </div>
         
         <div style="display: flex; gap: 12px; margin-top: 20px;">
-            <button class="btn-save" onclick="saveCity()" style="flex: 1;">💾 Сохранить</button>
-            <button class="btn-cancel" onclick="closeCityModal()" style="flex: 1;">❌ Отмена</button>
+            <button class="btn-save" onclick="saveCity()" style="flex: 1;">Сохранить</button>
+            <button class="btn-cancel" onclick="closeCityModal()" style="flex: 1;">Отмена</button>
         </div>
     </div>
 </div>
@@ -600,29 +639,29 @@
         <div class="modal-title" id="addressModalTitle">➕ Добавить адрес</div>
         
         <div class="form-group">
-            <label>🏙️ Город</label>
+            <label>Город</label>
             <select id="addressCityId" class="form-select">
                 <option value="">-- Без города --</option>
             </select>
         </div>
         
         <div class="form-group">
-            <label>📍 Адрес*</label>
+            <label>Адрес*</label>
             <input type="text" id="addressText" class="form-input" placeholder="Улица, дом">
         </div>
         
         <div class="form-group">
-            <label>📞 Телефон</label>
+            <label>Телефон</label>
             <input type="text" id="addressPhone" class="form-input" placeholder="+7 (XXX) XXX-XX-XX">
         </div>
         
         <div class="form-group">
-            <label>⏰ Часы работы</label>
+            <label>Часы работы</label>
             <textarea id="addressWorkingHours" class="form-input" rows="3" placeholder="Пн-Пт: 10:00-22:00&#10;Сб-Вс: 11:00-23:00"></textarea>
         </div>
         
         <div class="form-group">
-            <label>🌐 Координаты (для карты)</label>
+            <label>Координаты (для карты)</label>
             <div style="display: flex; gap: 10px;">
                 <input type="text" id="addressLatitude" class="form-input" placeholder="Широта (latitude)" style="flex: 1;">
                 <input type="text" id="addressLongitude" class="form-input" placeholder="Долгота (longitude)" style="flex: 1;">
@@ -633,14 +672,14 @@
         <div class="form-group">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                 <input type="checkbox" id="addressIsMain">
-                <span>⭐ Сделать основным адресом</span>
+                <span>Сделать основным адресом</span>
             </label>
             <small>Основной адрес будет показываться первым в приложении</small>
         </div>
         
         <div style="display: flex; gap: 12px; margin-top: 20px;">
-            <button class="btn-save" onclick="saveAddress()" style="flex: 1;">💾 Сохранить</button>
-            <button class="btn-cancel" onclick="closeAddressModal()" style="flex: 1;">❌ Отмена</button>
+            <button class="btn-save" onclick="saveAddress()" style="flex: 1;">Сохранить</button>
+            <button class="btn-cancel" onclick="closeAddressModal()" style="flex: 1;">Отмена</button>
         </div>
     </div>
 </div>
@@ -663,57 +702,57 @@
             <div class="modal-title" id="campaignModalTitle">➕ Создать кампанию</div>
             
             <div class="form-group">
-                <label>📝 Название кампании</label>
+                <label>Название кампании</label>
                 <input type="text" id="campaignName" class="form-input" placeholder="Например: Возврат спящих пользователей">
             </div>
             
             <div class="form-group">
-                <label>👥 Аудитория</label>
+                <label>Аудитория</label>
                 <select id="campaignAudience" class="form-select" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd;">
-                    <option value="all">📊 Все пользователи</option>
-                    <option value="new">🌱 Новичок (1 покупка, ≤14 дней)</option>
-                    <option value="active">🔥 Активный (2+ покупок, ≤7 дней)</option>
-                    <option value="regular">⭐ Постоянный (2+ покупок, ≤3 дней)</option>
-                    <option value="dormant">😴 Спящий (≥15 дней без покупок)</option>
-                    <option value="birthday">🎂 С днем рождения (текущий месяц)</option>
+                    <option value="all">Все пользователи</option>
+                    <option value="new">Новичок (1 покупка, ≤14 дней)</option>
+                    <option value="active">Активный (2+ покупок, ≤7 дней)</option>
+                    <option value="regular">Постоянный (2+ покупок, ≤3 дней)</option>
+                    <option value="dormant">Спящий (≥15 дней без покупок)</option>
+                    <option value="birthday">С днем рождения (текущий месяц)</option>
                 </select>
             </div>
             
             <div class="form-group">
-                <label>📨 Заголовок сообщения</label>
+                <label>Заголовок сообщения</label>
                 <input type="text" id="campaignTitle" class="form-input" placeholder="Заголовок для VK сообщения">
             </div>
             
             <div class="form-group">
-                <label>💬 Текст сообщения</label>
+                <label>Текст сообщения</label>
                 <textarea id="campaignMessage" rows="5" class="form-textarea" placeholder="Текст сообщения..."></textarea>
             </div>
             
             <div class="form-group" id="campaignIntervalGroup">
-                <label>⏰ Интервал отправки (дни)</label>
+                <label>Интервал отправки (дни)</label>
                 <input type="number" id="campaignInterval" class="form-input" value="7" min="1" max="365">
                 <small style="display: block; margin-top: 4px; color: #666;">
-                    💡 Сообщение будет отправляться раз в указанное количество дней
+                     Сообщение будет отправляться раз в указанное количество дней
                 </small>
             </div>
             
             <div class="form-group" style="display: flex; gap: 20px; align-items: center;">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                     <input type="checkbox" id="campaignActive" style="width: 20px; height: 20px;">
-                    <span>✅ Включить кампанию</span>
+                    <span>Включить кампанию</span>
                 </label>
                 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                     <input type="checkbox" id="campaignSendNow" style="width: 20px; height: 20px;">
-                    <span>🚀 Отправить сразу после создания</span>
+                    <span>Отправить сразу после создания</span>
                 </label>
             </div>
             
             <div id="campaignError" class="error" style="display: none;"></div>
             
             <div style="display: flex; gap: 12px; margin-top: 20px;">
-                <button class="btn-save" onclick="saveCampaign()" style="flex: 1;">💾 Сохранить</button>
-                <button class="btn-cancel" onclick="closeCampaignModal()" style="flex: 1; padding: 14px; background: #95a5a6; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;">❌ Отмена</button>
+                <button class="btn-save" onclick="saveCampaign()" style="flex: 1;">Сохранить</button>
+                <button class="btn-cancel" onclick="closeCampaignModal()" style="flex: 1; padding: 14px; background: #95a5a6; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;"> Отмена</button>
             </div>
         </div>
     </div>

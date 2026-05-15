@@ -369,7 +369,7 @@
                             Начать сканирование
                         </button>
                         <button class="btn btn-warning" id="stopScanBtn" onclick="stopCameraScan()" style="flex: 1; display: none;">
-                            ⏹️ Остановить
+                            Остановить
                         </button>
                     </div>
                     
@@ -384,13 +384,13 @@
                         
                         <input type="file" id="qrImageInput" accept="image/*" style="display: none;" onchange="handleImageFileSelect(event)">
                         <button class="btn" onclick="document.getElementById('qrImageInput').click()" style="max-width: 300px; margin-bottom: 10px;">
-                            📁 Выбрать изображение
+                            Выбрать изображение
                         </button>
                         
                         <div style="margin: 10px 0; color: #999; font-size: 12px;">или</div>
                         
                         <button class="btn btn-warning" id="pasteBtn" onclick="pasteFromClipboard()" style="max-width: 300px;">
-                            📋 Вставить из буфера
+                            Вставить из буфера
                         </button>
                         
                         <div id="dropZone" style="margin-top: 15px; padding: 20px; border: 2px dashed #ccc; border-radius: 8px; background: white;">
@@ -407,17 +407,17 @@
         
         <!-- User Info Card -->
         <div class="card" id="userInfoCard" style="display:none;">
-            <h3>📊 Информация о пользователе</h3>
+            <h3>Информация о пользователе</h3>
             <div id="userInfo"></div>
         </div>
 		<!-- Selection Address Card -->
 <div class="card" id="addressSection" style="display:none;">
-    <h3>📍 Выберите адрес заведения</h3>
+    <h3>Выберите адрес заведения</h3>
     <div id="addressList" style="max-height: 200px; overflow-y: auto;">
         <div class="info">Загрузка адресов...</div>
     </div>
     <div id="selectedAddressInfo" class="info" style="display: none; margin-top: 12px;">
-        ✅ Выбран адрес: <strong id="selectedAddressText"></strong>
+        Выбран адрес: <strong id="selectedAddressText"></strong>
     </div>
 </div>
 
@@ -425,7 +425,7 @@
         <div class="card" id="orderSection" style="display:none;">
         
         <div>
-            <label>💰 Сумма заказа (₽):</label>
+            <label>Сумма заказа (₽):</label>
             <input type="number" id="orderAmount" placeholder="1000" style="width: calc(100% - 120px);" oninput="onOrderAmountChange()">
             <button onclick="calculateBonus()">Рассчитать бонусы</button>
         </div>
@@ -443,21 +443,21 @@
         <div class="radio-group">
     <label style="background:#f8f9fa; border:1px solid #ddd; cursor: pointer;" id="spendLabel" onclick="selectDiscountType('spend')">
         <input type="radio" name="discountType" value="spend" onchange="onDiscountTypeChange()" style="display: none;">
-        💸 Списать бонусы
+        Списать бонусы
     </label>
     <label style="background:#f8f9fa; border:1px solid #ddd; cursor: pointer;" id="promotionLabel" onclick="selectDiscountType('promotion')">
         <input type="radio" name="discountType" value="promotion" onchange="onDiscountTypeChange()" style="display: none;">
-        🎁 Использовать акцию
+        Использовать акцию
     </label>
 </div>
         
         <!-- СЕКЦИЯ СПИСАНИЯ БОНУСОВ -->
         <div class="bonus-spend-section" id="spendSection">
-            <h4>💸 Списание бонусов</h4>
+            <h4>Списание бонусов</h4>
             <div id="spendInfo">
-                <div>📌 1 ₽ = <span id="rubToBonusValue">10</span> бонусов</div>
-                <div>📌 Макс. процент: <span id="maxPercentValue">25</span>%</div>
-                <div>📌 Доступно: <strong id="availableBonuses">0</strong> бонусов</div>
+                <div>1 ₽ = <span id="rubToBonusValue">10</span> бонусов</div>
+                <div>Макс. процент: <span id="maxPercentValue">25</span>%</div>
+                <div>Доступно: <strong id="availableBonuses">0</strong> бонусов</div>
             </div>
             <div>
                 <label>Списать бонусов:</label>
@@ -469,19 +469,19 @@
         
         <!-- СЕКЦИЯ КУПЛЕННЫХ АКЦИЙ -->
         <div class="promotion-section" id="promotionSection" style="display: none;">
-            <h4>🎁 Доступные акции</h4>
+            <h4>Доступные акции</h4>
             <div id="availablePromotionsList"></div>
             <div id="selectedPromotionInfo" class="selected-promotion" style="display: none;"></div>
         </div>
         
         <!-- ИТОГОВАЯ СУММА -->
         <div class="final-order-card" id="finalOrderCard" style="display: none;">
-            <div style="font-size: 14px; opacity: 0.9;">💳 ИТОГОВАЯ СУММА К ОПЛАТЕ</div>
+            <div style="font-size: 14px; opacity: 0.9;">ИТОГОВАЯ СУММА К ОПЛАТЕ</div>
             <div class="amount" id="finalAmountToPay">0 ₽</div>
             <div style="font-size: 12px;" id="discountInfo"></div>
             <div style="font-size: 12px;" id="bonusToEarnInfo"></div>
             <button class="confirm-btn" onclick="confirmOrder()" id="confirmBtn">
-                ✅ ПОДТВЕРДИТЬ ЗАКАЗ
+                ПОДТВЕРДИТЬ ЗАКАЗ
             </button>
         </div>
         
@@ -489,18 +489,18 @@
         
         <!-- Back Button -->
         <button class="btn btn-warning" onclick="backToScanner()" style="margin-top: 20px;">
-            ⬅️ Вернуться назад к сканированию
+            Вернуться назад к сканированию
         </button>
     </div>
     
     <div class="card" id="historySection" style="display:none;">
-        <h3>📜 История операций</h3>
+        <h3>История операций</h3>
         <div id="historyStats" style="display: flex; justify-content: space-around; padding: 10px; background: #f8f9fa; border-radius: 12px; margin-bottom: 15px;">
             <div><strong>Заработано:</strong> <span id="totalEarned">0</span></div>
             <div><strong>Потрачено:</strong> <span id="totalSpent">0</span></div>
         </div>
         <div id="historyList" style="max-height: 400px; overflow-y: auto;"></div>
-        <button onclick="refreshHistory()" style="margin-top: 15px; width: 100%;">🔄 Обновить</button>
+        <button onclick="refreshHistory()" style="margin-top: 15px; width: 100%;">Обновить</button>
     </div>
     
     </div> <!-- End mainContent -->
@@ -967,7 +967,7 @@
         }
 
         if (decodedText) {
-            resultDiv.innerHTML = '<div class="success">✅ QR-код найден!</div>';
+            resultDiv.innerHTML = '<div class="success">QR-код найден!</div>';
             setTimeout(async () => await processQrCode(decodedText), 300);
         } else {
             throw new Error('QR-код не распознан');
@@ -1376,9 +1376,9 @@
             // Show user info
             document.getElementById('userInfo').innerHTML = `
     <div class="user-info">
-        <strong>👤 ${data.user.name || 'Пользователь'}</strong><br>
-        💰 Баланс: <span class="balance">${data.user.bonus_balance || 0}</span> бонусов<br>
-        🏆 Уровень: ${data.tier || 'Новичок'} (кешбэк ${data.cashbackPercent || 3}%)
+        <strong>${data.user.name || 'Пользователь'}</strong><br>
+        Баланс: <span class="balance">${data.user.bonus_balance || 0}</span> бонусов<br>
+        Уровень: ${data.tier || 'Новичок'} (кешбэк ${data.cashbackPercent || 3}%)
     </div>
 `;
             
@@ -1421,7 +1421,7 @@
             }
             
             document.getElementById('scanResult').innerHTML = 
-                '<div class="success">✅ QR-код проверен успешно</div>';
+                '<div class="success">QR-код проверен успешно</div>';
         } else {
             throw new Error(data.message || 'Ошибка проверки QR-кода');
         }
@@ -1602,7 +1602,7 @@ function updateFinalOrderSummary() {
         document.getElementById('bonusToEarnInfo').innerHTML = `⭐ Будет начислено: +${bonusToEarn.toLocaleString()} бонусов<br><span style="font-size: 10px;">(кешбэк ${currentCashbackPercent || 3}% = ${cashbackRub.toFixed(2)}₽ × ${rubToBonus} бонусов/₽)</span>`;
         document.getElementById('bonusToEarnInfo').style.color = '#ffd966';
     } else {
-        document.getElementById('bonusToEarnInfo').innerHTML = `⚠️ Минимальная сумма для начисления: ${minPurchase}₽`;
+        document.getElementById('bonusToEarnInfo').innerHTML = `Минимальная сумма для начисления: ${minPurchase}₽`;
         document.getElementById('bonusToEarnInfo').style.color = '#ffaa66';
     }
     
@@ -1636,17 +1636,17 @@ function updateConfirmButtonState() {
         confirmBtn.style.cursor = 'not-allowed';
         
         if (!hasDiscountTypeSelected) {
-            confirmBtn.title = '🎯 Сначала выберите тип скидки';
+            confirmBtn.title = 'Сначала выберите тип скидки';
         } else if (!hasAddress) {
-            confirmBtn.title = '📍 Сначала выберите адрес заведения';
+            confirmBtn.title = 'Сначала выберите адрес заведения';
         } else if (!orderAmount || orderAmount <= 0) {
-            confirmBtn.title = '💰 Введите сумму заказа';
+            confirmBtn.title = 'Введите сумму заказа';
         }
     } else {
         confirmBtn.disabled = false;
         confirmBtn.style.opacity = '1';
         confirmBtn.style.cursor = 'pointer';
-        confirmBtn.title = '✅ Подтвердить заказ';
+        confirmBtn.title = 'Подтвердить заказ';
     }
 }     
 
@@ -1680,7 +1680,7 @@ async function loadAvailablePromotions() {
         const container = document.getElementById('availablePromotionsList');
 
         if (availablePromotions.length === 0) {
-            container.innerHTML = '<div class="warning">⚠️ Нет доступных акций</div>';
+            container.innerHTML = '<div class="warning">Нет доступных акций</div>';
             const promoRadio = document.querySelector('input[value="promotion"]');
             if (promoRadio) {
                 promoRadio.disabled = true;
@@ -1848,9 +1848,9 @@ async function loadAvailablePromotions() {
                         bonusRateInfo.style.display = 'block';
                         bonusRateInfo.innerHTML = `
                             <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                                <span>⭐ Базовое начисление: <strong>${currentBonusSettings.bonusRatePerThousand}</strong> бонусов/1000₽</span>
-                                <span>📈 Минимум: <strong>${currentBonusSettings.minPurchaseForBonus}</strong> ₽</span>
-                                <span>💱 Курс: 1 ₽ = <strong>${currentBonusSettings.rubToBonus}</strong> бонусов</span>
+                                <span>Базовое начисление: <strong>${currentBonusSettings.bonusRatePerThousand}</strong> бонусов/1000₽</span>
+                                <span>Минимум: <strong>${currentBonusSettings.minPurchaseForBonus}</strong> ₽</span>
+                                <span>Курс: 1 ₽ = <strong>${currentBonusSettings.rubToBonus}</strong> бонусов</span>
                             </div>
                         `;
                     }
@@ -1868,7 +1868,7 @@ async function loadAvailablePromotions() {
     
     if (amount < minPurchase) {
         document.getElementById('bonusResult').innerHTML = `
-            <div class="warning">⚠️ Минимальная сумма для начисления бонусов: ${minPurchase}₽</div>
+            <div class="warning">Минимальная сумма для начисления бонусов: ${minPurchase}₽</div>
         `;
     } else {
         // Получаем кешбэк в процентах (из уровня пользователя)
@@ -2072,14 +2072,14 @@ async function loadUserHistory() {
                     borderColor = '#9b59b6';
                     const spentAmount = Math.abs(actualBonusChange);
                     if (spentAmount > 0 && actualBonusChange < 0) {
-                        amountText = `<div style="font-size: 12px; color: #9b59b6;">💎 Потрачено: ${spentAmount} бонусов</div>`;
+                        amountText = `<div style="font-size: 12px; color: #9b59b6;">Потрачено: ${spentAmount} бонусов</div>`;
                         bonusText = `<span style="color: #e74c3c; font-weight: bold;">-${spentAmount} бонусов</span>`;
                     } else if (spentAmount === 0 || actualBonusChange === 0) {
-                        amountText = `<div style="font-size: 12px; color: #3498db;">🎁 Бесплатная акция</div>`;
+                        amountText = `<div style="font-size: 12px; color: #3498db;">Бесплатная акция</div>`;
                         bonusText = `<span style="color: #3498db; font-weight: bold;">Бесплатно</span>`;
                     } else {
                         // Покупка акции (списание)
-                        amountText = `<div style="font-size: 12px; color: #9b59b6;">💎 Потрачено: ${spentAmount} бонусов</div>`;
+                        amountText = `<div style="font-size: 12px; color: #9b59b6;">Потрачено: ${spentAmount} бонусов</div>`;
                         bonusText = `<span style="color: #e74c3c; font-weight: bold;">-${spentAmount} бонусов</span>`;
                     }
                 } else if (isEarn) {
@@ -2087,7 +2087,7 @@ async function loadUserHistory() {
                     title = t.description || 'Начисление бонусов';
                     borderColor = '#27ae60';
                     if (t.amount > 0) {
-                        amountText = `<div style="font-size: 12px; color: #27ae60;">💰 Сумма: ${t.amount.toLocaleString()} ₽</div>`;
+                        amountText = `<div style="font-size: 12px; color: #27ae60;">Сумма: ${t.amount.toLocaleString()} ₽</div>`;
                     }
                     bonusText = `<span style="color: #27ae60; font-weight: bold;">+${actualBonusChange} бонусов</span>`;
                 } else {
@@ -2273,7 +2273,7 @@ function renderAddressList() {
     if (!container) return;
     
     if (availableAddresses.length === 0) {
-        container.innerHTML = '<div class="warning">⚠️ Нет доступных адресов. Обратитесь к администратору.</div>';
+        container.innerHTML = '<div class="warning">Нет доступных адресов. Обратитесь к администратору.</div>';
         return;
     }
     
@@ -2298,12 +2298,12 @@ function renderAddressList() {
              onmouseenter="this.style.borderColor='#667eea'"
              onmouseleave="this.style.borderColor='${selectedAddress?.id === addr.id ? '#27ae60' : '#ddd'}'">
             <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="font-size: 24px;">${addr.is_main ? '⭐' : '📍'}</div>
+                <div style="font-size: 24px;">${addr.is_main ? '⭐' : ''}</div>
                 <div style="flex: 1;">
                     <div style="font-weight: 600;">${escapeHtmlForCashier(addr.address)}</div>
                     <div style="font-size: 12px; color: #666; margin-top: 4px;">
-                        ${addr.city_name ? `🏙️ ${escapeHtmlForCashier(addr.city_name)}` : ''}
-                        ${addr.phone ? ` • 📞 ${addr.phone}` : ''}
+                        ${addr.city_name ? `${escapeHtmlForCashier(addr.city_name)}` : ''}
+                        ${addr.phone ? ` • ${addr.phone}` : ''}
                         ${addr.is_main ? '<span style="color: #f39c12; margin-left: 8px;">Основной</span>' : ''}
                     </div>
                     ${addr.working_hours ? `<div style="font-size: 11px; color: #888; margin-top: 4px;">⏰ ${escapeHtmlForCashier(addr.working_hours)}</div>` : ''}
@@ -2355,7 +2355,7 @@ function selectAddressForOrder(addressId) {
     // Обновляем состояние кнопки
     updateConfirmButtonState();
     
-    console.log('✅ Выбран адрес:', selectedAddress.address, selectedAddress.city_name ? `(${selectedAddress.city_name})` : '');
+    console.log('Выбран адрес:', selectedAddress.address, selectedAddress.city_name ? `(${selectedAddress.city_name})` : '');
 }
 
 // Показать предупреждение о необходимости выбора адреса
@@ -2378,7 +2378,7 @@ function hideAddressWarning() {
 function checkAddressSelected() {
     if (!selectedAddress) {
         showAddressRequiredWarning();
-        showNotification('❌ Пожалуйста, выберите адрес заведения!', 'error');
+        showNotification('Пожалуйста, выберите адрес заведения!', 'error');
         document.getElementById('addressSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
         
         // Анимируем предупреждение

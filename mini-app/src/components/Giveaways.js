@@ -263,12 +263,11 @@ const adjustDateToLocal = (dateString) => {
         textAlign: 'center',
         color: 'white'
       }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🎰</div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Нет активных розыгрышей
         </div>
         <div style={{ fontSize: 12, opacity: 0.5 }}>
-          Следите за обновлениями! Скоро появятся новые розыгрыши 🎁
+          Следите за обновлениями! Скоро появятся новые розыгрыши 
         </div>
       </div>
     );
