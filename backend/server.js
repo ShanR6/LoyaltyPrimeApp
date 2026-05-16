@@ -2660,50 +2660,38 @@ app.post('/api/demo-request', async (req, res) => {
     try {
         const { brandName, owner, email, phone } = req.body;
         
-        if (!brandName || || !owner || !email || !phone) {
+        if (!brandName || !owner || !email || !phone) {
             return res.status(400).json({ success: false, message: 'Заполните все поля' });
         }
         
-        if (!email.includes('@')) {
-            return res.status(400).json({ success: false, message: 'Введите корректный email' });
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (cleanPhone.length !== 11) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Введите корректный номер телефона (11 цифр)' 
+            });
+        }
+        const normalizedPhone = '+7' + cleanPhone.slice(-10);
+        
+        try {
+            await transporter.sendMail({
+                from: '"LoyaltyPrime" <padavydov@stud.kantiana.ru>',
+                to: email,
+                subject: 'Спасибо за заявку!',
+                text: `Здравствуйте, ${owner}!\n\nВы оставили заявку на демо-доступ к программе лояльности LoyaltyPrime.\nМы свяжемся с вами по телефону ${normalizedPhone} в ближайшее время.\n\nС уважением, команда LoyaltyPrime`,
+                html: `<p>Здравствуйте, <strong>${owner}</strong>!</p><p>Вы оставили заявку на демо-доступ к программе лояльности <strong>LoyaltyPrime</strong>.</p><p>Мы свяжемся с вами по телефону <strong>${normalizedPhone}</strong> в ближайшее время.</p><p>С уважением, команда LoyaltyPrime</p>`
+            });
+        } catch (mailError) {
+            console.warn(`Не удалось отправить письмо клиенту ${email}:`, mailError.message);
         }
         
         const mailOptions = {
-            from: '"LoyaltyPrime" <padavydov@stud.kantiana.ru>',  
-            to: 'padavydov@stud.kantiana.ru',                         
+            from: '"LoyaltyPrime" <padavydov@stud.kantiana.ru>',
+            to: 'padavydov@stud.kantiana.ru',
             subject: `Новая заявка на демо от ${brandName}`,
-            text: `
-Новая заявка на демо-доступ к программе лояльности
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Бренд: ${brandName}
-Владелец: ${owner}
-Email: ${email}
-Телефон для связи: ${phone}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Свяжитесь с клиентом как можно скорее для демонстрации возможностей LoyaltyPrime.
-            `,
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px;">
-                    <h2 style="color: #ff4d4d; margin-bottom: 20px;">Новая заявка на демо</h2>
-                    
-                    <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                        <p style="margin: 8px 0;"><strong>Бренд:</strong> ${brandName}</p>
-						<p style="margin: 8px 0;"><strong>Владелец:</strong> ${owner}</p>
-                        <p style="margin: 8px 0;"><strong>Email:</strong> ${email}</p>
-						<p style="margin: 8px 0;"><strong>Телефон для связи:</strong> ${phone}</p>
-                    </div>
-                    
-                    <p style="color: #555;">Свяжитесь с клиентом как можно скорее для демонстрации возможностей <strong>LoyaltyPrime</strong>.</p>
-                    
-                    <hr style="margin: 20px 0; border-color: #e0e0e0;">
-                    
-                    <p style="color: #888; font-size: 12px;">Письмо сгенерировано автоматически из CRM-системы LoyaltyPrime.</p>
-                </div>
-            `
+            text: `Новая заявка на демо-доступ к программе лояльности!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nБренд: ${brandName}\nВладелец: ${owner}\nEmail: ${email}\nТелефон: ${normalizedPhone}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nСвяжитесь с клиентом как можно скорее для демонстрации возможностей LoyaltyPrime.`,
+            html: `Новая заявка на демо-доступ к программе лояльности!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nБренд: ${brandName}\nВладелец: ${owner}\nEmail: ${email}\nТелефон: ${normalizedPhone}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nСвяжитесь с клиентом как можно скорее для демонстрации возможностей LoyaltyPrime.`
         };
-        
         await transporter.sendMail(mailOptions);
         
         console.log(`Демо-заявка отправлена: ${brandName} - ${email}`);

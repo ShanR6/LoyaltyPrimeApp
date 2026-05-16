@@ -102,42 +102,49 @@ function toggleFaq(element) {
 
 // ========== ОТПРАВКА ДЕМО-ЗАЯВКИ НА ПОЧТУ ==========
 async function submitDemo() {
-    const brandName = document.getElementById('demoBrand')?.value;
-	const owner = document.getElementById('demoOwner')?.value;
-    const email = document.getElementById('demoEmail')?.value;
-    const phone = document.getElementById('demoPhone')?.value;
-    if (!brandName || || !owner || !email || !phone) {
+    const brandName = document.getElementById('demoBrand')?.value?.trim();
+    const owner = document.getElementById('demoOwner')?.value?.trim();
+    const email = document.getElementById('demoEmail')?.value?.trim();
+    const phone = document.getElementById('demoPhone')?.value?.trim();
+
+    if (!brandName || !owner || !email || !phone) {
         alert('Пожалуйста, заполните все поля');
         return;
     }
-    
-    if (!email.includes('@')) {
-        alert('Пожалуйста, введите корректный email');
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 11) {
+        alert('Номер телефона должен состоять из 11 цифр');
         return;
     }
-    
+
+    if (!email.includes('@') || !email.includes('.')) {
+        alert('Введите корректный email');
+        return;
+    }
+
     const button = document.querySelector('.cta-button');
     const originalText = button.textContent;
     button.textContent = 'Отправка...';
     button.disabled = true;
-    
+
     try {
         const response = await fetch(`${API_URL}/api/demo-request`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ brandName, owner, email, phone })
+            body: JSON.stringify({ brandName, owner, email, phone: cleanPhone })  // передаём очищенный номер
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             alert('Спасибо! Заявка отправлена. Мы свяжемся с вами в ближайшее время.');
             document.getElementById('demoBrand').value = '';
-			document.getElementById('demoOwner').value = '';
+            document.getElementById('demoOwner').value = '';
             document.getElementById('demoEmail').value = '';
-			document.getElementById('demoPhone').value = '';
+            document.getElementById('demoPhone').value = '';
         } else {
-            alert((data.message || 'Ошибка отправки. Попробуйте позже.'));
+            alert(data.message || 'Ошибка отправки. Попробуйте позже.');
         }
     } catch (error) {
         console.error('Ошибка:', error);
