@@ -30,25 +30,56 @@
     </header>
 
     <!-- Модальные окна CRM -->
-    <div class="modal" id="loginModal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeModal('login')">&times;</span>
-            <div class="modal-title">Вход в CRM</div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" id="loginEmail" placeholder="example@mail.com">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Пароль</label>
-                <input type="password" class="form-input" id="loginPassword" placeholder="********">
-            </div>
-            <div class="error-message" id="loginError"></div>
-            <button class="modal-btn" onclick="handleCRMLogin()">Войти в CRM</button>
-            <div class="modal-link">
-                <span onclick="window.open('cashier.html', '_blank')" style="cursor: pointer; color: #667eea; font-weight: 600;">Вход кассира</span>
-            </div>
+<div class="modal" id="loginModal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal('login')">&times;</span>
+        <div class="modal-title">Вход в CRM</div>
+        <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" id="loginEmail" placeholder="example@mail.com">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Пароль</label>
+            <input type="password" class="form-input" id="loginPassword" placeholder="********">
+        </div>
+        <div class="error-message" id="loginError"></div>
+        <button class="modal-btn" onclick="handleCRMLogin()">Войти в CRM</button>
+        <div class="modal-link" style="display: flex; justify-content: space-between; margin-top: 12px;">
+            <span onclick="closeModal('login'); openModal('forgotPassword')" style="cursor: pointer; color: #e74c3c; font-weight: 600;">
+                Забыли пароль?
+            </span>
+            <span onclick="window.open('cashier.html', '_blank')" style="cursor: pointer; color: #667eea; font-weight: 600;">
+                Вход кассира
+            </span>
         </div>
     </div>
+</div>
+<!-- Модальное окно восстановления пароля -->
+<div id="forgotPasswordModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal('forgotPassword')">&times;</span>
+        <div class="modal-title">Восстановление пароля</div>
+        <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+            Укажите email и номер телефона, которые вы использовали при регистрации. 
+            Мы свяжемся с вами для восстановления доступа.
+        </p>
+        <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" id="forgotEmail" placeholder="example@mail.com">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Номер телефона</label>
+            <input type="tel" class="form-input" id="forgotPhone" placeholder="+7 900 123-45-67">
+        </div>
+        <div class="error-message" id="forgotError"></div>
+        <button class="modal-btn" onclick="submitForgotPassword()">Отправить запрос</button>
+        <div class="modal-link" style="margin-top: 12px; text-align: center;">
+            <span onclick="closeModal('forgotPassword'); openModal('login')" style="cursor: pointer; color: #667eea; font-weight: 600;">
+                ← Вернуться ко входу
+            </span>
+        </div>
+    </div>
+</div>
 
     <!-- Модальное окно добавления/редактирования акции -->
 <div id="promotionModal" class="modal">
@@ -393,17 +424,17 @@
                         
                         <div class="form-group">
                             <label>Логин кассира</label>
-                            <input type="text" id="cashierLogin" class="form-input" placeholder="Введите логин">
+                            <input type="text" id="cashierLogin" class="form-input" placeholder="Введите логин" autocomplete="off">
                         </div>
                         
                         <div class="form-group">
                             <label>Пароль кассира</label>
-                            <input type="password" id="cashierPassword" class="form-input" placeholder="Введите пароль">
+                            <input type="password" id="cashierPassword" class="form-input" placeholder="Введите пароль" autocomplete="new-password">
                         </div>
                         
                         <div class="form-group">
                             <label>Подтверждение пароля</label>
-                            <input type="password" id="cashierPasswordConfirm" class="form-input" placeholder="Повторите пароль">
+                            <input type="password" id="cashierPasswordConfirm" class="form-input" placeholder="Повторите пароль" autocomplete="new-password">
                         </div>
                         
                         <button class="btn-save" onclick="saveCashierCredentials()" style="width: 100%; margin-top: 16px;">

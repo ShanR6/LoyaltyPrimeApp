@@ -461,7 +461,7 @@ const claimQuestBonus = async (quest) => {
         q.progress >= q.target && !q.completed && !q.claimed
       );
       
-      console.log('🔍 Проверка заданий для автовыполнения:', questsToCheck.map(q => q.title));
+      console.log('Проверка заданий для автовыполнения:', questsToCheck.map(q => q.title));
       
       for (const quest of questsToCheck) {
         markQuestAsCompleted(quest);
@@ -497,35 +497,34 @@ const claimQuestBonus = async (quest) => {
 
   function mapQuestType(title) {
     const lowerTitle = title.toLowerCase();
-    console.log(`🔍 mapQuestType для "${title}" -> lower: "${lowerTitle}"`);
+    console.log(`mapQuestType для "${title}" -> lower: "${lowerTitle}"`);
     
-    // ✅ ДОБАВИТЬ ПРОВЕРКУ ДЛЯ АКЦИИ (самую первую!)
     if (lowerTitle.includes('воспользоваться акцией') || lowerTitle.includes('акцией')) {
-        console.log(`   ✅ Определён тип: use_promotion`);
+        console.log(`Определён тип: use_promotion`);
         return 'use_promotion';
     }
     if (lowerTitle.includes('ежедневный вход')) {
-        console.log(`   ✅ Определён тип: daily_login`);
+        console.log(`Определён тип: daily_login`);
         return 'daily_login';
     }
     if (lowerTitle.includes('потратить')) {
-        console.log(`   ✅ Определён тип: spend_amount`);
+        console.log(`Определён тип: spend_amount`);
         return 'spend_amount';
     }
     if (lowerTitle.includes('покупк')) {
-        console.log(`   ✅ Определён тип: purchase_count`);
+        console.log(`Определён тип: purchase_count`);
         return 'purchase_count';
     }
     if (lowerTitle.includes('колесо удачи')) {
-        console.log(`   ✅ Определён тип: spin_wheel`);
+        console.log(`Определён тип: spin_wheel`);
         return 'spin_wheel';
     }
     if (lowerTitle.includes('скретч')) {
-        console.log(`   ✅ Определён тип: scratch_card`);
+        console.log(`Определён тип: scratch_card`);
         return 'scratch_card';
     }
     if (lowerTitle.includes('кости')) {
-        console.log(`   ✅ Определён тип: play_dice`);
+        console.log(`Определён тип: play_dice`);
         return 'play_dice';
     }
     

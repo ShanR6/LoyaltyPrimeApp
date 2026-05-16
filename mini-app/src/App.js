@@ -8,10 +8,8 @@ import { DiceRoll } from './components/DiceRoll';
 import { ScratchCard } from './components/ScratchCard';
 import { Giveaways } from './components/Giveaways';
 
-// mini-app/src/App.js
-const API_URL = 'http://localhost:3001'; // Локальный бэкенд
+const API_URL = 'http://localhost:3001';
 
-// Или лучше так:
 const getApiUrl = () => {
   if (window.location.hostname === 'localhost') {
     return 'http://localhost:3001';
@@ -20,10 +18,8 @@ const getApiUrl = () => {
 };
 
 
-// Определяем DEFAULT_TIERS ДО его использования
 const DEFAULT_TIERS = [
-    { name: '🌱 Новичок', threshold: 0, cashback: 3, color: '#95a5a6', icon: '🌱' },
-    { name: '🥉 Бронза', threshold: 500, cashback: 5, color: '#cd7f32', icon: '🥉' },
+    { name: '🔰 Новичок', threshold: 0, cashback: 3, color: '#95a5a6', icon: '🔰' },
     { name: '🥈 Серебро', threshold: 2000, cashback: 7, color: '#bdc3c7', icon: '🥈' },
     { name: '🥇 Золото', threshold: 8000, cashback: 10, color: '#f1c40f', icon: '🥇' },
     { name: '💎 Бриллиант', threshold: 20000, cashback: 15, color: '#00b4d8', icon: '💎' }
@@ -55,15 +51,12 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [greetingSettings, setGreetingSettings] = useState({ text: 'Добро пожаловать!', emoji: '👋' });
   
-// Получение смещения пользователя (положительное для восточных поясов, напр. Москва = 180)
 const getUserOffset = () => -(new Date().getTimezoneOffset());
 
-// Преобразование даты, сохранённой в часовом поясе компании, в локальное время пользователя
 const adjustDateToLocal = (dateString, companyOffset) => {
     if (!dateString) return null;
-    const parsed = new Date(dateString); // интерпретируется как локальное время браузера (может быть неверно)
+    const parsed = new Date(dateString);
     const userOffset = getUserOffset();
-    // Исправляем: к исходному timestamp добавляем (userOffset - companyOffset) минут
     const correctedTime = parsed.getTime() + (userOffset - companyOffset) * 60000;
     return new Date(correctedTime);
 };
@@ -164,7 +157,6 @@ useEffect(() => {
           setPromotions(activePromotions);
         }
         
-        // 2. ✅ ОБНОВЛЯЕМ КУПЛЕННЫЕ АКЦИИ (ВАЖНО!)
         const purchasedResponse = await fetch(`${API_URL}/api/users/${userId}/promotions/purchased/${selectedGroup.id}`);
         if (purchasedResponse.ok) {
           const purchasedData = await purchasedResponse.json();
@@ -174,7 +166,6 @@ useEffect(() => {
           }
         }
         
-        // 3. ✅ СИНХРОНИЗИРУЕМ БАЛАНС (на случай если бонусы были списаны)
         await syncBalanceFromDB();
         
       } catch (error) {

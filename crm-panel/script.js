@@ -102,41 +102,44 @@ function toggleFaq(element) {
 
 // ========== ОТПРАВКА ДЕМО-ЗАЯВКИ НА ПОЧТУ ==========
 async function submitDemo() {
-    const brandName = document.getElementById('demoBrand')?.value?.trim();
-    const owner = document.getElementById('demoOwner')?.value?.trim();
-    const email = document.getElementById('demoEmail')?.value?.trim();
-    const phone = document.getElementById('demoPhone')?.value?.trim();
-
+    const brandName = document.getElementById('demoBrand')?.value;
+    const owner = document.getElementById('demoOwner')?.value;
+    const email = document.getElementById('demoEmail')?.value;
+    const phone = document.getElementById('demoPhone')?.value;
+    
+    // Валидация обязательных полей
     if (!brandName || !owner || !email || !phone) {
         alert('Пожалуйста, заполните все поля');
         return;
     }
-
+    
+    // Валидация email
+    if (!email.includes('@')) {
+        alert('Пожалуйста, введите корректный email');
+        return;
+    }
+    
+    // Валидация телефона: проверяем, что введено 11 цифр
     const cleanPhone = phone.replace(/\D/g, '');
     if (cleanPhone.length !== 11) {
-        alert('Номер телефона должен состоять из 11 цифр');
+        alert('Пожалуйста, введите корректный номер телефона (11 цифр)');
         return;
     }
-
-    if (!email.includes('@') || !email.includes('.')) {
-        alert('Введите корректный email');
-        return;
-    }
-
+    
     const button = document.querySelector('.cta-button');
     const originalText = button.textContent;
     button.textContent = 'Отправка...';
     button.disabled = true;
-
+    
     try {
         const response = await fetch(`${API_URL}/api/demo-request`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ brandName, owner, email, phone: cleanPhone })  // передаём очищенный номер
+            body: JSON.stringify({ brandName, owner, email, phone })
         });
-
+        
         const data = await response.json();
-
+        
         if (data.success) {
             alert('Спасибо! Заявка отправлена. Мы свяжемся с вами в ближайшее время.');
             document.getElementById('demoBrand').value = '';
@@ -4928,6 +4931,17 @@ async function loadMiniAppStatus() {
             if (warningDiv) {
                 warningDiv.style.display = isActive ? 'none' : 'block';
             }
+            
+            // Добавлено: Показываем уведомление о статусе блокировки при входе
+            if (!isActive && !sessionStorage.getItem('blocked_notification_shown')) {
+                setTimeout(() => {
+                    showMiniAppStatus(
+                        '⚠️ VK Mini App отключен. Включите его в настройках CRM, чтобы пользователи могли пользоваться приложением.',
+                        'warning'
+                    );
+                    sessionStorage.setItem('blocked_notification_shown', 'true');
+                }, 1000);
+            }
         }
     } catch (error) {
         console.error('Ошибка загрузки статуса Mini App:', error);
@@ -5002,6 +5016,14 @@ async function toggleMiniApp(isActive) {
 // Показ уведомления о статусе
 function showMiniAppStatus(message, type) {
     const statusDiv = document.createElement('div');
+    let bgColor = '#27ae60'; // success - green
+    
+    if (type === 'error') {
+        bgColor = '#e74c3c'; // error - red
+    } else if (type === 'warning') {
+        bgColor = '#f39c12'; // warning - orange
+    }
+    
     statusDiv.style.cssText = `
         position: fixed;
         bottom: 20px;
@@ -5012,7 +5034,9 @@ function showMiniAppStatus(message, type) {
         font-weight: 600;
         z-index: 10000;
         animation: slideIn 0.3s ease;
-        background: ${type === 'success' ? '#27ae60' : '#e74c3c'};
+        background: ${bgColor};
+        max-width: 350px;
+        font-size: 13px;
     `;
     statusDiv.textContent = message;
     document.body.appendChild(statusDiv);
@@ -5020,6 +5044,72 @@ function showMiniAppStatus(message, type) {
     setTimeout(() => {
         statusDiv.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => statusDiv.remove(), 300);
-    }, 3000);
+    }, 5000);
 }
+// ========== ВОССТАНОВЛЕНИЕ ПАРОЛЯ ==========
 
+async function submitForgotPassword() {
+    const email = document.getElementById('forgotEmail')?.value.trim();
+    const phone = document.getElementById('forgotPhone')?.value.trim();
+    const errorElement = document.getElementById('forgotError');
+    
+    // Валидация
+    if (!email || !phone) {
+        errorElement.textContent = 'Заполните email и номер телефона';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    if (!email.includes('@')) {
+        errorElement.textContent = 'Введите корректный email';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    // Валидация телефона (11 цифр)
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 11) {
+        errorElement.textContent = 'Введите корректный номер телефона (11 цифр)';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+        return;
+    }
+    
+    const button = event.target;
+    const originalText = button.textContent;
+    button.textContent = 'Отправка...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/companies/forgot-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, phone })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(data.message);
+            // Очищаем поля и закрываем модальное окно
+            document.getElementById('forgotEmail').value = '';
+            document.getElementById('forgotPhone').value = '';
+            closeModal('forgotPassword');
+            openModal('login');
+        } else {
+            errorElement.textContent = data.message || 'Ошибка отправки';
+            errorElement.style.display = 'block';
+            setTimeout(() => errorElement.style.display = 'none', 3000);
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        errorElement.textContent = 'Ошибка подключения к серверу';
+        errorElement.style.display = 'block';
+        setTimeout(() => errorElement.style.display = 'none', 3000);
+    } finally {
+        button.textContent = originalText;
+        button.disabled = false;
+    }
+}

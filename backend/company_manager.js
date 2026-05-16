@@ -1,6 +1,5 @@
 const readline = require('readline');
 const { Pool } = require('pg');
-const { addPresetDataForCompany } = require('./database-pg');
 
 const pool = new Pool({
     user: 'postgres',
@@ -19,12 +18,21 @@ const question = (query) => new Promise(resolve => rl.question(query, resolve));
 
 // Функция для синхронизации последовательности ID
 async function syncSequence() {
-    await pool.query(`
-        SELECT setval('companies_id_seq', (SELECT COALESCE(MAX(id), 0) FROM companies))
-    `);
+    const result = await pool.query('SELECT COALESCE(MAX(id), 0) as max_id FROM companies');
+    const maxId = parseInt(result.rows[0].max_id);
+    
+    if (maxId === 0) {
+        // Таблица пустая - сбрасываем на 1
+        await pool.query('ALTER SEQUENCE companies_id_seq RESTART WITH 1');
+        console.log('Последовательность сброшена на 1 (таблица пуста)');
+    } else {
+        // Устанавливаем на maxId
+        await pool.query(`SELECT setval('companies_id_seq', $1)`, [maxId]);
+        console.log(`Последовательность установлена на ${maxId}`);
+    }
 }
 
-// Функция для создания компании
+// Функция для создания компании (БЕЗ предустановленных акций и заданий)
 async function createCompany() {
     console.log('\nСоздание новой компании\n');
     
@@ -41,23 +49,28 @@ async function createCompany() {
         return;
     }
     
-    // Синхронизируем последовательность
-    await syncSequence();
-    
-    // Вставляем новую компанию
-    const result = await pool.query(
-        `INSERT INTO companies (company, name, email, phone, password, brand_color, description) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) 
-         RETURNING id, company, email`,
-        [company, name, email, phone || '', password, brandColor || '#2ecc71', description || '']
-    );
-    
-    const companyId = result.rows[0].id;
-	await addPresetDataForCompany(companyId);
-    console.log(`\nКомпания "${company}" успешно создана!`);
-    console.log(`   ID: ${companyId}`);
-    console.log(`   Email: ${email}`);
-    console.log(`   Пароль: ${password}`);
+    try {
+        await syncSequence();
+        
+        // ИЗМЕНЕНО: явно устанавливаем is_active = false, mini_app_active = false
+        const result = await pool.query(
+            `INSERT INTO companies (company, name, email, phone, password, brand_color, description, is_active, mini_app_active, created_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, false, false, NOW()) 
+             RETURNING id, company, email`,
+            [company, name, email, phone || '', password, brandColor || '#2ecc71', description || '']
+        );
+        
+        const companyId = result.rows[0].id;
+        
+        console.log(`\nКомпания "${company}" успешно создана!`);
+        console.log(`   ID: ${companyId}`);
+        console.log(`   Email: ${email}`);
+        console.log(`   Пароль: ${password}`);
+        console.log(`   Статус: ЗАБЛОКИРОВАНА (CRM и VK Mini App неактивны)`);
+        console.log(`   Для активации войдите в CRM и включите оба переключателя в настройках.`);
+    } catch (error) {
+        console.error('Ошибка создания компании:', error.message);
+    }
 }
 
 // Функция для удаления компании
@@ -102,9 +115,7 @@ async function deleteCompany() {
         await pool.query('DELETE FROM companies WHERE id = $1', [companyId]);
         console.log('Компания успешно удалена!');
         
-        // Синхронизируем последовательность после удаления
         await syncSequence();
-        console.log('Последовательность ID синхронизирована');
     } else {
         console.log('Удаление отменено');
     }
@@ -119,7 +130,7 @@ async function listCompanies() {
         return;
     }
     
-    console.log('\nСписок компаний:');
+    console.log('\n📋 Список компаний:');
     console.log('┌────┬──────────────────────────┬──────────────────────────┬─────────────┐');
     console.log('│ ID │ Название                 │ Email                    │ Телефон     │');
     console.log('├────┼──────────────────────────┼──────────────────────────┼─────────────┤');
