@@ -17,7 +17,7 @@
                     <a href="#card" class="nav-link">Карта</a>
                     <a href="#ranks" class="nav-link">Ранги</a>
                     <a href="#marketing" class="nav-link">Акции</a>
-                    <a href="#faq" class="nav-link">FAQ</a>
+                    <a href="#faq" class="nav-link">Вопросы</a>
                 </nav>
                 <div class="auth-buttons">
                     <button class="btn-outline" onclick="openCRMLogin()">Вход в CRM</button>
@@ -54,7 +54,7 @@
 <div id="promotionModal" class="modal">
     <div class="modal-content">
         <span class="modal-close" onclick="closeModal('promotion')">&times;</span>
-        <div class="modal-title" id="promotionModalTitle">✏️ Редактировать акцию</div>
+        <div class="modal-title" id="promotionModalTitle"></div>
         
         <div class="form-group">
             <label>Название акции</label>
@@ -686,13 +686,105 @@
 
     <!-- Остальной сайт (лендинг) -->
     <div id="mainSite">
-        <section class="hero"><div class="container"><div class="hero-grid"><div class="hero-content"><h1 class="hero-title">Программа лояльности<span>для малого и среднего бизнеса</span></h1><div class="hero-buttons"></div></div><div class="hero-visual"><div class="card-preview"><div>💰 Текущий баланс</div><div class="balance-main"><span class="balance-amount" id="balance">0 <small>бонусов</small></span><span id="userRankBadge">🏅 Новичок</span></div><div class="progress-bar"><div class="progress-fill" id="rankProgress" style="width: 0%;"></div></div><div style="display: flex; justify-content: space-between;"><span id="currentRank">Новичок</span><span id="nextRank">Серебро</span></div></div></div></div></div></section>
+        <section class="hero"><div class="container"><div class="hero-grid"><div class="hero-content"><h1 class="hero-title">Программа лояльности<span>для кофейного и ресторанного бизнеса</span></h1><div class="hero-buttons"></div></div><div class="hero-visual"><div class="card-preview"><div>Текущий баланс</div><div class="balance-main"><span class="balance-amount" id="balance">0 <small>бонусов</small></div><div class="progress-bar"><div class="progress-fill" id="rankProgress" style="width: 0%;"></div></div><div style="display: flex; justify-content: space-between;"><span id="currentRank">Новичок</span><span id="nextRank">Серебро</span></div></div></div></div></div></section>
         <section id="card" class="card-features"><div class="container"><div class="section-header"><h2>Цифровая карта лояльности</h2></div><div class="card-grid"><div class="card-feature-item"><h3>📱 VK Mini App</h3><p>Полноценный личный кабинет прямо в VK. Не нужно скачивать приложение.</p></div><div class="card-feature-item"><h3>💳 Карта лояльности</h3><p>Всегда под рукой. Обновление баланса в реальном времени.</p></div></div></div></section>
         <section id="ranks" class="ranks"><div class="container"><div class="section-header"><h2>Ранговая бонусная система</h2></div><div class="ranks-grid"><div class="rank-card"><div class="rank-name bronze">Bronze</div><div class="rank-cashback">3%</div><p>кешбэк</p></div><div class="rank-card"><div class="rank-name silver">Silver</div><div class="rank-cashback">5%</div><p>кешбэк</p></div><div class="rank-card"><div class="rank-name gold">Gold</div><div class="rank-cashback">10%</div><p>кешбэк</p></div></div></div></section>
-        <section id="marketing" class="marketing"><div class="container"><div class="section-header"><h2>Конструктор акций и рассылок</h2></div><div class="scenario-grid"><div class="scenario-card"><h4>🔄 Возврат потерянных</h4><p>Персональные предложения неактивным гостям</p></div><div class="scenario-card"><h4>🎂 Дни рождения</h4><p>Бонусы и поздравления</p></div><div class="scenario-card"><h4>⏰ Тихие часы</h4><p>Поддержка продаж в часы спада</p></div><div class="scenario-card"><h4>👥 Рефералы</h4><p>Приводите друзей и получайте бонусы</p></div></div></div></section>
-        <section id="faq" class="faq"><div class="container"><div class="section-header"><h2>Частые вопросы</h2></div><div class="faq-grid"><div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Сколько стоит?<span>+</span></div><div class="faq-answer">От 6 000 ₽/месяц. Первый месяц бесплатно.</div></div><div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Скорость запуска?<span>+</span></div><div class="faq-answer">7 дней под ключ.</div></div></div></div></section>
-        <section id="cta" class="cta"><div class="container"><h2>Получите демо системы</h2><div class="cta-form"><div style="display: flex; gap: 16px; flex-wrap: wrap; width: 100%;"><input type="text" class="cta-input" placeholder="Название бренда" id="demoBrand"><input type="email" class="cta-input" placeholder="Ваш email" id="demoEmail"><button class="cta-button" onclick="submitDemo()">Отправить</button></div></div></div></section>
-        <footer class="footer"><div class="container"><div class="footer-grid"><div><div class="footer-logo">LoyaltyPrime</div><p>Программа лояльности для бизнеса</p></div><div><h4>Продукт</h4><ul class="footer-links"><li><a href="#card">Карта</a></li><li><a href="#ranks">Ранги</a></li></ul></div><div><h4>Контакты</h4><ul class="footer-links"><li>@loyaltyprime</li><li>info@loyaltyprime.ru</li></ul></div></div><div style="text-align: center; margin-top: 60px;">© 2026 LoyaltyPrime</div></div></footer>
+        <section id="marketing" class="marketing">
+		<div class="container">
+		<div class="section-header"><h2>Расширенная настройка программы лояльности</h2></div>
+		<div class="scenario-grid"><div class="scenario-card"><h4>📊 Аналитика и сегментация</h4><p>Отслеживайте ключевые метрики, выручку по адресам и распределение клиентов по сегментам.</p></div>
+		<div class="scenario-card"><h4>📫 Рассылка сообщений</h4><p>Отправляйте персонализированные push-уведомления клиентам прямо в VK.</p></div>
+		<div class="scenario-card"><h4>🎁 Управление акциями и заданиями</h4><p>Создавайте и настраивайте акции, задания и розыгрыши для роста вовлечённости.</p></div>
+		<div class="scenario-card"><h4>🎮 Игровые механики</h4><p>Настройте колесо фортуны, скретч-карты и кости, чтобы развлекать и удерживать клиентов.</p></div>
+		<div class="scenario-card"><h4>⚙️ Настройки бонусной системы</h4><p>Управляйте курсом бонусов, процентами кешбэка и уровнями лояльности.</p></div>
+		<div class="scenario-card"><h4>🏪 Страница кассира </h4><p>Принимайте оплату бонусами, применяйте акции и начисляйте кешбэк прямо на кассе.</p></div>
+		</section>
+        <section id="faq" class="faq">
+		<div class="container"><div class="section-header"><h2>Возможные вопросы</h2></div>
+		<div class="faq-grid"><div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как клиенты получают бонусы?<span>+</span></div>
+		<div class="faq-answer">Бонусы начисляются автоматически за покупки через кассу, а также за выполнение заданий, участие в играх и ежедневный вход в приложение.</div></div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Можно ли настроить разные уровни лояльности?<span>+</span></div>
+		<div class="faq-answer">Да. Вы создаёте любое количество уровней (Новичок, Золотой, Бриллиант и т.д.) с разным кешбэком и порогами трат.</div></div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как кассир принимает оплату бонусами?<span>+</span></div>
+		<div class="faq-answer">Кассир сканирует QR-код клиента, вводит сумму покупки и списывает бонусы. Часть суммы также можно оплатить бонусами, а остальное — наличными или картой.</div></div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как работает кешбэк?<span>+</span></div>
+		<div class="faq-answer">Процент от каждой покупки возвращается клиенту бонусами. Процент кешбэка зависит от уровня лояльности и настраивается в CRM.</div></div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как выглядит VK Mini App?<span>+</span></div>
+		<div class="faq-answer" style="user-select: none; -webkit-user-select: none; pointer-events: none;">
+        <img src="images/vk_mini_app.png" 
+             alt="VK Mini App" 
+             style="max-width: 100%; display: block; margin: 0 auto; user-select: none; -webkit-user-select: none;"
+             draggable="false"
+             oncontextmenu="return false;"
+             ondragstart="return false;" />
+    </div>
+</div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как выглядит аналитика в CRM?<span>+</span></div>
+		<div class="faq-answer" style="user-select: none; -webkit-user-select: none; pointer-events: none;">
+        <img src="images/analytics.png" 
+             alt="Analytics" 
+             style="max-width: 100%; display: block; margin: 0 auto; user-select: none; -webkit-user-select: none;"
+             draggable="false"
+             oncontextmenu="return false;"
+             ondragstart="return false;" />
+    </div>
+</div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как выглядит лояльность в CRM?<span>+</span></div>
+		<div class="faq-answer" style="user-select: none; -webkit-user-select: none; pointer-events: none;">
+        <img src="images/loyalty.png" 
+             alt="Loyalty" 
+             style="max-width: 100%; display: block; margin: 0 auto; user-select: none; -webkit-user-select: none;"
+             draggable="false"
+             oncontextmenu="return false;"
+             ondragstart="return false;" />
+    </div>
+</div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как выглядят уведомления в CRM?<span>+</span></div>
+		<div class="faq-answer" style="user-select: none; -webkit-user-select: none; pointer-events: none;">
+        <img src="images/notifications.png" 
+             alt="Notifications" 
+             style="max-width: 100%; display: block; margin: 0 auto; user-select: none; -webkit-user-select: none;"
+             draggable="false"
+             oncontextmenu="return false;"
+             ondragstart="return false;" />
+    </div>
+</div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как выглядят акции и задания в CRM?<span>+</span></div>
+		<div class="faq-answer" style="user-select: none; -webkit-user-select: none; pointer-events: none;">
+        <img src="images/marketing.png" 
+             alt="Marketing" 
+             style="max-width: 100%; display: block; margin: 0 auto; user-select: none; -webkit-user-select: none;"
+             draggable="false"
+             oncontextmenu="return false;"
+             ondragstart="return false;" />
+    </div>
+</div>
+		<div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Как выглядят игры в CRM?<span>+</span></div>
+		<div class="faq-answer" style="user-select: none; -webkit-user-select: none; pointer-events: none;">
+        <img src="images/games.png" 
+             alt="Games" 
+             style="max-width: 100%; display: block; margin: 0 auto; user-select: none; -webkit-user-select: none;"
+             draggable="false"
+             oncontextmenu="return false;"
+             ondragstart="return false;" />
+    </div>
+</div>
+		</div></div></section>
+        <section id="cta" class="cta">
+  <div class="container">
+    <h2>Получите демо системы</h2>
+    <div class="cta-form">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; width: 100%;">
+        <input type="text" class="cta-input" placeholder="Название бренда" id="demoBrand">
+        <input type="text" class="cta-input" placeholder="ФИО" id="demoOwner">
+        <input type="email" class="cta-input" placeholder="Ваш email" id="demoEmail">
+        <input type="tel" class="cta-input" placeholder="Номер телефона" id="demoPhone">
+        <button class="cta-button" onclick="submitDemo()">Отправить</button>
+      </div>
+    </div>
+  </div>
+</section>
+        <footer class="footer"><div class="container"><div class="footer-grid"><div><div class="footer-logo">LoyaltyPrime</div><p>Программа лояльности для кофейного и ресторанного бизнеса</p></div><div><h4>Продукт</h4><ul class="footer-links"><li><a href="#card">Карта</a></li><li><a href="#ranks">Ранги</a></li></ul></div><div><h4>Контакты</h4><ul class="footer-links"><li>@loyaltyprime</li><li>info@loyaltyprime.ru</li></ul></div></div><div style="text-align: center; margin-top: 60px;">© 2026 LoyaltyPrime</div></div></footer>
     </div>
 
     <!-- Модальное окно создания/редактирования кампании -->

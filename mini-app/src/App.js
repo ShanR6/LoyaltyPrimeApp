@@ -1014,8 +1014,6 @@ if (step === 'selectGroup') {
                   color: '#ffd966', 
                   marginBottom: 12,
                   paddingLeft: 12,
-                  borderLeft: `4px solid ${brandColor}`,
-                  background: 'rgba(0,0,0,0.2)',
                   padding: '8px 12px',
                   borderRadius: 12,
                   display: 'inline-block'
@@ -1025,6 +1023,7 @@ if (step === 'selectGroup') {
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   {groupedCompanies[letter].map(company => {
                     const compColor = company.brand_color || company.brandColor || '#ff4d4d';
+                    const isActive = company.mini_app_active !== false;
                     return (
                       <div 
                         key={company.id} 
@@ -1032,17 +1031,28 @@ if (step === 'selectGroup') {
                           background:'rgba(30,35,48,0.8)', 
                           borderRadius:24, 
                           border:`1px solid ${compColor}40`,
-                          cursor:'pointer',
-                          transition: 'transform 0.2s, box-shadow 0.2s'
+                          cursor: isActive ? 'pointer' : 'not-allowed',
+                          transition: 'transform 0.2s, box-shadow 0.2s',
+                          opacity: isActive ? 1 : 0.6
                         }}
-                        onClick={() => handleSelectGroup(company)}
+                        onClick={() => {
+                          if (isActive) {
+                            handleSelectGroup(company);
+                          } else {
+                            showModal('Временно недоступно', 'Приложение отключено администратором. Пожалуйста, выберите другое заведение.');
+                          }
+                        }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateX(4px)';
-                          e.currentTarget.style.boxShadow = `0 4px 12px ${compColor}20`;
+                          if (isActive) {
+                            e.currentTarget.style.transform = 'translateX(4px)';
+                            e.currentTarget.style.boxShadow = `0 4px 12px ${compColor}20`;
+                          }
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateX(0)';
-                          e.currentTarget.style.boxShadow = 'none';
+                          if (isActive) {
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }
                         }}
                       >
                         <div style={{ display:'flex', alignItems:'center', padding:16 }}>
@@ -1060,14 +1070,40 @@ if (step === 'selectGroup') {
                             {company.companyEmoji || '🏢'}
                           </div>
                           <div style={{ flex:1 }}>
-                            <div style={{ fontWeight:700, fontSize:18, color:'white' }}>
-                              {company.company || company.name}
+                            <div style={{ fontWeight:700, fontSize:18, color:'white', display:'flex', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+                              <span>{company.company || company.name}</span>
+                              {/* СТАТУС MINI APP */}
+                              {!isActive ? (
+                                <span style={{ 
+                                  fontSize: 11, 
+                                  background: '#e74c3c', 
+                                  color: 'white', 
+                                  padding: '3px 10px', 
+                                  borderRadius: 20,
+                                  fontWeight: 'normal',
+                                  display: 'inline-block'
+                                }}>
+                                  🔴 Неактивно
+                                </span>
+                              ) : (
+                                <span style={{ 
+                                  fontSize: 11, 
+                                  background: '#2ecc71', 
+                                  color: 'white', 
+                                  padding: '3px 10px', 
+                                  borderRadius: 20,
+                                  fontWeight: 'normal',
+                                  display: 'inline-block'
+                                }}>
+                                  🟢 Активно
+                                </span>
+                              )}
                             </div>
                             <div style={{ fontSize:12, opacity:0.7, color:'white', marginTop:2 }}>
                               {company.description || 'Добро пожаловать!'}
                             </div>
                           </div>
-                          <div style={{ fontSize:24, color:'white', opacity:0.5 }}>→</div>
+                          <div style={{ fontSize:24, color:'white', opacity:0.5 }}>{isActive ? '→' : '🔒'}</div>
                         </div>
                       </div>
                     );
@@ -1095,6 +1131,7 @@ if (step === 'selectGroup') {
                     </>
                   );
                 }
+                const isActive = company.mini_app_active !== false;
                 
                 return (
                   <div 
@@ -1103,17 +1140,28 @@ if (step === 'selectGroup') {
                       background:'rgba(30,35,48,0.8)', 
                       borderRadius:24, 
                       border:`1px solid ${compColor}40`,
-                      cursor:'pointer',
-                      transition: 'transform 0.2s, box-shadow 0.2s'
+                      cursor: isActive ? 'pointer' : 'not-allowed',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      opacity: isActive ? 1 : 0.6
                     }}
-                    onClick={() => handleSelectGroup(company)}
+                    onClick={() => {
+                      if (isActive) {
+                        handleSelectGroup(company);
+                      } else {
+                        showModal('Временно недоступно', 'Приложение отключено администратором. Пожалуйста, выберите другое заведение.');
+                      }
+                    }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateX(4px)';
-                      e.currentTarget.style.boxShadow = `0 4px 12px ${compColor}20`;
+                      if (isActive) {
+                        e.currentTarget.style.transform = 'translateX(4px)';
+                        e.currentTarget.style.boxShadow = `0 4px 12px ${compColor}20`;
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateX(0)';
-                      e.currentTarget.style.boxShadow = 'none';
+                      if (isActive) {
+                        e.currentTarget.style.transform = 'translateX(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
                     }}
                   >
                     <div style={{ display:'flex', alignItems:'center', padding:16 }}>
@@ -1131,14 +1179,39 @@ if (step === 'selectGroup') {
                         {company.companyEmoji || '🏢'}
                       </div>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:700, fontSize:18, color:'white' }}>
+                        <div style={{ fontWeight:700, fontSize:18, color:'white', display:'flex', alignItems:'center', flexWrap:'wrap', gap:8 }}>
                           {highlightedName}
+                          {!isActive ? (
+                            <span style={{ 
+                              fontSize: 11, 
+                              background: '#e74c3c', 
+                              color: 'white', 
+                              padding: '3px 10px', 
+                              borderRadius: 20,
+                              fontWeight: 'normal',
+                              display: 'inline-block'
+                            }}>
+                              🔴 Неактивно
+                            </span>
+                          ) : (
+                            <span style={{ 
+                              fontSize: 11, 
+                              background: '#2ecc71', 
+                              color: 'white', 
+                              padding: '3px 10px', 
+                              borderRadius: 20,
+                              fontWeight: 'normal',
+                              display: 'inline-block'
+                            }}>
+                              🟢 Активно
+                            </span>
+                          )}
                         </div>
                         <div style={{ fontSize:12, opacity:0.7, color:'white', marginTop:2 }}>
                           {company.description || 'Добро пожаловать!'}
                         </div>
                       </div>
-                      <div style={{ fontSize:24, color:'white', opacity:0.5 }}>→</div>
+                      <div style={{ fontSize:24, color:'white', opacity:0.5 }}>{isActive ? '→' : '🔒'}</div>
                     </div>
                   </div>
                 );
@@ -1196,32 +1269,32 @@ if (step === 'selectGroup') {
           ))}
         </div>
       )}
-	  
-	  {!searchQuery && (
-  <button
-    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-    style={{
-      position: 'fixed',
-      bottom: 80,
-      right: 16,
-      width: 44,
-      height: 44,
-      borderRadius: '50%',
-      background: brandColor,
-      border: 'none',
-      color: 'white',
-      fontSize: 20,
-      cursor: 'pointer',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-      zIndex: 100,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}
-  >
-    ↑
-  </button>
-)}
+      
+      {!searchQuery && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          style={{
+            position: 'fixed',
+            bottom: 80,
+            right: 16,
+            width: 44,
+            height: 44,
+            borderRadius: '50%',
+            background: brandColor,
+            border: 'none',
+            color: 'white',
+            fontSize: 20,
+            cursor: 'pointer',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          ↑
+        </button>
+      )}
       
       {/* Индикатор количества заведений */}
       <div style={{ 
@@ -1316,30 +1389,44 @@ if (step === 'profile' && selectedGroup && selectedGroup.miniAppActive === false
   
   {/* Прогресс-бар от потраченной суммы */}
   <div style={{ marginBottom:8 }}>
-    <div style={{ background:'rgba(255,255,255,0.2)', height:8, borderRadius:20, overflow:'hidden' }}>
-      <div style={{ width:`${getProgressToNextTier(currentGroupData?.totalSpent || 0)}%`, height:'100%', background:`linear-gradient(90deg, ${getCurrentTierBySpent(currentGroupData?.totalSpent || 0)?.color}, ${selectedGroup?.color})`, borderRadius:20, transition:'width 0.3s ease' }} />
-    </div>
-  </div>
   {(() => {
     const spent = currentGroupData?.totalSpent || 0;
     const current = getCurrentTierBySpent(spent);
     const next = getNextTierBySpent(spent);
-    if (next) {
-      return (
-        <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, opacity:0.7, color:'white' }}>
-          <span>{current?.name}</span>
-          <span>до {next.name}</span>
-          <span>{(next.threshold - spent).toLocaleString()} ₽</span>
-        </div>
-      );
-    }
-    return (
-      <div style={{ fontSize:11, opacity:0.7, textAlign:'center', color:'white' }}>
-        🏆 Максимальный уровень достигнут!
+    
+    return next && (
+      <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 11, opacity: 0.7, color: 'white', marginBottom: 4 }}>
+        <span>{next.name}</span>
       </div>
     );
   })()}
-  <div style={{ fontSize:10, textAlign:'center', marginTop:8, opacity:0.5, color:'white' }}>Нажмите, чтобы увидеть все уровни</div>
+  
+  <div style={{ background:'rgba(255,255,255,0.2)', height:8, borderRadius:20, overflow:'hidden' }}>
+    <div style={{ width:`${getProgressToNextTier(currentGroupData?.totalSpent || 0)}%`, height:'100%', background:`linear-gradient(90deg, ${getCurrentTierBySpent(currentGroupData?.totalSpent || 0)?.color}, ${selectedGroup?.color})`, borderRadius:20, transition:'width 0.3s ease' }} />
+  </div>
+</div>
+
+{(() => {
+  const spent = currentGroupData?.totalSpent || 0;
+  const current = getCurrentTierBySpent(spent);
+  const next = getNextTierBySpent(spent);
+  
+  if (next) {
+    return (
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, opacity:0.7, color:'white' }}>
+        <span>{current?.name}</span>
+        <span>{(next.threshold - spent).toLocaleString()} бонусов</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ fontSize:11, opacity:0.7, textAlign:'center', color:'white' }}>
+      Максимальный уровень достигнут!
+    </div>
+  );
+})()}
+
+<div style={{ fontSize:10, textAlign:'center', marginTop:8, opacity:0.5, color:'white' }}>Нажмите, чтобы увидеть все уровни</div>
 </div>
   
   <div style={{ display:'flex', justifyContent:'center', gap:16, background:'rgba(0,0,0,0.3)', borderRadius:16, padding:'8px 12px' }}>
@@ -1790,7 +1877,6 @@ if (step === 'profile' && selectedGroup && selectedGroup.miniAppActive === false
                     </div>
                   )}
                   
-                  {/* Кнопка покупки акции */}
                   {/* Кнопка покупки акции */}
 {isCurrentlyActive && (
   <div style={{ marginTop:12 }}>

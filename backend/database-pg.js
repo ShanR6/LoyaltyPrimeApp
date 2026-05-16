@@ -659,7 +659,7 @@ async function getCompanyTiers(companyId) {
         }
         
         const defaultTiers = [
-            { name: "🌱 Новичок", threshold: 0, cashback: 3, color: "#95a5a6", icon: "🌱" },
+            { name: "🔰 Новичок", threshold: 0, cashback: 3, color: "#95a5a6", icon: "🔰" },
             { name: "🥉 Бронза", threshold: 500, cashback: 5, color: "#cd7f32", icon: "🥉" },
             { name: "🥈 Серебро", threshold: 2000, cashback: 7, color: "#bdc3c7", icon: "🥈" },
             { name: "🥇 Золото", threshold: 8000, cashback: 10, color: "#f1c40f", icon: "🥇" },
@@ -671,7 +671,7 @@ async function getCompanyTiers(companyId) {
     } catch (error) {
         console.error('Ошибка getCompanyTiers:', error);
         return [
-            { name: "🌱 Новичок", threshold: 0, cashback: 3, color: "#95a5a6", icon: "🌱" },
+            { name: "🔰 Новичок", threshold: 0, cashback: 3, color: "#95a5a6", icon: "🔰" },
             { name: "🥉 Бронза", threshold: 500, cashback: 5, color: "#cd7f32", icon: "🥉" },
             { name: "🥈 Серебро", threshold: 2000, cashback: 7, color: "#bdc3c7", icon: "🥈" },
             { name: "🥇 Золото", threshold: 8000, cashback: 10, color: "#f1c40f", icon: "🥇" },
@@ -721,7 +721,7 @@ async function addMissingColumns() {
         if (checkTiers.rows.length === 0) {
             console.log('Добавляем колонку tiers_settings в таблицу companies...');
             const defaultTiers = JSON.stringify([
-                {"name": "🌱 Новичок", "threshold": 0, "cashback": 3, "color": "#95a5a6", "icon": "🌱"},
+                {"name": "🔰 Новичок", "threshold": 0, "cashback": 3, "color": "#95a5a6", "icon": "🔰"},
                 {"name": "🥉 Бронза", "threshold": 500, "cashback": 5, "color": "#cd7f32", "icon": "🥉"},
                 {"name": "🥈 Серебро", "threshold": 2000, "cashback": 7, "color": "#bdc3c7", "icon": "🥈"},
                 {"name": "🥇 Золото", "threshold": 8000, "cashback": 10, "color": "#f1c40f", "icon": "🥇"},
@@ -965,9 +965,8 @@ async function insertTestData() {
         if (count === 0) {
             console.log('Добавление тестовых данных...');
             
-            // ИСПРАВЛЕНО: убрали multiplier, оставили только cashback
             const defaultTiers = JSON.stringify([
-                {"name": "🌱 Новичок", "threshold": 0, "cashback": 3, "color": "#95a5a6", "icon": "🌱"},
+                {"name": "🔰 Новичок", "threshold": 0, "cashback": 3, "color": "#95a5a6", "icon": "🔰"},
                 {"name": "🥉 Бронза", "threshold": 500, "cashback": 5, "color": "#cd7f32", "icon": "🥉"},
                 {"name": "🥈 Серебро", "threshold": 2000, "cashback": 7, "color": "#bdc3c7", "icon": "🥈"},
                 {"name": "🥇 Золото", "threshold": 8000, "cashback": 10, "color": "#f1c40f", "icon": "🥇"},
@@ -1191,7 +1190,7 @@ async function deleteQuest(questId) {
 async function addCompany(companyData) {
     const { company, name, email, phone, password, brandColor, description } = companyData;
     const defaultTiers = JSON.stringify([
-        { name: "🌱 Новичок", threshold: 0, multiplier: 1, cashback: 3, color: "#95a5a6", icon: "🌱" },
+        { name: "🔰 Новичок", threshold: 0, multiplier: 1, cashback: 3, color: "#95a5a6", icon: "🔰" },
         { name: "🥉 Бронза", threshold: 500, multiplier: 1.2, cashback: 5, color: "#cd7f32", icon: "🥉" },
         { name: "🥈 Серебро", threshold: 2000, multiplier: 1.5, cashback: 7, color: "#bdc3c7", icon: "🥈" },
         { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
@@ -1225,7 +1224,8 @@ async function getAllCompanies() {
             company, 
             brand_color as "brandColor", 
             description,
-            COALESCE(settings->>'company_emoji', '🏢') as "companyEmoji"
+            COALESCE(settings->>'company_emoji', '🏢') as "companyEmoji",
+            COALESCE(mini_app_active, false) as "mini_app_active"
         FROM companies 
         WHERE active = true 
         ORDER BY created_at DESC
@@ -4251,7 +4251,7 @@ async function addMiniAppStatusColumn() {
             console.log('Колонка mini_app_active добавлена');
         }
     } catch (error) {
-        console.error('❌ Ошибка добавления mini_app_active:', error);
+        console.error('Ошибка добавления mini_app_active:', error);
     }
 }
 

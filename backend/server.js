@@ -2658,9 +2658,9 @@ const transporter = nodemailer.createTransport({
 // ============ ЭНДПОИНТ ДЛЯ ДЕМО-ЗАЯВКИ ============
 app.post('/api/demo-request', async (req, res) => {
     try {
-        const { brandName, email } = req.body;
+        const { brandName, owner, email, phone } = req.body;
         
-        if (!brandName || !email) {
+        if (!brandName || || !owner || !email || !phone) {
             return res.status(400).json({ success: false, message: 'Заполните все поля' });
         }
         
@@ -2668,28 +2668,31 @@ app.post('/api/demo-request', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Введите корректный email' });
         }
         
-        // Формируем письмо - ОТПРАВЛЯЕМ НА ВАШ ЯНДЕКС 360
         const mailOptions = {
             from: '"LoyaltyPrime" <padavydov@stud.kantiana.ru>',  
             to: 'padavydov@stud.kantiana.ru',                         
-            subject: `📋 Новая заявка на демо от ${brandName}`,
+            subject: `Новая заявка на демо от ${brandName}`,
             text: `
-Новая заявка на демо-доступ к программе лояльности!
+Новая заявка на демо-доступ к программе лояльности
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏢 Бренд: ${brandName}
-📧 Email для связи: ${email}
+Бренд: ${brandName}
+Владелец: ${owner}
+Email: ${email}
+Телефон для связи: ${phone}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Свяжитесь с клиентом как можно скорее для демонстрации возможностей LoyaltyPrime.
             `,
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px;">
-                    <h2 style="color: #ff4d4d; margin-bottom: 20px;">📋 Новая заявка на демо</h2>
+                    <h2 style="color: #ff4d4d; margin-bottom: 20px;">Новая заявка на демо</h2>
                     
                     <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                        <p style="margin: 8px 0;"><strong>🏢 Бренд:</strong> ${brandName}</p>
-                        <p style="margin: 8px 0;"><strong>📧 Email для связи:</strong> ${email}</p>
+                        <p style="margin: 8px 0;"><strong>Бренд:</strong> ${brandName}</p>
+						<p style="margin: 8px 0;"><strong>Владелец:</strong> ${owner}</p>
+                        <p style="margin: 8px 0;"><strong>Email:</strong> ${email}</p>
+						<p style="margin: 8px 0;"><strong>Телефон для связи:</strong> ${phone}</p>
                     </div>
                     
                     <p style="color: #555;">Свяжитесь с клиентом как можно скорее для демонстрации возможностей <strong>LoyaltyPrime</strong>.</p>
@@ -2701,10 +2704,9 @@ app.post('/api/demo-request', async (req, res) => {
             `
         };
         
-        // Отправляем письмо
         await transporter.sendMail(mailOptions);
         
-        console.log(`📧 Демо-заявка отправлена на Яндекс 360: ${brandName} - ${email}`);
+        console.log(`Демо-заявка отправлена: ${brandName} - ${email}`);
         
         res.json({ 
             success: true, 
@@ -2726,7 +2728,7 @@ app.get('/api/companies/:companyId/analytics', async (req, res) => {
         const { companyId } = req.params;
         const period = req.query.period || 'month';
         
-        console.log('🔄 Пересчет классификации всех пользователей перед аналитикой...');
+        console.log('Пересчет классификации всех пользователей перед аналитикой...');
         await recalculateAllUsersClassification(companyId);
         
         const analytics = await getRealAnalytics(companyId, period);

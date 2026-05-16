@@ -103,10 +103,11 @@ function toggleFaq(element) {
 // ========== ОТПРАВКА ДЕМО-ЗАЯВКИ НА ПОЧТУ ==========
 async function submitDemo() {
     const brandName = document.getElementById('demoBrand')?.value;
+	const owner = document.getElementById('demoOwner')?.value;
     const email = document.getElementById('demoEmail')?.value;
-    
-    if (!brandName || !email) {
-        alert('Пожалуйста, заполните оба поля');
+    const phone = document.getElementById('demoPhone')?.value;
+    if (!brandName || || !owner || !email || !phone) {
+        alert('Пожалуйста, заполните все поля');
         return;
     }
     
@@ -117,14 +118,14 @@ async function submitDemo() {
     
     const button = document.querySelector('.cta-button');
     const originalText = button.textContent;
-    button.textContent = '⏳ Отправка...';
+    button.textContent = 'Отправка...';
     button.disabled = true;
     
     try {
         const response = await fetch(`${API_URL}/api/demo-request`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ brandName, email })
+            body: JSON.stringify({ brandName, owner, email, phone })
         });
         
         const data = await response.json();
@@ -132,7 +133,9 @@ async function submitDemo() {
         if (data.success) {
             alert('Спасибо! Заявка отправлена. Мы свяжемся с вами в ближайшее время.');
             document.getElementById('demoBrand').value = '';
+			document.getElementById('demoOwner').value = '';
             document.getElementById('demoEmail').value = '';
+			document.getElementById('demoPhone').value = '';
         } else {
             alert((data.message || 'Ошибка отправки. Попробуйте позже.'));
         }
@@ -1185,7 +1188,8 @@ function createRevenueSelect(container) {
     container.appendChild(selectContainer);
 }
 
-// ========== МОДУЛЬ 2: ЛОЯЛЬНОСТЬ (УРОВНИ) ==========
+/// ========== МОДУЛЬ 2: ЛОЯЛЬНОСТЬ (УРОВНИ) ==========
+
 async function loadTiersSettings() {
     if (!currentBusiness) return;
     
@@ -1198,11 +1202,10 @@ async function loadTiersSettings() {
             renderTiersSettings();
         } else {
             tiers = [
-                { name: "🌱 Новичок", threshold: 0, multiplier: 1, cashback: 3, color: "#95a5a6", icon: "🌱" },
-                { name: "🥉 Бронза", threshold: 500, multiplier: 1.2, cashback: 5, color: "#cd7f32", icon: "🥉" },
-                { name: "🥈 Серебро", threshold: 2000, multiplier: 1.5, cashback: 7, color: "#bdc3c7", icon: "🥈" },
-                { name: "🥇 Золото", threshold: 8000, multiplier: 2, cashback: 10, color: "#f1c40f", icon: "🥇" },
-                { name: "💎 Бриллиант", threshold: 20000, multiplier: 2.5, cashback: 15, color: "#00b4d8", icon: "💎" }
+                { name: "Новичок", threshold: 0, cashback: 3, color: "#95a5a6", icon: "🔰" },
+                { name: "Серебро", threshold: 2000, cashback: 7, color: "#bdc3c7", icon: "🥈" },
+                { name: "Золото", threshold: 8000, cashback: 10, color: "#f1c40f", icon: "🥇" },
+                { name: "Бриллиант", threshold: 20000, cashback: 15, color: "#00b4d8", icon: "💎" }
             ];
             renderTiersSettings();
         }
@@ -1219,57 +1222,79 @@ function renderTiersSettings() {
     const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
     
     container.innerHTML = sortedTiers.map((tier, idx) => `
-        <div class="tier-config-item" style="border-left: 4px solid ${tier.color}">
-            <div class="tier-config-header">
-                <div class="tier-config-title">
-                    <div class="tier-icon-preview" style="background: ${tier.color}20; border-radius: 12px; padding: 4px 8px;">
-                        <span style="font-size: 20px;">${tier.icon || '⭐'}</span>
-                        <input type="text" value="${escapeHtml(tier.name)}" 
+        <div class="tier-config-item" style="border-left: 4px solid ${tier.color}; margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 12px;">
+            <div class="tier-config-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+                <div class="tier-config-title" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div class="tier-icon-preview" style="background: ${tier.color}20; border-radius: 12px; padding: 6px 12px; display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 28px;" id="tierIconPreview_${idx}">${tier.icon || getDefaultIcon(idx)}</span>
+                        <input type="text" 
+                               value="${escapeHtml(tier.name)}" 
                                onchange="updateTierConfig(${idx}, 'name', this.value)" 
                                class="tier-name-input"
-                               style="width: 120px; margin-left: 8px;">
+                               style="width: 130px; padding: 8px 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px;">
                     </div>
                     <input type="color" value="${tier.color}" 
                            onchange="updateTierConfig(${idx}, 'color', this.value)" 
-                           class="tier-color-input">
-                    <select onchange="updateTierConfig(${idx}, 'icon', this.value)" class="tier-icon-select">
-                        ${getIconOptions(tier.icon)}
-                    </select>
+                           class="tier-color-input"
+                           style="width: 44px; height: 40px; border-radius: 8px; border: 1px solid #ddd; cursor: pointer;">
+                    <div style="display: flex; flex-direction: column;">
+                        <input type="text" 
+                               value="${tier.icon || getDefaultIcon(idx)}" 
+                               onchange="updateTierConfig(${idx}, 'icon', this.value)"
+                               oninput="updateTierIconPreview(${idx}, this.value)"
+                               class="tier-icon-input"
+                               placeholder="Введите эмодзи"
+                               maxlength="2"
+                               style="width: 80px; text-align: center; font-size: 22px; padding: 6px; border-radius: 8px; border: 1px solid #ddd;">
+                        <small style="font-size: 10px; color: #888; margin-top: 2px; text-align: center;">Иконка</small>
+                    </div>
                 </div>
-                <button class="btn-remove" onclick="removeTierConfig(${idx})" ${sortedTiers.length <= 1 ? 'disabled style="opacity:0.5"' : ''}>🗑️</button>
+                <button class="btn-remove" onclick="removeTierConfig(${idx})" ${sortedTiers.length <= 1 ? 'disabled style="opacity:0.5"' : ''} style="background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer;">🗑️</button>
             </div>
             
-            <div class="tier-config-fields">
-                <div class="config-field">
-                    <label>Порог трат бонусов:</label>
+            <div class="tier-config-fields" style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px;">
+                <div class="config-field" style="flex: 1;">
+                    <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Порог трат (₽):</label>
                     <input type="number" value="${tier.threshold}" 
                            onchange="updateTierConfig(${idx}, 'threshold', parseInt(this.value))" 
-                           class="config-input">
+                           class="config-input"
+                           style="width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ddd;">
                 </div>
                 
-                <!-- ИСПРАВЛЕНО: убрали multiplier, оставили только cashback -->
-                <div class="config-field">
-                    <label>Кешбэк (% начисления):</label>
+                <div class="config-field" style="flex: 1;">
+                    <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Кешбэк (%):</label>
                     <input type="number" step="0.5" value="${tier.cashback || 3}" 
                            onchange="updateTierConfig(${idx}, 'cashback', parseFloat(this.value))" 
-                           class="config-input">
+                           class="config-input"
+                           style="width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ddd;">
                     <small style="display: block; margin-top: 4px; color: #666;">Процент от суммы покупки, который начисляется бонусами</small>
                 </div>
             </div>
             
             <div class="tier-preview">
-                <div style="background: ${tier.color}; padding: 8px 12px; border-radius: 12px; color: white;">
-                    ${tier.icon} ${escapeHtml(tier.name)}: кешбэк ${tier.cashback || 3}% • порог ${tier.threshold.toLocaleString()}
+                <div style="background: ${tier.color}; padding: 10px 14px; border-radius: 12px; color: white; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;" id="tierPreviewIcon_${idx}">${tier.icon || getDefaultIcon(idx)}</span>
+                    <span style="font-weight: 600;">${escapeHtml(tier.name)}</span>
+                    <span style="margin-left: auto;">кешбэк ${tier.cashback || 3}% • порог ${tier.threshold.toLocaleString()}₽</span>
                 </div>
             </div>
         </div>
     `).join('');
 }
 
+// Функция для получения стандартного смайлика по индексу уровня
+function getDefaultIcon(index) {
+    const defaultIcons = ['🔰','🥈','🥇', '💎'];
+    return defaultIcons[index % defaultIcons.length] || '⭐';
+}
 
-function getIconOptions(selectedIcon) {
-    const icons = ['🌱', '🥉', '🥈', '🥇', '💎', '⭐', '🏆', '👑', '🔥', '⚡', '🎯'];
-    return icons.map(icon => `<option value="${icon}" ${selectedIcon === icon ? 'selected' : ''}>${icon}</option>`).join('');
+// Функция для обновления превью иконки в реальном времени
+function updateTierIconPreview(index, newIcon) {
+    const previewSpan = document.getElementById(`tierIconPreview_${index}`);
+    const previewSpan2 = document.getElementById(`tierPreviewIcon_${index}`);
+    const iconValue = newIcon || getDefaultIcon(index);
+    if (previewSpan) previewSpan.textContent = iconValue;
+    if (previewSpan2) previewSpan2.textContent = iconValue;
 }
 
 function updateTierConfig(index, field, value) {
@@ -1285,7 +1310,6 @@ function addTierConfig() {
     const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold);
     const lastTier = sortedTiers[sortedTiers.length - 1];
     const newThreshold = lastTier ? lastTier.threshold + 5000 : 1000;
-    // ИСПРАВЛЕНО: убрали multiplier
     const newCashback = lastTier ? Math.min(30, lastTier.cashback + 2) : 3;
     
     tiers.push({
@@ -1293,7 +1317,7 @@ function addTierConfig() {
         threshold: newThreshold,
         cashback: newCashback,
         color: getNextColor(tiers.length),
-        icon: getNextIcon(tiers.length)
+        icon: getDefaultIcon(tiers.length)
     });
     renderTiersSettings();
     saveTiersToServer();
@@ -1302,11 +1326,6 @@ function addTierConfig() {
 function getNextColor(index) {
     const colors = ['#95a5a6', '#cd7f32', '#bdc3c7', '#f1c40f', '#00b4d8', '#9b59b6', '#e74c3c', '#2ecc71', '#e67e22', '#1abc9c'];
     return colors[index % colors.length];
-}
-
-function getNextIcon(index) {
-    const icons = ['🌱', '🥉', '🥈', '🥇', '💎', '⭐', '🏆', '👑', '🔥', '⚡'];
-    return icons[index % icons.length];
 }
 
 function removeTierConfig(index) {
@@ -4859,7 +4878,7 @@ async function saveGreetingSettings() {
         }
     } catch (error) {
         console.error('Ошибка сохранения приветствия:', error);
-        showGreetingStatus('❌ Ошибка подключения: ' + error.message, 'error');
+        showGreetingStatus('Ошибка подключения: ' + error.message, 'error');
     }
 }
 
@@ -4911,7 +4930,7 @@ async function loadMiniAppStatus() {
 // Переключение статуса Mini App
 async function toggleMiniApp(isActive) {
     if (!currentBusiness) {
-        showMiniAppStatus('❌ Ошибка: компания не выбрана', 'error');
+        showMiniAppStatus('Ошибка: компания не выбрана', 'error');
         return;
     }
     
@@ -4962,12 +4981,12 @@ async function toggleMiniApp(isActive) {
         } else {
             // Возвращаем toggle в исходное состояние
             toggle.checked = originalChecked;
-            showMiniAppStatus(data.message || '❌ Ошибка обновления статуса', 'error');
+            showMiniAppStatus(data.message || 'Ошибка обновления статуса', 'error');
         }
     } catch (error) {
         console.error('Ошибка:', error);
         toggle.checked = originalChecked;
-        showMiniAppStatus('❌ Ошибка подключения к серверу', 'error');
+        showMiniAppStatus('Ошибка подключения к серверу', 'error');
     } finally {
         toggle.disabled = false;
     }
