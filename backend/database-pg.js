@@ -21,23 +21,24 @@ async function initDatabase() {
     try {
         await query(`
             CREATE TABLE IF NOT EXISTS companies (
-                id SERIAL PRIMARY KEY,
-                company VARCHAR(255) NOT NULL,
-                name VARCHAR(255) NOT NULL,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                phone VARCHAR(50),
-                password VARCHAR(255) NOT NULL,
-                brand_color VARCHAR(50) DEFAULT '#2A4B7C',
-                description TEXT DEFAULT 'Добро пожаловать в программу лояльности!',
-                is_active BOOLEAN DEFAULT FALSE,
-                settings JSONB DEFAULT '{}',
-                tiers_settings JSONB DEFAULT '[]',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-				timezone_offset INTEGER DEFAULT 0
+				id SERIAL PRIMARY KEY,
+				company VARCHAR(255) NOT NULL,
+				name VARCHAR(255) NOT NULL,
+				email VARCHAR(255) UNIQUE NOT NULL,
+				phone VARCHAR(50),
+				password VARCHAR(255) NOT NULL,
+				brand_color VARCHAR(50) DEFAULT '#2A4B7C',
+				description TEXT DEFAULT 'Добро пожаловать в программу лояльности!',
+				is_active BOOLEAN DEFAULT FALSE,
+				settings JSONB DEFAULT '{}',
+				tiers_settings JSONB DEFAULT '[]',
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				timezone_offset INTEGER DEFAULT 0,
+				mini_app_active BOOLEAN DEFAULT FALSE,
+				daily_bonus_settings JSONB DEFAULT '{"enabled": true, "baseAmount": 10, "streakBonus": 5}',
+				bonus_settings JSONB DEFAULT '{"rubToBonus": 10, "maxBonusPaymentPercent": 25, "minPurchaseForBonus": 1000, "bonusRatePerThousand": 10}'
             )
         `);
-		
-		await addTimezoneColumn();
 		
         await query(`
             CREATE TABLE IF NOT EXISTS promotions (
@@ -54,6 +55,7 @@ async function initDatabase() {
                 start_date TIMESTAMP,
                 end_date TIMESTAMP,
                 active BOOLEAN DEFAULT TRUE,
+				target_audience VARCHAR(50) DEFAULT 'all',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -70,6 +72,11 @@ async function initDatabase() {
                 active BOOLEAN DEFAULT TRUE,
                 expires_days INTEGER DEFAULT 30,
                 end_date TIMESTAMP,
+				duration_days INTEGER DEFAULT 1,
+				last_completed_at TIMESTAMP,
+				reset_at TIMESTAMP,
+				target_type VARCHAR(50) DEFAULT 'daily_login',
+				target_value INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -128,6 +135,7 @@ async function initDatabase() {
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 total_earned INTEGER DEFAULT 0,
+				total_spent INTEGER DEFAULT 0,
                 streak INTEGER DEFAULT 0,
                 last_login_date DATE,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -155,6 +163,7 @@ async function initDatabase() {
                 promotion_id INTEGER REFERENCES promotions(id) ON DELETE CASCADE,
                 company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
                 purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				promotion_cycle_start TIMESTAMP NOT NULL DEFAULT NOW(),
                 promotion_cycle_start TIMESTAMP NOT NULL,
                 used BOOLEAN DEFAULT FALSE,
                 used_at TIMESTAMP,
@@ -216,15 +225,20 @@ async function initDatabase() {
         await query(`
             CREATE TABLE IF NOT EXISTS notification_campaigns (
                 id SERIAL PRIMARY KEY,
-                company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
-                name VARCHAR(255) NOT NULL,
-                trigger_type VARCHAR(50), -- nullable, not used anymore
-                title VARCHAR(255) NOT NULL,
-                message TEXT NOT NULL,
-                audience VARCHAR(50) DEFAULT 'all',
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+				company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+				name VARCHAR(255) NOT NULL,
+				trigger_type VARCHAR(50),
+				title VARCHAR(255) NOT NULL,
+				message TEXT NOT NULL,
+				audience VARCHAR(50) DEFAULT 'all',
+				is_active BOOLEAN DEFAULT TRUE,
+				interval_days INTEGER DEFAULT 1,
+				is_default BOOLEAN DEFAULT FALSE,
+				last_sent_at TIMESTAMP,
+				button_link TEXT,
+				button_text VARCHAR(50) DEFAULT 'Перейти',
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
@@ -239,96 +253,57 @@ async function initDatabase() {
             )
         `);
 		
-		await addTimezoneColumn();
+		await query(`
+            CREATE TABLE IF NOT EXISTS cities (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                is_active BOOLEAN DEFAULT true,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(company_id, name)
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS addresses (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+                address TEXT NOT NULL,
+                latitude DECIMAL(10, 8),
+                longitude DECIMAL(11, 8),
+                phone VARCHAR(50),
+                working_hours TEXT,
+                is_main BOOLEAN DEFAULT false,
+                is_active BOOLEAN DEFAULT true,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS user_selected_locations (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                selected_address_id INTEGER NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(user_id, company_id)
+            )
+        `);
+
+		
         console.log('Таблицы созданы/проверены');
 		
-         await initLocationTables();
-        await addMissingColumns();
 		await addGiveawayColumns();
-		await migrateGiveawaysTable();
-        await addPromotionRewardColumns();
         await addGameSettingsTable();  
-        await addGameSettingsColumns();
-        await addDailyBonusSettings(); 
-        await addTransactionColumns();
         await ensureAllQuestsExist();
-		await checkAndResetQuests();
-		await addQuestColumns();
-		await addBonusSettingsColumn();
-		await addNotificationCampaignColumns();
-		await addUserProgressSpentColumn();
-		await createUserGamePlaysTable();
-		await addMiniAppStatusColumn();  
-		await addPromotionCycleStartColumn();
-        await insertTestData();
+		await createUserGamePlaysTable(); 
 
     } catch (error) {
-        console.error('❌ Ошибка инициализации БД:', error);
-    }
-}
-async function addDailyBonusSettings() {
-    try {
-        const checkTable = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'companies' AND column_name = 'daily_bonus_settings'
-        `);
-        
-        if (checkTable.rows.length === 0) {
-            console.log('Добавляем колонку daily_bonus_settings в таблицу companies...');
-            await query(`ALTER TABLE companies ADD COLUMN daily_bonus_settings JSONB DEFAULT '{"enabled": true, "baseAmount": 10, "streakBonus": 5}'`);
-            console.log('Колонка daily_bonus_settings добавлена');
-        }
-    } catch (error) {
-        console.error('❌ Ошибка добавления daily_bonus_settings:', error);
-    }
-}
-
-// Добавляем недостающие колонки в таблицу transactions
-async function addTransactionColumns() {
-    try {
-        // Проверяем и добавляем колонку store_id
-        const checkStoreId = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'transactions' AND column_name = 'store_id'
-        `);
-        
-        if (checkStoreId.rows.length === 0) {
-            console.log('Добавляем колонку store_id в таблицу transactions...');
-            await query(`ALTER TABLE transactions ADD COLUMN store_id VARCHAR(100)`);
-            console.log('Колонка store_id добавлена');
-        }
-        
-        // Проверяем и добавляем колонку cashier_id
-        const checkCashierId = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'transactions' AND column_name = 'cashier_id'
-        `);
-        
-        if (checkCashierId.rows.length === 0) {
-            console.log('Добавляем колонку cashier_id в таблицу transactions...');
-            await query(`ALTER TABLE transactions ADD COLUMN cashier_id VARCHAR(100)`);
-            console.log('Колонка cashier_id добавлена');
-        }
-        
-        // Проверяем и добавляем колонку metadata
-        const checkMetadata = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'transactions' AND column_name = 'metadata'
-        `);
-        
-        if (checkMetadata.rows.length === 0) {
-            console.log('Добавляем колонку metadata в таблицу transactions...');
-            await query(`ALTER TABLE transactions ADD COLUMN metadata JSONB DEFAULT '{}'`);
-            console.log('Колонка metadata добавлена');
-        }
-        
-        console.log('Все колонки transactions проверены');
-    } catch (error) {
-        console.error('❌ Ошибка добавления колонок transactions:', error);
+        console.error('Ошибка инициализации БД:', error);
     }
 }
 
@@ -370,7 +345,7 @@ async function updateDailyBonusSettings(companyId, settings) {
 // Функция для обеспечения наличия всех 20 заданий у каждой компании
 async function ensureAllQuestsExist() {
     try {
-        console.log('🔍 Проверяем наличие всех заданий у компаний...');
+        console.log('Проверяем наличие всех заданий у компаний...');
         
         // Получаем все компании
         const companiesResult = await query('SELECT id FROM companies');
@@ -411,11 +386,9 @@ async function ensureAllQuestsExist() {
         
         console.log('Проверка заданий завершена');
     } catch (error) {
-        console.error('❌ Ошибка обеспечения наличия заданий:', error);
+        console.error('Ошибка обеспечения наличия заданий:', error);
     }
 }
-
-// Добавьте эту функцию в database-pg.js после initDatabase()
 
 async function addGameSettingsTable() {
     try {
@@ -431,20 +404,18 @@ async function addGameSettingsTable() {
         `);
         console.log('Таблица game_settings создана/проверена');
         
-        // Добавляем уникальное ограничение если его нет
         try {
             await query(`
                 ALTER TABLE game_settings ADD CONSTRAINT unique_company_game 
                 UNIQUE (company_id, game_type)
             `);
         } catch (e) {
-            // Ограничение уже существует - игнорируем
             if (!e.message.includes('already exists')) {
                 console.log('Уникальное ограничение уже существует');
             }
         }
     } catch (error) {
-        console.error('❌ Ошибка создания game_settings:', error);
+        console.error('Ошибка создания game_settings:', error);
     }
 }
 
@@ -453,7 +424,6 @@ async function getGameSettings(companyId, gameType) {
     try {
         // Убеждаемся, что таблица и колонки существуют
         await addGameSettingsTable();
-        await addGameSettingsColumns();
         
         const result = await query(
             'SELECT settings, active FROM game_settings WHERE company_id = $1 AND game_type = $2',
@@ -548,7 +518,6 @@ async function saveGameSettings(companyId, gameType, settings, active) {
     try {
         // Убеждаемся, что таблица и колонки существуют
         await addGameSettingsTable();
-        await addGameSettingsColumns();
         
         const settingsJson = JSON.stringify(settings);
         const result = await query(
@@ -708,343 +677,6 @@ async function updateCompanyTiers(companyId, tiersSettings) {
     }
 }
 
-async function addMissingColumns() {
-    try {
-        const checkTiers = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'companies' AND column_name = 'tiers_settings'
-        `);
-        
-        if (checkTiers.rows.length === 0) {
-            console.log('Добавляем колонку tiers_settings в таблицу companies...');
-            const defaultTiers = JSON.stringify([
-                {"name": "🔰 Новичок", "threshold": 0, "cashback": 3, "color": "#95a5a6", "icon": "🔰"},
-                {"name": "🥈 Серебро", "threshold": 2000, "cashback": 7, "color": "#bdc3c7", "icon": "🥈"},
-                {"name": "🥇 Золото", "threshold": 8000, "cashback": 10, "color": "#f1c40f", "icon": "🥇"},
-                {"name": "💎 Бриллиант", "threshold": 20000, "cashback": 15, "color": "#00b4d8", "icon": "💎"}
-            ]);
-            await query(`
-                ALTER TABLE companies 
-                ADD COLUMN tiers_settings JSONB DEFAULT $1::jsonb
-            `, [defaultTiers]);
-            console.log('Колонка tiers_settings добавлена');
-        } else {
-            console.log('Обновляем существующие tiers_settings, удаляем multiplier...');
-            const companies = await query('SELECT id, tiers_settings FROM companies WHERE tiers_settings IS NOT NULL');
-            for (const company of companies.rows) {
-                let tiers = company.tiers_settings;
-                if (typeof tiers === 'string') {
-                    tiers = JSON.parse(tiers);
-                }
-                if (Array.isArray(tiers)) {
-                    let updated = false;
-                    const newTiers = tiers.map(tier => {
-                        if (tier.multiplier !== undefined) {
-                            updated = true;
-                            const { multiplier, ...rest } = tier;
-                            if (rest.cashback === undefined) {
-                                rest.cashback = Math.min(30, (multiplier || 1) * 5);
-                            }
-                            return rest;
-                        }
-                        return tier;
-                    });
-                    if (updated) {
-                        await query(
-                            'UPDATE companies SET tiers_settings = $1::jsonb WHERE id = $2',
-                            [JSON.stringify(newTiers), company.id]
-                        );
-                        console.log(`Обновлены уровни для компании ${company.id}`);
-                    }
-                }
-            }
-        }
-        
-        const checkStartDate = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'start_date'
-        `);
-        
-        if (checkStartDate.rows.length === 0) {
-            console.log('Добавляем колонки start_date и end_date в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN start_date TIMESTAMP`);
-            await query(`ALTER TABLE promotions ADD COLUMN end_date TIMESTAMP`);
-            console.log('Колонки start_date и end_date добавлены');
-        }
-        
-        const checkExpiresDays = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'expires_days'
-        `);
-        
-        if (checkExpiresDays.rows.length === 0) {
-            console.log('Добавляем колонку expires_days в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN expires_days INTEGER DEFAULT 30`);
-            console.log('Колонка expires_days добавлена');
-        }
-        
-        const checkEndDate = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'end_date'
-        `);
-        
-        if (checkEndDate.rows.length === 0) {
-            console.log('Добавляем колонку end_date в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN end_date TIMESTAMP`);
-            console.log('Колонка end_date добавлена');
-        }
-        
-        const checkEmoji = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'emoji'
-        `);
-        
-        if (checkEmoji.rows.length === 0) {
-            console.log('Добавляем колонку emoji в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN emoji VARCHAR(10) DEFAULT '🎯'`);
-            console.log('Колонка emoji добавлена');
-        }
-        
-        const checkRewardType = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'reward_type'
-        `);
-        
-        if (checkRewardType.rows.length === 0) {
-            console.log('Добавляем колонки reward_type и reward_value в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN reward_type VARCHAR(20) DEFAULT 'discount'`);
-            await query(`ALTER TABLE promotions ADD COLUMN reward_value INTEGER DEFAULT 0`);
-            console.log('Колонки reward_type и reward_value добавлены');
-        }
-        
-        const checkBirthday = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'users' AND column_name = 'birthday_date'
-        `);
-        
-        if (checkBirthday.rows.length === 0) {
-            console.log('Добавляем колонку birthday_date в таблицу users...');
-            await query(`ALTER TABLE users ADD COLUMN birthday_date DATE`);
-            console.log('Колонка birthday_date добавлена');
-        }
-        
-        // ========== ОБНОВЛЕННАЯ ТАБЛИЦА user_purchased_promotions ==========
-        const checkPurchasedTable = await query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_name = 'user_purchased_promotions'
-        `);
-        
-        if (checkPurchasedTable.rows.length === 0) {
-            console.log('Создаем таблицу user_purchased_promotions (НОВАЯ СТРУКТУРА)...');
-            await query(`
-                CREATE TABLE user_purchased_promotions (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                    promotion_id INTEGER REFERENCES promotions(id) ON DELETE CASCADE,
-                    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
-                    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    used BOOLEAN DEFAULT FALSE,
-                    used_at TIMESTAMP,
-                    UNIQUE(user_id, promotion_id)
-                )
-            `);
-            console.log('Таблица user_purchased_promotions создана с новой структурой');
-        } else {
-            // МИГРАЦИЯ: обновляем существующую таблицу
-            console.log('Обновляем существующую таблицу user_purchased_promotions...');
-            
-            // Проверяем и удаляем колонку promotion_cycle_start если она есть
-            const checkCycleStart = await query(`
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'user_purchased_promotions' AND column_name = 'promotion_cycle_start'
-            `);
-            
-            if (checkCycleStart.rows.length > 0) {
-                console.log('Удаляем колонку promotion_cycle_start...');
-                await query(`ALTER TABLE user_purchased_promotions DROP COLUMN promotion_cycle_start`);
-                console.log('Колонка promotion_cycle_start удалена');
-            }
-            
-            // Удаляем старое уникальное ограничение если оно было
-            try {
-                await query(`ALTER TABLE user_purchased_promotions DROP CONSTRAINT IF EXISTS user_purchased_promotions_user_id_promotion_id_promotion_cycle_start_key`);
-                console.log('Старое ограничение удалено');
-            } catch (e) {
-                console.log('Старое ограничение не найдено');
-            }
-            
-            // Добавляем новое уникальное ограничение
-            try {
-                await query(`
-                    ALTER TABLE user_purchased_promotions 
-                    ADD CONSTRAINT unique_user_promotion 
-                    UNIQUE (user_id, promotion_id)
-                `);
-                console.log('Новое уникальное ограничение добавлено');
-            } catch (e) {
-                if (!e.message.includes('already exists')) {
-                    console.error('Ошибка добавления ограничения:', e.message);
-                } else {
-                    console.log('Уникальное ограничение уже существует');
-                }
-            }
-        }
-        
-        const checkProducts = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'products'
-        `);
-        
-        if (checkProducts.rows.length === 0) {
-            console.log('Добавляем колонку products в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN products TEXT DEFAULT ''`);
-            console.log('Колонка products добавлена');
-        }
-        
-        const checkIsFree = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'is_free'
-        `);
-        
-        if (checkIsFree.rows.length === 0) {
-            console.log('Добавляем колонку is_free в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN is_free BOOLEAN DEFAULT FALSE`);
-            console.log('Колонка is_free добавлена');
-        }
-        
-        const checkPrice = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'price'
-        `);
-        
-        if (checkPrice.rows.length === 0) {
-            console.log('Добавляем колонку price в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN price INTEGER DEFAULT 100`);
-            console.log('Колонка price добавлена');
-        }
-        
-        const checkRequiresPurchase = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'requires_purchase'
-        `);
-        
-        if (checkRequiresPurchase.rows.length > 0) {
-            console.log('Удаляем устаревшую колонку requires_purchase...');
-            await query(`ALTER TABLE promotions DROP COLUMN requires_purchase`);
-            console.log('Колонка requires_purchase удалена');
-        }
-        
-        console.log('Все недостающие колонки добавлены');
-        
-    } catch (error) {
-        console.error('❌ Ошибка при добавлении колонок:', error);
-    }
-}
-
-
-async function insertTestData() {
-    try {
-        const result = await query('SELECT COUNT(*) FROM companies');
-        const count = parseInt(result.rows[0].count);
-        if (count === 0) {
-            console.log('Добавление тестовых данных...');
-            
-            const defaultTiers = JSON.stringify([
-                {"name": "🔰 Новичок", "threshold": 0, "cashback": 3, "color": "#95a5a6", "icon": "🔰"},
-                {"name": "🥈 Серебро", "threshold": 2000, "cashback": 7, "color": "#bdc3c7", "icon": "🥈"},
-                {"name": "🥇 Золото", "threshold": 8000, "cashback": 10, "color": "#f1c40f", "icon": "🥇"},
-                {"name": "💎 Бриллиант", "threshold": 20000, "cashback": 15, "color": "#00b4d8", "icon": "💎"}
-            ]);
-            
-            // Добавляем первую компанию
-            const result1 = await query(`
-                INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings) 
-                VALUES ('Пиццерия "Маргарита"', 'Иван Петров', 'pizza@test.com', '+7 (999) 123-45-67', '123456', '#e74c3c', 'Итальянская кухня, пицца, паста', $1)
-                RETURNING id
-            `, [defaultTiers]);
-            
-            // Добавляем вторую компанию
-            const result2 = await query(`
-                INSERT INTO companies (company, name, email, phone, password, brand_color, description, tiers_settings) 
-                VALUES ('Кофейня "Кофеин"', 'Анна Сидорова', 'coffee@test.com', '+7 (999) 234-56-78', '123456', '#8e44ad', 'Ароматный кофе, десерты, выпечка', $1)
-                RETURNING id
-            `, [defaultTiers]);
-            
-            // Добавляем предустановленные данные для обеих компаний
-            await addPresetDataForCompany(result1.rows[0].id);
-            await addPresetDataForCompany(result2.rows[0].id);
-            
-            console.log('Тестовые данные добавлены с 20 акциями и 20 заданиями для каждой компании');
-        } else {
-            console.log(`В базе уже есть ${count} компаний`);
-            
-            // Проверяем, есть ли у существующих компаний акции и задания
-            const companies = await getAllCompanies();
-            for (const company of companies) {
-                const promotionsCount = await query('SELECT COUNT(*) FROM promotions WHERE company_id = $1', [company.id]);
-                const questsCount = await query('SELECT COUNT(*) FROM quests WHERE company_id = $1', [company.id]);
-                
-                if (parseInt(promotionsCount.rows[0].count) === 0) {
-                    console.log(`Добавляем предустановленные акции для компании ${company.id}...`);
-                    await addPresetDataForCompany(company.id);
-                }
-                
-                if (parseInt(questsCount.rows[0].count) === 0) {
-                    console.log(`Добавляем предустановленные задания для компании ${company.id}...`);
-                    const presetQuests = getPresetQuests();
-                    for (const quest of presetQuests) {
-                        await query(`
-                            INSERT INTO quests (company_id, emoji, title, description, reward, active, expires_days, created_at, updated_at) 
-                            VALUES ($1, $2, $3, $4, $5, true, 30, NOW(), NOW())
-                        `, [company.id, quest.emoji, quest.title, quest.description, quest.reward]);
-                    }
-                    console.log(`Добавлено ${presetQuests.length} заданий для компании ${company.id}`);
-                }
-                
-                // ОБНОВЛЕНИЕ: миграция существующих уровней — удаляем multiplier
-                const tiersResult = await query('SELECT tiers_settings FROM companies WHERE id = $1', [company.id]);
-                if (tiersResult.rows.length > 0 && tiersResult.rows[0].tiers_settings) {
-                    let tiers = tiersResult.rows[0].tiers_settings;
-                    if (typeof tiers === 'string') {
-                        tiers = JSON.parse(tiers);
-                    }
-                    if (Array.isArray(tiers) && tiers.length > 0 && tiers[0].multiplier !== undefined) {
-                        console.log(`Обновляем уровни для компании ${company.id}, удаляем multiplier...`);
-                        const newTiers = tiers.map(tier => {
-                            const { multiplier, ...rest } = tier;
-                            // Если cashback не задан, используем multiplier * 5 как fallback, но не больше 30%
-                            if (rest.cashback === undefined) {
-                                rest.cashback = Math.min(30, (multiplier || 1) * 5);
-                            }
-                            return rest;
-                        });
-                        await query(
-                            'UPDATE companies SET tiers_settings = $1::jsonb WHERE id = $2',
-                            [JSON.stringify(newTiers), company.id]
-                        );
-                        console.log(`Уровни обновлены для компании ${company.id}`);
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error('❌ Ошибка вставки тестовых данных:', error);
-    }
-}
-
 // ============ CRUD операции для акций ============
 async function getPromotions(companyId) {
     const result = await query('SELECT * FROM promotions WHERE company_id = $1 ORDER BY created_at DESC', [companyId]);
@@ -1054,7 +686,6 @@ async function getPromotions(companyId) {
 async function addPromotion(companyId, promotionData) {
     const { name, emoji, description, startDate, endDate, active, reward_type, reward_value, products, is_free, price } = promotionData;
     
-    // Проверка минимальной длительности акции (12 часов) - для НОВЫХ акций
     if (startDate && endDate) {
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -1151,7 +782,6 @@ async function getQuests(companyId) {
 
 async function addQuest(companyId, questData) {
     const { emoji, title, description, reward, active, expiresDays } = questData;
-    // Ограничиваем durationDays от 1 до 7
     let durationDays = expiresDays || 7;
     if (durationDays < 1) durationDays = 1;
     if (durationDays > 7) durationDays = 7;
@@ -1275,96 +905,6 @@ async function createUser(vkId, companyId, name) {
     }
 }
 
-
-async function addQuestColumns() {
-    try {
-        // Проверяем и добавляем колонку duration_days (количество дней на выполнение)
-        const checkDuration = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'duration_days'
-        `);
-        
-        if (checkDuration.rows.length === 0) {
-            console.log('Добавляем колонку duration_days в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN duration_days INTEGER DEFAULT 1`);
-            console.log('Колонка duration_days добавлена');
-        }
-        
-        // Проверяем и добавляем колонку last_completed_at (когда задание было выполнено)
-        const checkLastCompleted = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'last_completed_at'
-        `);
-        
-        if (checkLastCompleted.rows.length === 0) {
-            console.log('Добавляем колонку last_completed_at в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN last_completed_at TIMESTAMP`);
-            console.log('Колонка last_completed_at добавлена');
-        }
-        
-        // Проверяем и добавляем колонку reset_at (когда задание сбросится)
-        const checkResetAt = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'reset_at'
-        `);
-        
-        if (checkResetAt.rows.length === 0) {
-            console.log('Добавляем колонку reset_at в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN reset_at TIMESTAMP`);
-            console.log('Колонка reset_at добавлена');
-        }
-        
-        // Проверяем и добавляем колонку target_type (тип цели задания)
-        const checkTargetType = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'target_type'
-        `);
-        
-        if (checkTargetType.rows.length === 0) {
-            console.log('Добавляем колонку target_type в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN target_type VARCHAR(50) DEFAULT 'daily_login'`);
-            console.log('Колонка target_type добавлена');
-        }
-        
-        // Проверяем и добавляем колонку target_value (значение цели задания)
-        const checkTargetValue = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'quests' AND column_name = 'target_value'
-        `);
-        
-        if (checkTargetValue.rows.length === 0) {
-            console.log('Добавляем колонку target_value в таблицу quests...');
-            await query(`ALTER TABLE quests ADD COLUMN target_value INTEGER DEFAULT 1`);
-            console.log('Колонка target_value добавлена');
-        }
-        
-        // Обновляем существующие задания - устанавливаем duration_days = 1 для daily_login
-        await query(`
-            UPDATE quests 
-            SET duration_days = 1 
-            WHERE title ILIKE '%вход%' AND duration_days IS NULL
-        `);
-        
-        // Для остальных заданий по умолчанию 7 дней
-        await query(`
-            UPDATE quests 
-            SET duration_days = 7 
-            WHERE duration_days IS NULL
-        `);
-        
-        // Обновляем target_type и target_value для существующих заданий
-        await updateQuestTargetTypes();
-        
-    } catch (error) {
-        console.error('❌ Ошибка добавления колонок заданий:', error);
-    }
-}
-
 // Функция для обновления target_type и target_value на основе названия задания
 async function updateQuestTargetTypes() {
     try {
@@ -1418,42 +958,10 @@ async function updateQuestTargetTypes() {
         console.error('Ошибка обновления target_type:', error);
     }
 }
-async function checkAndResetQuests(userId, companyId) {
-    const now = new Date();
-    
-    // Получаем все задания пользователя
-    const userQuests = await query(`
-        SELECT uqp.*, q.duration_days, q.title
-        FROM user_quest_progress uqp
-        JOIN quests q ON uqp.quest_id = q.id
-        WHERE uqp.user_id = $1 AND q.company_id = $2
-    `, [userId, companyId]);
-    
-    for (const quest of userQuests.rows) {
-        // Если задание выполнено и есть дата выполнения
-        if (quest.completed && quest.updated_at) {
-            const completedDate = new Date(quest.updated_at);
-            const daysSinceCompleted = Math.floor((now - completedDate) / (1000 * 60 * 60 * 24));
-            const durationDays = quest.duration_days || 1;
-            
-            // Если прошло больше дней чем duration_days - сбрасываем задание
-            if (daysSinceCompleted >= durationDays) {
-                await query(`
-                    UPDATE user_quest_progress 
-                    SET progress = 0, 
-                        completed = FALSE, 
-                        claimed = FALSE,
-                        updated_at = NOW()
-                    WHERE user_id = $1 AND quest_id = $2
-                `, [userId, quest.quest_id]);
-            }
-        }
-    }
-}
 
 async function trackPurchaseProgress(userId, companyId, purchaseAmount) {
     try {
-        console.log(`🛒 Отслеживание покупки: userId=${userId}, companyId=${companyId}, amount=${purchaseAmount}`);
+        console.log(`Отслеживание покупки: userId=${userId}, companyId=${companyId}, amount=${purchaseAmount}`);
         
         const questsResult = await query(
             `SELECT * FROM quests 
@@ -1518,7 +1026,7 @@ async function trackPurchaseProgress(userId, companyId, purchaseAmount) {
                          WHERE user_id = $3 AND quest_id = $4`,
                         [actualProgress, completed, userId, quest.id]
                     );
-                    console.log(`   🔄 Сброшен прогресс: ${actualProgress}`);
+                    console.log(`Сброшен прогресс: ${actualProgress}`);
                 } else if (!progress.completed && !progress.claimed) {
                     await query(
                         `UPDATE user_quest_progress 
@@ -1526,11 +1034,10 @@ async function trackPurchaseProgress(userId, companyId, purchaseAmount) {
                          WHERE user_id = $3 AND quest_id = $4`,
                         [actualProgress, completed, userId, quest.id]
                     );
-                    console.log(`   📈 Прогресс обновлён: ${actualProgress}/${quest.target_value}`);
+                    console.log(`Прогресс обновлён: ${actualProgress}/${quest.target_value}`);
                     
-                    // ТОЛЬКО ЛОГ, БЕЗ НАЧИСЛЕНИЯ БОНУСА
                     if (completed && !progress.completed) {
-                        console.log(`   🎉 Задание "${quest.title}" выполнено! Ожидает нажатия кнопки "Забрать"`);
+                        console.log(`Задание "${quest.title}" выполнено! Ожидает нажатия кнопки "Забрать"`);
                     }
                 }
             } else {
@@ -1539,22 +1046,21 @@ async function trackPurchaseProgress(userId, companyId, purchaseAmount) {
                      VALUES ($1, $2, $3, $4, false, NOW())`,
                     [userId, quest.id, actualProgress, completed]
                 );
-                console.log(`   🆕 Создан прогресс: ${actualProgress}/${quest.target_value}`);
+                console.log(`Создан прогресс: ${actualProgress}/${quest.target_value}`);
                 
-                // ТОЛЬКО ЛОГ, БЕЗ НАЧИСЛЕНИЯ БОНУСА
                 if (completed) {
-                    console.log(`   🎉 Задание "${quest.title}" выполнено! Ожидает нажатия кнопки "Забрать"`);
+                    console.log(`Задание "${quest.title}" выполнено! Ожидает нажатия кнопки "Забрать"`);
                 }
             }
         }
     } catch (error) {
-        console.error('❌ Ошибка trackPurchaseProgress:', error);
+        console.error('Ошибка trackPurchaseProgress:', error);
     }
 }
 
 async function trackDailyLogin(userId, companyId) {
     try {
-        console.log(`📅 Отслеживание ежедневного входа: userId=${userId}`);
+        console.log(`Отслеживание ежедневного входа: userId=${userId}`);
         
         const questsResult = await query(
             `SELECT * FROM quests 
@@ -1577,11 +1083,10 @@ async function trackDailyLogin(userId, companyId) {
             );
             
             if (existingProgress.rows.length > 0) {
-                console.log(`   📅 Задание "${quest.title}" уже отмечено сегодня`);
+                console.log(`Задание "${quest.title}" уже отмечено сегодня`);
                 continue;
             }
             
-            // ТОЛЬКО ОТМЕЧАЕМ КАК ВЫПОЛНЕННОЕ, НО БЕЗ НАЧИСЛЕНИЯ
             await query(
                 `INSERT INTO user_quest_progress (user_id, quest_id, progress, completed, claimed, updated_at)
                  VALUES ($1, $2, 1, true, false, NOW())
@@ -1594,10 +1099,10 @@ async function trackDailyLogin(userId, companyId) {
                 [userId, quest.id]
             );
             
-            console.log(`   🎉 Ежедневный вход: задание "${quest.title}" выполнено! Ожидает нажатия кнопки "Забрать"`);
+            console.log(`Ежедневный вход: задание "${quest.title}" выполнено! Ожидает нажатия кнопки "Забрать"`);
         }
     } catch (error) {
-        console.error('❌ Ошибка trackDailyLogin:', error);
+        console.error('Ошибка trackDailyLogin:', error);
     }
 }
 // Функция для отметки выполнения задания "Воспользоваться акцией"
@@ -1655,7 +1160,6 @@ async function trackPromotionUsage(userId, companyId) {
                 );
             }
             
-            // ТОЛЬКО ЛОГ, БЕЗ НАЧИСЛЕНИЯ БОНУСА
             console.log(`   🎉 Задание "${quest.title}" выполнено! Ожидает нажатия кнопки "Забрать"`);
         }
     } catch (error) {
@@ -1725,7 +1229,6 @@ async function updateUserBalance(userId, change, type, description, metadata = {
                 [userId, user.company_id, change]
             );
         } else if (type === 'spend') {
-            // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: при списании увеличиваем total_spent
             const spendAmount = Math.abs(change);
             await client.query(
                 'UPDATE users SET total_spent = total_spent + $1 WHERE id = $2',
@@ -1886,162 +1389,6 @@ async function claimDailyBonus(userId, companyId, bonusAmount, newStreak) {
     
     return result.rows[0];
 }
-// Добавьте эту функцию в addMissingColumns() или выполните отдельно:
-async function addPromotionRewardColumns() {
-    try {
-        const checkRewardType = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'reward_type'
-        `);
-        
-        if (checkRewardType.rows.length === 0) {
-            console.log('Добавляем колонку reward_type в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN reward_type VARCHAR(50) DEFAULT 'bonus'`);
-            console.log('Колонка reward_type добавлена');
-        }
-        
-        const checkRewardValue = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'reward_value'
-        `);
-        
-        if (checkRewardValue.rows.length === 0) {
-            console.log('Добавляем колонку reward_value в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN reward_value INTEGER DEFAULT 0`);
-            console.log('Колонка reward_value добавлена');
-        }
-        
-        // Добавляем колонку products если её нет
-        const checkProducts = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'products'
-        `);
-        
-        if (checkProducts.rows.length === 0) {
-            console.log('Добавляем колонку products в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN products TEXT`);
-            console.log('Колонка products добавлена');
-        }
-        
-        // Добавляем колонку is_free если её нет
-        const checkIsFree = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'is_free'
-        `);
-        
-        if (checkIsFree.rows.length === 0) {
-            console.log('Добавляем колонку is_free в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN is_free BOOLEAN DEFAULT FALSE`);
-            console.log('Колонка is_free добавлена');
-        }
-        
-        // Добавляем колонку price если её нет
-        const checkPrice = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'promotions' AND column_name = 'price'
-        `);
-        
-        if (checkPrice.rows.length === 0) {
-            console.log('Добавляем колонку price в таблицу promotions...');
-            await query(`ALTER TABLE promotions ADD COLUMN price INTEGER DEFAULT 100`);
-            console.log('Колонка price добавлена');
-        }
-    } catch (error) {
-        console.error('❌ Ошибка добавления колонок:', error);
-    }
-}
-
-async function addGameSettingsColumns() {
-    try {
-        // Проверяем существование таблицы
-        const checkTable = await query(`
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'game_settings'
-            )
-        `);
-        
-        if (!checkTable.rows[0].exists) {
-            console.log('Таблица game_settings не существует, будет создана при первом использовании');
-            return;
-        }
-        
-        // Проверяем и добавляем колонку game_type если её нет
-        const checkGameType = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'game_settings' AND column_name = 'game_type'
-        `);
-        
-        if (checkGameType.rows.length === 0) {
-            console.log('Добавляем колонку game_type в таблицу game_settings...');
-            await query(`ALTER TABLE game_settings ADD COLUMN game_type VARCHAR(50)`);
-            console.log('Колонка game_type добавлена');
-        }
-        
-        // Проверяем и добавляем колонку settings если её нет
-        const checkSettings = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'game_settings' AND column_name = 'settings'
-        `);
-        
-        if (checkSettings.rows.length === 0) {
-            console.log('Добавляем колонку settings в таблицу game_settings...');
-            await query(`ALTER TABLE game_settings ADD COLUMN settings JSONB DEFAULT '{}'`);
-            console.log('Колонка settings добавлена');
-        }
-        
-        // Проверяем и добавляем колонку active если её нет
-        const checkActive = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'game_settings' AND column_name = 'active'
-        `);
-        
-        if (checkActive.rows.length === 0) {
-            console.log('Добавляем колонку active в таблицу game_settings...');
-            await query(`ALTER TABLE game_settings ADD COLUMN active BOOLEAN DEFAULT TRUE`);
-            console.log('Колонка active добавлена');
-        }
-        
-        // Проверяем и добавляем колонку company_id если её нет
-        const checkCompanyId = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'game_settings' AND column_name = 'company_id'
-        `);
-        
-        if (checkCompanyId.rows.length === 0) {
-            console.log('Добавляем колонку company_id в таблицу game_settings...');
-            await query(`ALTER TABLE game_settings ADD COLUMN company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE`);
-            console.log('Колонка company_id добавлена');
-        }
-        
-        // Проверяем и добавляем колонку updated_at если её нет
-        const checkUpdated = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'game_settings' AND column_name = 'updated_at'
-        `);
-        
-        if (checkUpdated.rows.length === 0) {
-            console.log('Добавляем колонку updated_at в таблицу game_settings...');
-            await query(`ALTER TABLE game_settings ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-            console.log('Колонка updated_at добавлена');
-        }
-        
-        console.log('Все колонки game_settings проверены');
-    } catch (error) {
-        console.error('❌ Ошибка добавления колонок game_settings:', error);
-    }
-}
-// Добавьте эту функцию в database-pg.js после других функций
 
 // Получение истории покупок пользователя
 async function getUserPurchaseHistory(userId, limit = 50) {
@@ -2247,9 +1594,8 @@ async function checkPromotionCycle(promotionId) {
     return result.rows[0];
 }
 
-// ============ Функции для Розыгрышей (Giveaways) ============
+// ============ Функции для Розыгрышей ============
 async function getGiveaways(companyId, includeInactive = false) {
-    await migrateGiveawaysTable();
     
     let queryText = 'SELECT * FROM giveaways WHERE company_id = $1';
     const params = [companyId];
@@ -2267,7 +1613,6 @@ async function getGiveaways(companyId, includeInactive = false) {
 async function addGiveaway(companyId, giveawayData) {
     const { name, link, description, active, is_paid, bonus_cost, end_date } = giveawayData;
     
-    // Проверяем обязательные поля
     if (!name || !link) {
         throw new Error('name и link обязательны');
     }
@@ -2486,28 +1831,22 @@ async function recalculateUserType(userId, companyId) {
     
     // ========== ПРАВИЛА СЕГМЕНТАЦИИ (только для пользователей с покупками) ==========
     
-    // 1. СПЯЩИЙ: 1+ покупка и прошло 15+ дней с последней покупки
     if (daysSinceLastPurchase >= 15) {
         newUserType = 'dormant';
     }
-    // 2. ПОСТОЯННЫЙ: 2+ покупки и максимальный интервал между ними <= 5 дней
     else if (totalPurchases >= 2 && maxIntervalDays <= 5) {
         newUserType = 'regular';
     }
-    // 3. АКТИВНЫЙ: 2+ покупки и максимальный интервал между ними <= 14 дней
     else if (totalPurchases >= 2 && maxIntervalDays <= 14) {
         newUserType = 'active';
     }
-    // 4. НОВИЧОК: 1 покупка и прошло <= 14 дней
     else if (totalPurchases === 1 && daysSinceLastPurchase <= 14) {
         newUserType = 'new';
     }
-    // 5. Если 2+ покупки, но интервал больше 14 дней - спящий (но с покупками)
     else if (totalPurchases >= 2 && maxIntervalDays > 14) {
         newUserType = 'dormant';
     }
     
-    // Обновляем тип пользователя (только если есть тип)
     if (newUserType) {
         await query(
             `UPDATE user_classification 
@@ -2515,7 +1854,7 @@ async function recalculateUserType(userId, companyId) {
              WHERE user_id = $2 AND company_id = $3`,
             [newUserType, userId, companyId]
         );
-        console.log(`📊 Пользователь ${userId}: ${newUserType} | Покупок: ${totalPurchases} | Макс. интервал: ${maxIntervalDays} дн | Дней без покупок: ${daysSinceLastPurchase}`);
+        console.log(`Пользователь ${userId}: ${newUserType} | Покупок: ${totalPurchases} | Макс. интервал: ${maxIntervalDays} дн | Дней без покупок: ${daysSinceLastPurchase}`);
     }
 }
 
@@ -2798,7 +2137,7 @@ switch (period) {
         avgBonus: Math.round(parseInt(avgCheckResult.rows[0].avg_bonus)),
         dailyActivity: dailyActivityResult.rows,
         topProducts: topProductsResult.rows,
-        addressesRevenue: addressesRevenue  // НОВОЕ ПОЛЕ
+        addressesRevenue: addressesRevenue
     };
 }
 async function addGiveawayColumns() {
@@ -2867,318 +2206,7 @@ async function addGiveawayColumns() {
         
         console.log('Все колонки giveaways проверены');
     } catch (error) {
-        console.error('❌ Ошибка добавления колонок giveaways:', error);
-    }
-}
-
-async function migrateGiveawaysTable() {
-    try {
-        // Проверяем существование таблицы
-        const tableExists = await query(`
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'giveaways'
-            )
-        `);
-        
-        if (!tableExists.rows[0].exists) {
-            console.log('Таблица giveaways не существует, будет создана позже');
-            return;
-        }
-        
-        // Получаем список существующих колонок
-        const columns = await query(`
-            SELECT column_name, is_nullable 
-            FROM information_schema.columns 
-            WHERE table_name = 'giveaways'
-        `);
-        
-        const existingColumns = columns.rows.map(c => c.column_name);
-        console.log('📋 Существующие колонки giveaways:', existingColumns);
-        
-        // Удаляем устаревшие колонки
-        const columnsToDrop = ['title', 'start_date', 'end_date_old'];
-        for (const col of columnsToDrop) {
-            if (existingColumns.includes(col)) {
-                console.log(`Удаляем устаревшую колонку ${col}...`);
-                await query(`ALTER TABLE giveaways DROP COLUMN ${col}`);
-            }
-        }
-        
-        // Обновляем список колонок после удаления
-        const updatedColumns = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'giveaways'
-        `);
-        const currentColumns = updatedColumns.rows.map(c => c.column_name);
-        
-        // Добавляем колонку name если её нет
-        if (!currentColumns.includes('name')) {
-            console.log('Добавляем колонку name...');
-            await query(`ALTER TABLE giveaways ADD COLUMN name VARCHAR(255)`);
-            await query(`UPDATE giveaways SET name = 'Розыгрыш' WHERE name IS NULL`);
-            await query(`ALTER TABLE giveaways ALTER COLUMN name SET NOT NULL`);
-        }
-        
-        // Добавляем колонку link если её нет
-        if (!currentColumns.includes('link')) {
-            console.log('Добавляем колонку link...');
-            await query(`ALTER TABLE giveaways ADD COLUMN link TEXT NOT NULL DEFAULT ''`);
-        }
-        
-        // Добавляем колонку description если её нет
-        if (!currentColumns.includes('description')) {
-            console.log('Добавляем колонку description...');
-            await query(`ALTER TABLE giveaways ADD COLUMN description TEXT`);
-        }
-        
-        // Добавляем колонку active если её нет
-        if (!currentColumns.includes('active')) {
-            console.log('Добавляем колонку active...');
-            await query(`ALTER TABLE giveaways ADD COLUMN active BOOLEAN DEFAULT TRUE`);
-        }
-        
-        // Добавляем колонку is_paid если её нет
-        if (!currentColumns.includes('is_paid')) {
-            console.log('Добавляем колонку is_paid...');
-            await query(`ALTER TABLE giveaways ADD COLUMN is_paid BOOLEAN DEFAULT FALSE`);
-        }
-        
-        // Добавляем колонку bonus_cost если её нет
-        if (!currentColumns.includes('bonus_cost')) {
-            console.log('Добавляем колонку bonus_cost...');
-            await query(`ALTER TABLE giveaways ADD COLUMN bonus_cost INTEGER DEFAULT 0`);
-        }
-        
-        // Добавляем колонку end_date если её нет
-        if (!currentColumns.includes('end_date')) {
-            console.log('Добавляем колонку end_date...');
-            await query(`ALTER TABLE giveaways ADD COLUMN end_date TIMESTAMP`);
-        } else {
-            // Удаляем ограничение NOT NULL если оно есть
-            console.log('Проверяем ограничение NOT NULL на end_date...');
-            const endDateCol = columns.rows.find(c => c.column_name === 'end_date');
-            if (endDateCol && endDateCol.is_nullable === 'NO') {
-                await query(`ALTER TABLE giveaways ALTER COLUMN end_date DROP NOT NULL`);
-                console.log('Удалено ограничение NOT NULL с end_date');
-            }
-        }
-        
-        // Добавляем колонку created_at если её нет
-        if (!currentColumns.includes('created_at')) {
-            console.log('Добавляем колонку created_at...');
-            await query(`ALTER TABLE giveaways ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-        }
-        
-        // Добавляем колонку updated_at если её нет
-        if (!currentColumns.includes('updated_at')) {
-            console.log('Добавляем колонку updated_at...');
-            await query(`ALTER TABLE giveaways ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-        }
-        
-        console.log('Все колонки giveaways добавлены/проверены');
-    } catch (error) {
-        console.error('❌ Ошибка миграции giveaways:', error);
-    }
-}
-// Добавляем колонку bonus_settings в таблицу companies
-async function addBonusSettingsColumn() {
-    try {
-        const checkColumn = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'companies' AND column_name = 'bonus_settings'
-        `);
-        
-        if (checkColumn.rows.length === 0) {
-            console.log('Добавляем колонку bonus_settings в таблицу companies...');
-            // ИСПРАВЛЕНО: переименовали maxBonusPaymentPercent в maxBonusPaymentPercent (оставили как есть, но в UI будем показывать как "Макс. % оплаты")
-            await query(`
-                ALTER TABLE companies 
-                ADD COLUMN bonus_settings JSONB DEFAULT '{
-                    "rubToBonus": 10,
-                    "maxBonusPaymentPercent": 25,
-                    "minPurchaseForBonus": 1000,
-                    "bonusRatePerThousand": 10
-                }'::jsonb
-            `);
-            console.log('Колонка bonus_settings добавлена');
-        } else {
-            await query(`
-                UPDATE companies 
-                SET bonus_settings = '{
-                    "rubToBonus": 10,
-                    "maxBonusPaymentPercent": 25,
-                    "minPurchaseForBonus": 1000,
-                    "bonusRatePerThousand": 10
-                }'::jsonb
-                WHERE bonus_settings IS NULL OR bonus_settings = '{}'::jsonb
-            `);
-        }
-    } catch (error) {
-        console.error('❌ Ошибка добавления bonus_settings:', error);
-    }
-}
-
-// Добавляем новые колонки для notification_campaigns
-async function addNotificationCampaignColumns() {
-    try {
-        // Проверяем и добавляем колонку interval_days
-        const checkInterval = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notification_campaigns' AND column_name = 'interval_days'
-        `);
-        
-        if (checkInterval.rows.length === 0) {
-            console.log('Добавляем колонку interval_days в таблицу notification_campaigns...');
-            await query(`ALTER TABLE notification_campaigns ADD COLUMN interval_days INTEGER DEFAULT 1`);
-            console.log('Колонка interval_days добавлена');
-        }
-        
-        // Проверяем и добавляем колонку image_url
-        const checkImage = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notification_campaigns' AND column_name = 'image_url'
-        `);
-        
-        if (checkImage.rows.length === 0) {
-            console.log('Добавляем колонку image_url в таблицу notification_campaigns...');
-            await query(`ALTER TABLE notification_campaigns ADD COLUMN image_url TEXT`);
-            console.log('Колонка image_url добавлена');
-        }
-        
-        // Проверяем и добавляем колонку is_default
-        const checkDefault = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notification_campaigns' AND column_name = 'is_default'
-        `);
-        
-        if (checkDefault.rows.length === 0) {
-            console.log('Добавляем колонку is_default в таблицу notification_campaigns...');
-            await query(`ALTER TABLE notification_campaigns ADD COLUMN is_default BOOLEAN DEFAULT FALSE`);
-            console.log('Колонка is_default добавлена');
-        }
-        
-        // Проверяем и добавляем колонку last_sent_at
-        const checkLastSent = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notification_campaigns' AND column_name = 'last_sent_at'
-        `);
-        
-        if (checkLastSent.rows.length === 0) {
-            console.log('Добавляем колонку last_sent_at в таблицу notification_campaigns...');
-            await query(`ALTER TABLE notification_campaigns ADD COLUMN last_sent_at TIMESTAMP`);
-            console.log('Колонка last_sent_at добавлена');
-        }
-        
-        // Исправляем колонку trigger_type - делаем nullable (допускает NULL)
-        console.log('Изменяем колонку trigger_type на nullable...');
-        try {
-            await query(`ALTER TABLE notification_campaigns ALTER COLUMN trigger_type DROP NOT NULL`);
-            console.log('Колонка trigger_type теперь допускает NULL');
-        } catch (error) {
-            console.log('Колонка trigger_type уже nullable или не существует:', error.message);
-        }
-        
-        // Проверяем и добавляем колонку audience в таблицу notifications (если её нет)
-        const checkNotifAudience = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notifications' AND column_name = 'audience'
-        `);
-        
-        if (checkNotifAudience.rows.length === 0) {
-            console.log('Добавляем колонку audience в таблицу notifications...');
-            await query(`ALTER TABLE notifications ADD COLUMN audience VARCHAR(50) DEFAULT 'all'`);
-            console.log('Колонка audience добавлена в notifications');
-        }
-        
-        // Проверяем и добавляем колонку status в таблицу notifications (если её нет)
-        const checkNotifStatus = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notifications' AND column_name = 'status'
-        `);
-        
-        if (checkNotifStatus.rows.length === 0) {
-            console.log('Добавляем колонку status в таблицу notifications...');
-            await query(`ALTER TABLE notifications ADD COLUMN status VARCHAR(50) DEFAULT 'pending'`);
-            console.log('Колонка status добавлена в notifications');
-        }
-        
-        // Проверяем и добавляем колонку sent_count в таблицу notifications (если её нет)
-        const checkNotifSentCount = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notifications' AND column_name = 'sent_count'
-        `);
-        
-        if (checkNotifSentCount.rows.length === 0) {
-            console.log('Добавляем колонку sent_count в таблицу notifications...');
-            await query(`ALTER TABLE notifications ADD COLUMN sent_count INTEGER DEFAULT 0`);
-            console.log('Колонка sent_count добавлена в notifications');
-        }
-        
-        // Проверяем и добавляем колонку sent_at в таблицу notifications (если её нет)
-        const checkNotifSentAt = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notifications' AND column_name = 'sent_at'
-        `);
-        
-        if (checkNotifSentAt.rows.length === 0) {
-            console.log('Добавляем колонку sent_at в таблицу notifications...');
-            await query(`ALTER TABLE notifications ADD COLUMN sent_at TIMESTAMP`);
-            console.log('Колонка sent_at добавлена в notifications');
-        }
-        
-        // Проверяем и добавляем колонку button_link в таблицу notification_campaigns
-        const checkButtonLink = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notification_campaigns' AND column_name = 'button_link'
-        `);
-        
-        if (checkButtonLink.rows.length === 0) {
-            console.log('Добавляем колонку button_link в таблицу notification_campaigns...');
-            await query(`ALTER TABLE notification_campaigns ADD COLUMN button_link TEXT`);
-            console.log('Колонка button_link добавлена');
-        }
-        
-        // Проверяем и добавляем колонку button_text в таблицу notification_campaigns
-        const checkButtonText = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notification_campaigns' AND column_name = 'button_text'
-        `);
-        
-        if (checkButtonText.rows.length === 0) {
-            console.log('Добавляем колонку button_text в таблицу notification_campaigns...');
-            await query(`ALTER TABLE notification_campaigns ADD COLUMN button_text VARCHAR(50) DEFAULT 'Перейти'`);
-            console.log('Колонка button_text добавлена');
-        }
-        
-        // Проверяем и добавляем колонку image_url в таблицу notifications
-        const checkNotifImage = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'notifications' AND column_name = 'image_url'
-        `);
-        
-        if (checkNotifImage.rows.length === 0) {
-            console.log('Добавляем колонку image_url в таблицу notifications...');
-            await query(`ALTER TABLE notifications ADD COLUMN image_url TEXT`);
-            console.log('Колонка image_url добавлена в notifications');
-        }
-        
-        console.log('Все колонки notification_campaigns проверены');
-    } catch (error) {
-        console.error('❌ Ошибка добавления колонок notification_campaigns:', error);
+        console.error('Ошибка добавления колонок giveaways:', error);
     }
 }
 
@@ -3468,64 +2496,7 @@ async function saveNotificationToHistory(companyId, title, message, audience, se
     }
 }
 
-// Добавьте эти функции в database-pg.js после существующих
-
 // ============ API ДЛЯ ГОРОДОВ И АДРЕСОВ ============
-
-// Создание таблиц городов и адресов
-async function initLocationTables() {
-    try {
-        // Таблица городов
-        await query(`
-            CREATE TABLE IF NOT EXISTS cities (
-                id SERIAL PRIMARY KEY,
-                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-                name VARCHAR(100) NOT NULL,
-                is_active BOOLEAN DEFAULT true,
-                sort_order INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(company_id, name)
-            )
-        `);
-        
-        // Таблица адресов
-        await query(`
-            CREATE TABLE IF NOT EXISTS addresses (
-                id SERIAL PRIMARY KEY,
-                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-                city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
-                address TEXT NOT NULL,
-                latitude DECIMAL(10, 8),
-                longitude DECIMAL(11, 8),
-                phone VARCHAR(50),
-                working_hours TEXT,
-                is_main BOOLEAN DEFAULT false,
-                is_active BOOLEAN DEFAULT true,
-                sort_order INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
-        
-        // Таблица выбранных локаций пользователей (ДОБАВИТЬ СЮДА)
-        await query(`
-            CREATE TABLE IF NOT EXISTS user_selected_locations (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-                selected_address_id INTEGER NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(user_id, company_id)
-            )
-        `);
-        
-        console.log('Таблицы городов, адресов и выбранных локаций созданы/проверены');
-    } catch (error) {
-        console.error('❌ Ошибка создания таблиц локаций:', error);
-    }
-}
 
 // Получить все города компании
 async function getCities(companyId) {
@@ -3899,38 +2870,7 @@ async function saveCashierCredentials(companyId, login, password) {
         throw error;
     }
 }
-async function addUserProgressSpentColumn() {
-    try {
-        const checkColumn = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'user_progress' AND column_name = 'total_spent'
-        `);
-        
-        if (checkColumn.rows.length === 0) {
-            console.log('Добавляем колонку total_spent в таблицу user_progress...');
-            await query(`ALTER TABLE user_progress ADD COLUMN total_spent INTEGER DEFAULT 0`);
-            console.log('Колонка total_spent добавлена в user_progress');
-        }
-    } catch (error) {
-        console.error('Ошибка добавления total_spent в user_progress:', error);
-    }
-}
-async function addTimezoneColumn() {
-  try {
-    const check = await query(`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'companies' AND column_name = 'timezone_offset'
-    `);
-    if (check.rows.length === 0) {
-      console.log('Добавляем колонку timezone_offset в таблицу companies...');
-      await query(`ALTER TABLE companies ADD COLUMN timezone_offset INTEGER DEFAULT 0`);
-      console.log('Колонка timezone_offset добавлена');
-    }
-  } catch (error) {
-    console.error('❌ Ошибка добавления timezone_offset:', error);
-  }
-}
+
 async function getUserFullData(userId, companyId) {
     try {
         // Получаем пользователя
@@ -3989,7 +2929,6 @@ async function getUserFullData(userId, companyId) {
     }
 }
 
-// Добавьте эту функцию в database-pg.js
 async function createUserGamePlaysTable() {
     try {
         await query(`
@@ -4004,7 +2943,6 @@ async function createUserGamePlaysTable() {
             )
         `);
         
-        // Добавляем уникальное ограничение, если его нет
         try {
             await query(`
                 ALTER TABLE user_game_plays 
@@ -4022,7 +2960,7 @@ async function createUserGamePlaysTable() {
         
         console.log('Таблица user_game_plays создана/проверена');
     } catch (error) {
-        console.error('❌ Ошибка создания user_game_plays:', error);
+        console.error('Ошибка создания user_game_plays:', error);
     }
 }
 
@@ -4031,7 +2969,7 @@ async function getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset
     try {
         const today = getTodayString(timezoneOffset);
         
-        console.log(`📅 ${gameType}: Проверка игр: timezoneOffset=${timezoneOffset}, today=${today}`);
+        console.log(`${gameType}: Проверка игр: timezoneOffset=${timezoneOffset}, today=${today}`);
         
         const result = await query(
             `SELECT plays_today, last_play_date 
@@ -4083,7 +3021,6 @@ async function getUserGamePlaysToday(userId, companyId, gameType, timezoneOffset
 
 
 // Функция для увеличения счетчика игр сегодня
-
 async function incrementUserGamePlays(userId, companyId, gameType, timezoneOffset = 0) {
     try {
         const today = getTodayString(timezoneOffset);
@@ -4109,7 +3046,7 @@ async function incrementUserGamePlays(userId, companyId, gameType, timezoneOffse
         return 0;
     }
 }
-// Добавьте эту функцию после функции updatePromotion
+
 async function clearPromotionPurchases(promotionId) {
     try {
         console.log(`🗑️ Очищаем покупки для акции ${promotionId}`);
@@ -4129,7 +3066,6 @@ async function clearPromotionPurchases(promotionId) {
     }
 }
 
-// Добавьте эту функцию в database-pg.js
 async function shouldClearPurchasesForPromotion(promotionId, newData) {
     const oldResult = await query('SELECT * FROM promotions WHERE id = $1', [promotionId]);
     
@@ -4151,75 +3087,42 @@ async function shouldClearPurchasesForPromotion(promotionId, newData) {
     const wasExpired = oldEndDate && oldEndDate < now;
     const willBeActive = newEndDate && newEndDate > now;
     
-    // 1. Акция была истекшей и снова становится активной
     if (wasExpired && willBeActive) {
         shouldClear = true;
         reasons.push(`акция была истекшей (до ${oldEndDate.toLocaleDateString()}), теперь активна до ${newEndDate.toLocaleDateString()}`);
     }
     
-    // 2. Изменение скидки
     if (newData.reward_value !== undefined && old.reward_value !== newData.reward_value) {
         shouldClear = true;
         reasons.push(`скидка (${old.reward_value}% → ${newData.reward_value}%)`);
     }
     
-    // 3. Изменение цены
     if (newData.price !== undefined && old.price !== newData.price) {
         shouldClear = true;
         reasons.push(`цена (${old.price} → ${newData.price} баллов)`);
     }
     
-    // 4. Изменение типа (бесплатная/платная)
     if (newData.is_free !== undefined && old.is_free !== newData.is_free) {
         shouldClear = true;
         reasons.push(`тип (${old.is_free ? 'бесплатная' : 'платная'} → ${newData.is_free ? 'бесплатная' : 'платная'})`);
     }
     
-    // 5. Укорочение даты окончания (активная акция стала короче)
     if (newEndDate && oldEndDate && !wasExpired && newEndDate < oldEndDate) {
         shouldClear = true;
         reasons.push(`дата окончания укорочена (${oldEndDate.toLocaleDateString()} → ${newEndDate.toLocaleDateString()})`);
     }
     
-    // 6. Изменение даты начала ДО старта акции
     if (newStartDate && oldStartDate && now < oldStartDate && newStartDate.getTime() !== oldStartDate.getTime()) {
         shouldClear = true;
         reasons.push(`дата начала изменена (${oldStartDate.toLocaleDateString()} → ${newStartDate.toLocaleDateString()})`);
     }
     
-    // 7. ПРОДЛЕНИЕ — НЕ ОЧИЩАЕМ
     if (newEndDate && oldEndDate && !wasExpired && newEndDate > oldEndDate) {
         console.log(`Продление акции: покупки НЕ очищаются`);
-        // Не добавляем reasons
     }
     
     return { shouldClear, reasons };
 }
-
-// Добавьте эту функцию в database-pg.js
-async function addPromotionCycleStartColumn() {
-    try {
-        const checkColumn = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'user_purchased_promotions' AND column_name = 'promotion_cycle_start'
-        `);
-        
-        if (checkColumn.rows.length === 0) {
-            console.log('Добавляем колонку promotion_cycle_start в таблицу user_purchased_promotions...');
-            await query(`
-                ALTER TABLE user_purchased_promotions 
-                ADD COLUMN promotion_cycle_start TIMESTAMP NOT NULL DEFAULT NOW()
-            `);
-            console.log('Колонка promotion_cycle_start добавлена');
-        } else {
-            console.log('Колонка promotion_cycle_start уже существует');
-        }
-    } catch (error) {
-        console.error('❌ Ошибка добавления promotion_cycle_start:', error);
-    }
-}
-
 
 function getTodayString(timezoneOffset) {
     const now = new Date();
@@ -4230,28 +3133,6 @@ function getTodayString(timezoneOffset) {
     return `${year}-${month}-${day}`;
 }
 
-async function addMiniAppStatusColumn() {
-    try {
-        const checkColumn = await query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'companies' AND column_name = 'mini_app_active'
-        `);
-        
-        if (checkColumn.rows.length === 0) {
-            console.log('Добавляем колонку mini_app_active в таблицу companies...');
-            await query(`
-                ALTER TABLE companies 
-                ADD COLUMN mini_app_active BOOLEAN DEFAULT FALSE
-            `);
-            console.log('Колонка mini_app_active добавлена');
-        }
-    } catch (error) {
-        console.error('Ошибка добавления mini_app_active:', error);
-    }
-}
-
-// Добавьте эти функции в database-pg.js
 async function getMiniAppStatus(companyId) {
     try {
         const result = await query(
@@ -4321,7 +3202,6 @@ module.exports = {
 	getGameSettings,
 	saveGameSettings,
 	addGameSettingsTable,
-    addGameSettingsColumns,
 	getUserPurchaseHistory,
 	addPurchaseTransaction,
 	getUserTransactions,
@@ -4336,8 +3216,6 @@ module.exports = {
     hasUserPurchasedPromotion,
     usePurchasedPromotion,
     checkPromotionCycle,
-	addQuestColumns,
-	checkAndResetQuests,
     trackPurchaseProgress,
     trackPromotionUsage,
     resetQuestProgress,
@@ -4357,10 +3235,8 @@ module.exports = {
 	addGiveawayColumns,
 	hasUserPurchasedGiveaway,
 	purchaseGiveaway,
-	migrateGiveawaysTable,
     getRealAnalytics,
     recalculateAllUsersClassification,
-	addBonusSettingsColumn,
     // Notifications
     sendNotification,
     getNotificationHistory,
@@ -4373,7 +3249,6 @@ module.exports = {
     getUsersBySegment,
     executeCampaign,
 	saveNotificationToHistory,
-	initLocationTables,
     getCities,
     addCity,
     updateCity,
@@ -4387,13 +3262,12 @@ module.exports = {
     getUserSelectedLocation,
     updateUserSelectedLocation,
     getMainLocation,
-    // Cashier credentials
+    // Cashier
     getCashierCredentials,
     saveCashierCredentials,
     findCashierByLogin,
-	addUserProgressSpentColumn,
 	getUserFullData,
-    // Greeting settings
+    // Greeting
     saveGreetingSettings,
     getGreetingSettings,
 	createUserGamePlaysTable,
@@ -4401,7 +3275,6 @@ module.exports = {
 	incrementUserGamePlays,
 	clearPromotionPurchases,
 	shouldClearPurchasesForPromotion,
-	addPromotionCycleStartColumn,
 	getTodayString,
 	trackDailyLogin,
 	getMiniAppStatus,

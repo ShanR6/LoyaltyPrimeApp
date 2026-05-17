@@ -588,7 +588,6 @@ const syncBalanceFromDB = async () => {
       saveCurrentGroupData(newData);
       console.log('Баланс синхронизирован из БД:', newData.bonusBalance, 'totalSpent:', newData.totalSpent, 'history length:', newData.history.length);
       
-      // ✅ ВАЖНО: ОТПРАВЛЯЕМ СОБЫТИЕ ДЛЯ ОБНОВЛЕНИЯ ВСЕХ ИГР
       window.dispatchEvent(new CustomEvent('refreshGamePlays'));
       console.log('🔄 Отправлено событие refreshGamePlays для обновления игр');
     }
@@ -599,17 +598,6 @@ const syncBalanceFromDB = async () => {
   
   const showModal = (title, message) => setModal({ show: true, title, message });
   const closeModal = () => setModal({ show: false, title: '', message: '' });
-
-  const exchangeReward = (reward) => {
-    const cur = getCurrentGroupData();
-    if (cur.bonusBalance >= reward.cost) {
-      if (updateBalanceAndStats(-reward.cost, 'spend')) {
-        showModal('Успешно!', `Вы обменяли ${reward.title} в "${selectedGroup.name}". Бонусы списаны.`);
-      }
-    } else {
-      showModal('Недостаточно баллов', `Вам не хватает ${reward.cost - cur.bonusBalance} бонусов в "${selectedGroup.name}"`);
-    }
-  };
 
   // Функция сохранения дня рождения
   const saveBirthday = async (date) => {
@@ -2004,11 +1992,7 @@ if (step === 'profile' && selectedGroup && selectedGroup.miniAppActive === false
           userId={userId} 
           selectedGroupId={selectedGroup?.id}
           vkId={userInfo?.id}
-		  companyTimezoneOffset={selectedGroup?.timezoneOffset || 0}
-		   onProgressUpdate={(updatedQuests) => {
-            // Можно обновить состояние, если нужно
-            console.log('Прогресс заданий обновлен', updatedQuests);
-        }}
+		  }
         />
       )}
       

@@ -75,7 +75,6 @@ const {
     getActiveCampaigns,
     getUsersBySegment,
     executeCampaign,
-	initLocationTables,
     getCities,
     addCity,
     updateCity,
@@ -857,41 +856,6 @@ function getNextTier(tiers, totalSpent) {
     }
     return null;
 }
-
-// Получение истории транзакций пользователя для VK Mini App
-app.get('/api/users/:userId/transactions/:companyId', async (req, res) => {
-    try {
-        const { userId, companyId } = req.params;
-        const limit = parseInt(req.query.limit) || 100;
-        
-        const transactions = await getUserTransactions(userId, companyId, limit);
-        
-        // Форматируем транзакции для mini-app
-        const formattedTransactions = transactions.map(t => ({
-            id: t.id,
-            type: t.bonus_earned > 0 ? 'earn' : 'spend',
-            amount: t.amount || 0,
-            bonusChange: t.bonus_earned > 0 ? t.bonus_earned : -t.bonus_spent,
-            description: t.description || (t.bonus_earned > 0 ? 'Начисление бонусов' : 'Списание бонусов'),
-            source: t.source || 'app',
-            storeId: t.store_id,
-            cashierId: t.cashier_id,
-            createdAt: t.created_at
-        }));
-        
-        // ✅ СОРТИРУЕМ ПО ДАТЕ (новые сверху)
-        formattedTransactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        
-        res.json({
-            success: true,
-            transactions: formattedTransactions,
-            count: formattedTransactions.length
-        });
-    } catch (error) {
-        console.error('Ошибка получения транзакций:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
 
 app.post('/api/users/dailyBonus/check', async (req, res) => {
     try {
@@ -3261,8 +3225,6 @@ app.get('/api/addresses/:addressId/info', async (req, res) => {
     }
 });
 
-
-
 app.get('/api/users/:userId/full-data/:companyId', async (req, res) => {
     try {
         const { userId, companyId } = req.params;
@@ -3556,8 +3518,6 @@ app.post('/api/users/:userId/games/increment', async (req, res) => {
     }
 });
 
-// Добавьте после других API эндпоинтов:
-
 // Завершение задания
 app.post('/api/users/:userId/quests/complete', async (req, res) => {
     try {
@@ -3681,10 +3641,10 @@ app.post('/api/companies/forgot-password', async (req, res) => {
         const mailOptions = {
             from: '"LoyaltyPrime" <padavydov@stud.kantiana.ru>',
             to: 'padavydov@stud.kantiana.ru',
-            subject: `🔐 Запрос на восстановление пароля: ${company.company}`,
+            subject: `Запрос на восстановление пароля: ${company.company}`,
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px;">
-                    <h2 style="color: #ff4d4d; margin-bottom: 20px;">🔐 Запрос на восстановление пароля</h2>
+                    <h2 style="color: #ff4d4d; margin-bottom: 20px;">Запрос на восстановление пароля</h2>
                     
                     <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
                         <p style="margin: 8px 0;"><strong>Компания:</strong> ${company.company}</p>
@@ -3695,7 +3655,7 @@ app.post('/api/companies/forgot-password', async (req, res) => {
                     
                     <div style="background: #fff3cd; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
                         <p style="margin: 0; color: #856404;">
-                            <strong>📞 Действия:</strong> Свяжитесь с владельцем по номеру телефона ${normalizedPhone} для подтверждения личности, 
+                            <strong>Действия:</strong> Свяжитесь с владельцем по номеру телефона ${normalizedPhone} для подтверждения личности, 
                             затем помогите восстановить доступ к аккаунту (сбросьте пароль или сообщите новый).
                         </p>
                     </div>
